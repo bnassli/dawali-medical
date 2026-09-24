@@ -2,8 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { requireActor } from "@/modules/auth/current-actor";
-import { SUBJ_COMPLAINTS_HABITS_SECTION_CODE } from "@/modules/clinical/definitions";
-import { getClinicalSectionForVisit, getVisitReasons } from "@/modules/clinical/service";
+import {
+  getClinicalSectionForVisit,
+  getVisitReasons,
+  listClinicalSections,
+} from "@/modules/clinical/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { getPatientById } from "@/modules/patients/service";
 import { getVisitById } from "@/modules/visits/service";
@@ -11,11 +14,14 @@ import { ClinicalSectionForm } from "./clinical-section-form";
 
 export default async function VisitChartPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; visitId: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
 }) {
   const actor = await requireActor();
   const { id, visitId } = await params;
+  const { tab } = await searchParams;
 
   const patient = await getPatientById(getDb(), actor, id);
   if (!patient) notFound();
@@ -28,13 +34,15 @@ export default async function VisitChartPage({
   const canAddOption = actor.permissions.has(PERMISSIONS.CLINICAL_OPTION_ADD);
   const visitOpen = visit.status === "open";
 
-  const section = canRead
-    ? await getClinicalSectionForVisit(
-        getDb(),
-        actor,
-        visit.id,
-        SUBJ_COMPLAINTS_HABITS_SECTION_CODE,
-      )
+  // Tabs are data (clinical_sections, in sort order); exactly ONE section form
+  // is rendered — the requested tab, else the first (ADR-027).
+  const tabs = canRead ? await listClinicalSections(getDb(), actor) : [];
+  const requestedTab = typeof tab === "string" ? tab : undefined;
+  const activeTab = requestedTab ? tabs.find((t) => t.code === requestedTab) : tabs[0];
+  if (canRead && requestedTab && !activeTab) notFound();
+
+  const section = activeTab
+    ? await getClinicalSectionForVisit(getDb(), actor, visit.id, activeTab.code)
     : null;
 
   const reason = canRead
@@ -60,13 +68,28 @@ export default async function VisitChartPage({
         </p>
       </div>
 
-      {/* Tab area — only the Sprint 2 tab exists; later tabs are added in
-          their own sprints in docs/CLINICAL_TABS.md order. */}
-      <nav className="tabs" aria-label="Clinical tabs">
-        <span className="tab active" aria-current="page">
-          {section?.section.name ?? "Subj Complaints Habits"}
-        </span>
-      </nav>
+      {/* Tab area — data-driven from clinical_sections (docs/CLINICAL_TABS.md
+          order). The active tab is plain text; the others are links, which the
+          unsaved-changes guard in the form intercepts like any navigation. */}
+      {tabs.length > 0 ? (
+        <nav className="tabs" aria-label="Clinical tabs">
+          {tabs.map((t) =>
+            t.code === activeTab?.code ? (
+              <span key={t.code} className="tab active" aria-current="page">
+                {t.name}
+              </span>
+            ) : (
+              <Link
+                key={t.code}
+                className="tab"
+                href={`/patients/${patient.id}/visits/${visit.id}?tab=${t.code}`}
+              >
+                {t.name}
+              </Link>
+            ),
+          )}
+        </nav>
+      ) : null}
 
       {/* Content area */}
       <div className="card">
@@ -80,7 +103,7 @@ export default async function VisitChartPage({
               </p>
             ) : null}
             <ClinicalSectionForm
-              key={visit.id}
+              key={`${visit.id}:${section.section.code}`}
               visitId={visit.id}
               actorId={actor.userId}
               sectionCode={section.section.code}

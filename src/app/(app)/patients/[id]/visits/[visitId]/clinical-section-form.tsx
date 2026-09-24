@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   CHOICE_DEBOUNCE_MS,
   fetchSectionState,
@@ -12,6 +12,7 @@ import {
   type FieldSnapshot,
   type OptionView,
 } from "@/modules/clinical/autosave-client";
+import { FIELD_EXCLUSION_RULES } from "@/modules/clinical/definitions";
 import { isGuardedLinkClick } from "@/modules/clinical/navigation-guard";
 import type { ClinicalFieldView } from "@/modules/clinical/service";
 
@@ -43,10 +44,46 @@ function statusText(snap: FieldSnapshot): string {
 }
 
 function describe(value: EntryValue, options: OptionView[]): string {
+  if (value.checked !== undefined) return value.checked ? "Checked" : "Unchecked";
   const labels = value.optionIds.map((id) => options.find((o) => o.id === id)?.label ?? "(unknown option)");
   const parts = [...labels, value.freeText].filter((p) => p !== "");
   return parts.length > 0 ? parts.join("; ") : "(empty)";
 }
+
+/**
+ * Mutual exclusion between fields of this tab (ADR-027, FIELD_EXCLUSION_RULES),
+ * e.g. "Unknown" vs Past Medical Hx. The UI only disables: it never clears or
+ * rewrites the other field. The server enforces the same rule.
+ */
+interface Exclusion {
+  /** "flag" = this is the checkbox; "excluded" = this is a field the checkbox rules out. */
+  role: "flag" | "excluded";
+  peers: FieldSaver[];
+  peerLabels: string[];
+}
+
+function hasValue(v: EntryValue): boolean {
+  return v.optionIds.length > 0 || v.freeText.trim() !== "" || v.checked === true;
+}
+
+function useExclusionBlock(exclusion: Exclusion | null, selfActive: boolean): boolean {
+  const peers = exclusion?.peers ?? NO_PEERS;
+  const role = exclusion?.role;
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const offs = peers.map((p) => p.subscribe(listener));
+      return () => offs.forEach((off) => off());
+    },
+    [peers],
+  );
+  const getBlocked = useCallback(() => {
+    if (!role || selfActive) return false; // never trap a value the user must be able to clear
+    return peers.some((p) => hasValue(p.getSnapshot().value));
+  }, [peers, role, selfActive]);
+  return useSyncExternalStore(subscribe, getBlocked, getBlocked);
+}
+
+const NO_PEERS: FieldSaver[] = [];
 
 function FieldEditor({
   field,
@@ -55,6 +92,7 @@ function FieldEditor({
   readOnly,
   canWrite,
   canAddOption,
+  exclusion,
 }: {
   field: ClinicalFieldView;
   saver: FieldSaver;
@@ -62,11 +100,13 @@ function FieldEditor({
   readOnly: boolean;
   canWrite: boolean;
   canAddOption: boolean;
+  exclusion: Exclusion | null;
 }) {
   const snap = useSaver(saver);
   const isSelect = field.fieldType === "select";
   const isMulti = field.fieldType === "multiselect";
   const isChoice = isSelect || isMulti;
+  const isCheckbox = field.fieldType === "checkbox";
   const inputId = `field-${field.code}`;
   const { optionIds, freeText } = snap.value;
   const options = snap.options;
@@ -79,10 +119,21 @@ function FieldEditor({
   );
   const [adding, setAdding] = useState(false);
 
-  const disabled = fieldReadOnly || snap.conflict !== null;
+  const blocked = useExclusionBlock(exclusion, isCheckbox ? snap.value.checked === true : hasValue(snap.value));
+  const disabled = fieldReadOnly || snap.conflict !== null || blocked;
+  const blockedText =
+    blocked && exclusion
+      ? exclusion.role === "flag"
+        ? `Clear ${exclusion.peerLabels.join(", ")} to mark this as Unknown.`
+        : `Uncheck ${exclusion.peerLabels.join(", ")} to enter values here.`
+      : null;
 
   function changeOptions(next: string[]) {
     saver.edit({ optionIds: next, freeText }, CHOICE_DEBOUNCE_MS);
+  }
+
+  function changeChecked(next: boolean) {
+    saver.edit({ optionIds: [], freeText: "", checked: next }, CHOICE_DEBOUNCE_MS);
   }
 
   function changeFreeText(next: string) {
@@ -102,7 +153,7 @@ function FieldEditor({
     }
     saver.addOptionToList(result.option);
     setNewLabel("");
-    if (canWrite && !fieldReadOnly && !snap.conflict) {
+    if (canWrite && !fieldReadOnly && !snap.conflict && !blocked) {
       changeOptions(isMulti ? [...optionIds, result.option.id] : [result.option.id]);
     }
     setAddMessage({ ok: true, text: `Added "${result.option.label}" to the list.` });
@@ -123,6 +174,18 @@ function FieldEditor({
           {statusText(snap)}
         </span>
       </div>
+
+      {isCheckbox ? (
+        <input
+          id={inputId}
+          type="checkbox"
+          checked={snap.value.checked === true}
+          disabled={disabled}
+          onChange={(e) => changeChecked(e.target.checked)}
+        />
+      ) : null}
+
+      {blockedText ? <span className="muted">{blockedText}</span> : null}
 
       {isSelect ? (
         <select
@@ -233,7 +296,7 @@ function FieldEditor({
         </button>
       ) : null}
 
-      {isChoice && canAddOption && !retired ? (
+      {isChoice && canAddOption && !retired && !blocked ? (
         <div className="add-new">
           <input
             type="text"
@@ -389,6 +452,34 @@ function ClinicalSectionFormInner({
   });
   const unsaved = useSyncExternalStore(group.subscribe, group.getUnsavedCount, group.getUnsavedCount);
   const [prompt, setPrompt] = useState<DiscardPrompt | null>(null);
+
+  // Exclusion rules whose fields are all placed in this tab (ADR-027).
+  const exclusions = useMemo(() => {
+    const byCode = new Map(fields.map((f) => [f.code, f]));
+    const result = new Map<string, Exclusion>();
+    for (const rule of FIELD_EXCLUSION_RULES) {
+      const flag = byCode.get(rule.flag);
+      const excluded = rule.excludes.flatMap((code) => {
+        const f = byCode.get(code);
+        return f ? [f] : [];
+      });
+      if (!flag || excluded.length === 0) continue;
+      const savers = (list: ClinicalFieldView[]) =>
+        list.flatMap((f) => {
+          const sv = group.get(f.id);
+          return sv ? [sv] : [];
+        });
+      result.set(flag.id, {
+        role: "flag",
+        peers: savers(excluded),
+        peerLabels: excluded.map((f) => f.label),
+      });
+      for (const f of excluded) {
+        result.set(f.id, { role: "excluded", peers: savers([flag]), peerLabels: [flag.label] });
+      }
+    }
+    return result;
+  }, [fields, group]);
 
   // Server props changed under a live form (router.refresh / revalidation):
   // adopt newer versions only for fields with nothing unsaved.
@@ -571,6 +662,7 @@ function ClinicalSectionFormInner({
               readOnly={readOnly}
               canWrite={canWrite}
               canAddOption={canAddOption}
+              exclusion={exclusions.get(field.id) ?? null}
             />
           ) : null;
         })}
@@ -581,11 +673,12 @@ function ClinicalSectionFormInner({
 }
 
 /**
- * The savers, visit id and field list are created once per (visit, user) and
- * must never be reused for another visit or user. Keying the inner component
- * by both guarantees a full remount — and therefore fresh savers — when the
- * route switches from one visit to another (V1 -> V2 -> V1) or the session's
- * user changes, even if a parent reuses this component instance.
+ * The savers, visit id and field list are created once per (visit, section,
+ * user) and must never be reused for another visit, tab or user. Keying the
+ * inner component by all three guarantees a full remount — and therefore fresh
+ * savers — when the route switches from one visit to another (V1 -> V2 -> V1),
+ * from one tab to another, or the session's user changes, even if a parent
+ * reuses this component instance.
  */
 export function ClinicalSectionForm(props: {
   visitId: string;
@@ -596,5 +689,10 @@ export function ClinicalSectionForm(props: {
   canWrite: boolean;
   canAddOption: boolean;
 }) {
-  return <ClinicalSectionFormInner key={`${props.visitId}:${props.actorId}`} {...props} />;
+  return (
+    <ClinicalSectionFormInner
+      key={`${props.visitId}:${props.sectionCode}:${props.actorId}`}
+      {...props}
+    />
+  );
 }
