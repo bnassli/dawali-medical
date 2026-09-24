@@ -104,10 +104,9 @@ disposable database. CI runs it after the build.
 - Sprint 2: field types for Subj Complaints Habits are a best guess (no
   SonoSoft reference screens in the repo); adjust
   `src/modules/clinical/definitions.ts` and re-seed.
-- Sprint 2 (**pending your confirmation**): a Reception user can enter the one
-  intake Reason for Visit when creating a visit (authorised by `visit.create`)
-  but cannot read the clinical chart afterwards, including that reason (no
-  `clinical.read`). See ADR-024.
+- Sprint 2: Reception can neither enter a Reason for Visit (the field is not
+  shown and the server refuses it) nor read the clinical chart. Only roles with
+  `clinical.write` (Doctor, Nurse/Assistant) can supply it at visit creation.
 - Sprint 2: browser Back/Forward cannot be intercepted reliably by the App
   Router. In-app links and forms (including Logout) are guarded; a history
   traversal only gets a best-effort keepalive flush, so text stuck in a failed

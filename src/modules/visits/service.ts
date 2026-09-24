@@ -47,6 +47,15 @@ export async function createVisit(
     patientId: input.patientId,
   });
 
+  // Reason for Visit is clinical data: only actors who may write clinical
+  // entries can supply it (Reception cannot). Denial is audited, nothing is created.
+  if (input.reason?.trim()) {
+    await requirePermission(db, actor, PERMISSIONS.CLINICAL_WRITE, {
+      entityType: "clinical_entry",
+      patientId: input.patientId,
+    });
+  }
+
   return db.transaction(async (tx) => {
     // Visits must reference an existing patient (CLAUDE.md rule #6: Patient
     // and Visit remain separate entities, but a visit is never orphaned).
@@ -68,8 +77,8 @@ export async function createVisit(
       .returning(visitColumns);
     if (!created) throw new Error("Failed to create visit");
 
-    // The reason typed at intake is stored ONLY as a reason_for_visit
-    // clinical entry (ADR-024), in this same transaction.
+    // The reason is stored ONLY as a reason_for_visit clinical entry
+    // (ADR-024), in this same transaction (clinical.write checked above).
     if (input.reason) {
       await recordInitialReasonForVisit(tx, actor, created, input.reason);
     }

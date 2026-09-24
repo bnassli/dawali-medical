@@ -503,8 +503,8 @@ async function loadReasonField(db: Database) {
  * Records the reason typed at visit creation as version 1 of the
  * reason_for_visit clinical entry — the ONLY place Reason for Visit is stored
  * (ADR-024). Must be called inside the visit-creation transaction, so the
- * entry and its audit row commit atomically with the visit. Authorised by
- * visit.create (intake), not clinical.write.
+ * entry and its audit row commit atomically with the visit. The caller must
+ * already have checked clinical.write.
  */
 export async function recordInitialReasonForVisit(
   tx: Database,

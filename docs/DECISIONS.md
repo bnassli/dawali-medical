@@ -117,7 +117,7 @@ ADR-020: Clinical permissions: `clinical.read`, `clinical.write`,
 Nurse/Assistant: read/write (visit-only free text, no permanent options).
 Admin: read/add/manage but deliberately NOT write — an admin who edits
 clinical data must also hold the Doctor role. Reception and Inventory have
-no clinical access (but see the narrow intake exception in ADR-024).
+no clinical access at all, including the Reason for Visit.
 
 ADR-021: Auto-save is client-side, per field
 (`src/modules/clinical/autosave-client.ts`, unit-tested with fake timers).
@@ -271,13 +271,14 @@ depth and PostgreSQL `char_length` in the migration all agree). The intake
 browser is stricter than the server, never looser. Visit creation validates
 in the schema, the HTML, and again in `recordInitialReasonForVisit`, which
 throws (rolling back the whole visit) rather than truncating.
-*Intake exception (PENDING FINAL USER CONFIRMATION)*: visit creation records the
-intake reason as a `reason_for_visit` v1 entry in the same transaction, authorised
-by `visit.create` — the one clinical write not gated by `clinical.write`. Product
-assumption for now: Reception may enter this single intake Reason for Visit under
-`visit.create` but cannot read the clinical chart afterwards (no `clinical.read`,
-so they do not even see the reason in the visit list). If that is not wanted, the
-alternative is to drop the reason input for roles without `clinical.write`.
+*Who may enter it (product decision)*: Reason for Visit is clinical data, so
+entering it needs `clinical.write` like any other clinical entry. Visit creation
+records the reason as a `reason_for_visit` v1 entry in the same transaction only
+for such actors (Doctor, Nurse/Assistant); the "Reason for new visit" input is not
+shown to other roles and `createVisit` refuses (403, audited) a reason from an
+actor without `clinical.write`, creating nothing. Reception can create a visit
+without a reason but can neither enter nor read a Reason for Visit or any other
+clinical data. There is no intake exception.
 Verification for production: `npm run db:verify-reason-backfill` (exit 1 if any
 legacy reason is missing; `db:validate` runs the same check and reports
 `over limit`). Later removal: after production validation shows `missing = 0` and

@@ -238,6 +238,36 @@ describe("Reason for Visit has exactly one authoritative source (ADR-024)", () =
       expect(await listVisitsForPatient(db, doctor, patient.id)).toHaveLength(0);
     });
 
+    it("Reception cannot enter a Reason for Visit: refused, audited, no visit and no entry; a reason-less visit still works", async () => {
+      const { actor: doctor } = await createTestUser(db, { roleCode: "DOCTOR" });
+      const { actor: reception } = await createTestUser(db, { roleCode: "RECEPTION" });
+      const patient = await newPatient(doctor);
+
+      await expect(
+        createVisit(db, reception, { patientId: patient.id, reason: "typed at the front desk" }),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+      expect(await listVisitsForPatient(db, doctor, patient.id)).toHaveLength(0);
+      const [denied] = await db
+        .select()
+        .from(auditLogs)
+        .where(and(eq(auditLogs.action, "access.denied"), eq(auditLogs.actorUserId, reception.userId)))
+        .orderBy(desc(auditLogs.id))
+        .limit(1);
+      expect(denied?.metadata).toMatchObject({ requiredPermission: "clinical.write" });
+
+      const visit = await createVisit(db, reception, { patientId: patient.id, reason: undefined });
+      expect(await entriesFor(visit.id)).toHaveLength(0);
+      expect((await createVisit(db, reception, { patientId: patient.id, reason: "   " })).id).toBeDefined();
+    });
+
+    it("Nurse/Assistant (clinical.write) can still record the reason at visit creation", async () => {
+      const { actor: doctor } = await createTestUser(db, { roleCode: "DOCTOR" });
+      const { actor: nurse } = await createTestUser(db, { roleCode: "NURSE_ASSISTANT" });
+      const patient = await newPatient(doctor);
+      const visit = await createVisit(db, nurse, { patientId: patient.id, reason: "nurse intake" });
+      expect((await entriesFor(visit.id))[0]?.value.freeText).toBe("nurse intake");
+    });
+
     it("denied visit creation for a NONEXISTENT patient id is 403-style (ForbiddenError) and audits safely, not an FK error", async () => {
       const { actor: inventory } = await createTestUser(db, { roleCode: "INVENTORY" });
       const ghost = "11111111-2222-4333-8444-555555555555";

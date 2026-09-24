@@ -27,8 +27,10 @@ export default async function PatientPage({
   const canUpdate = actor.permissions.has(PERMISSIONS.PATIENT_UPDATE);
   const canCreateVisit = actor.permissions.has(PERMISSIONS.VISIT_CREATE);
   // Reason for Visit lives only in clinical_entries (ADR-024); roles without
-  // clinical.read (e.g. Reception) do not see it.
+  // clinical.read (e.g. Reception) do not see it, and only clinical.write
+  // roles may enter one when creating a visit.
   const canReadClinical = actor.permissions.has(PERMISSIONS.CLINICAL_READ);
+  const canEnterReason = actor.permissions.has(PERMISSIONS.CLINICAL_WRITE);
   const reasons = canReadClinical
     ? await getVisitReasons(
         getDb(),
@@ -162,10 +164,12 @@ export default async function PatientPage({
         {canCreateVisit ? (
           <form action={createVisitAction} style={{ marginTop: "1rem" }}>
             <input type="hidden" name="patientId" value={patient.id} />
-            <div className="field">
-              <label htmlFor="reason">Reason for new visit</label>
-              <input id="reason" name="reason" maxLength={MAX_FREE_TEXT_LENGTH} />
-            </div>
+            {canEnterReason ? (
+              <div className="field">
+                <label htmlFor="reason">Reason for new visit</label>
+                <input id="reason" name="reason" maxLength={MAX_FREE_TEXT_LENGTH} />
+              </div>
+            ) : null}
             <button type="submit">New visit</button>
           </form>
         ) : null}

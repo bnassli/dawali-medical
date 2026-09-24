@@ -383,6 +383,8 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await page.goto(visitUrl(visit));
     await expect(field(page, "comments").locator("textarea")).toBeEnabled();
     await expect(page.getByRole("button", { name: "+ Add New" })).toHaveCount(0);
+    await page.goto(`/patients/${visit.patientId}`);
+    await expect(page.getByLabel("Reason for new visit")).toBeVisible();
 
     const adminCtx = await browser.newContext();
     const adminPage = await adminCtx.newPage();
@@ -400,6 +402,9 @@ test.describe("Subj Complaints Habits (browser)", () => {
       await expect(receptionPage.getByText("You do not have access to clinical entries.")).toBeVisible();
       await receptionPage.goto(`/patients/${visit.patientId}`);
       await expect(receptionPage.getByRole("columnheader", { name: "Reason" })).toHaveCount(0);
+      // Reception cannot enter a Reason for Visit either, but can still create a visit.
+      await expect(receptionPage.getByLabel("Reason for new visit")).toHaveCount(0);
+      await expect(receptionPage.getByRole("button", { name: "New visit" })).toBeVisible();
     } finally {
       await adminCtx.close();
       await receptionCtx.close();

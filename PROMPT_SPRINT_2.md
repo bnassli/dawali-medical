@@ -37,7 +37,7 @@ diagrams, reports, iCare, inventory, visit close/finalize. Do not start Sprint 3
    `clinical_option.manage`, NOT `clinical.write`. Doctor = `clinical.read`,
    `clinical.write`, `clinical_option.add`. Nurse/Assistant = `clinical.read`,
    `clinical.write` (visit-only free text, no permanent options). Reception = no
-   clinical access, except the narrow intake exception in 4. An admin who edits
+   clinical access whatsoever (cannot enter or read Reason for Visit). An admin who edits
    clinical data must also hold Doctor.
 3. **Visit lock**: writes rejected (423) unless `visits.status = 'open'`.
 4. **Reason for Visit** has exactly one authoritative writable source:
@@ -52,9 +52,9 @@ diagrams, reports, iCare, inventory, visit close/finalize. Do not start Sprint 3
      later, after production validation (`npm run db:verify-reason-backfill`).
    - Limit: 5000 characters (Unicode code points) in the schema, the HTML input
      and the service (defense in depth).
-   - **Intake exception — PENDING FINAL USER CONFIRMATION**: Reception may enter
-     the one intake Reason for Visit under `visit.create` but cannot read the
-     clinical chart afterwards.
+   - Entering it at visit creation requires `clinical.write` (UI hides the
+     input otherwise; the server refuses with an audited 403). No exception for
+     Reception.
 5. **Concurrency**: every save carries `expectedVersion`; a stale save returns
    409 with the current value, writes no revision and no audit row.
    Last-write-wins is forbidden. UI shows Conflict with Keep mine / Use theirs.
