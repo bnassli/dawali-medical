@@ -1,7 +1,7 @@
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { permissions, rolePermissions, sessions, userRoles, users } from "@/db/schema";
-import { hashPassword, verifyPassword } from "@/lib/password";
+import { getDummyPasswordHash, verifyPassword } from "@/lib/password";
 import { getEnv } from "@/lib/env";
 import { generateSessionToken, hashSessionToken } from "@/lib/session-token";
 import { writeAudit } from "@/modules/audit/service";
@@ -11,6 +11,9 @@ import { AuthenticationError } from "./errors";
 import type { LoginInput } from "./schema";
 
 export { AuthenticationError } from "./errors";
+
+// Precompute the login dummy hash at startup so no request pays for hashing.
+void getDummyPasswordHash().catch(() => undefined);
 
 export interface RequestMeta {
   ip?: string | null;
@@ -88,9 +91,13 @@ export async function login(
     .where(sql`lower(${users.email}) = ${email}`)
     .limit(1);
 
-  const passwordOk = user
-    ? await verifyPassword(user.passwordHash, input.password)
-    : await failClosedHash(input.password); // constant-time-ish decoy
+  // Exactly one Argon2 verification on every path. Unknown emails verify
+  // against a precomputed dummy hash (never matches), so timing and CPU
+  // cost do not reveal whether the account exists.
+  const passwordOk = await verifyPassword(
+    user?.passwordHash ?? (await getDummyPasswordHash()),
+    input.password,
+  );
 
   if (!user || !user.isActive || !passwordOk) {
     // Written outside any transaction: the throw below must not roll back
@@ -138,16 +145,6 @@ export async function login(
       displayName: user.displayName,
     };
   });
-}
-
-/**
- * Runs a dummy argon2 verification so that the login() code path takes
- * roughly the same amount of time whether or not the email exists,
- * reducing (not eliminating) user-enumeration via timing.
- */
-async function failClosedHash(password: string): Promise<boolean> {
-  const dummyHash = await hashPassword("dummy-password-for-timing-parity");
-  return verifyPassword(dummyHash, password);
 }
 
 /**
