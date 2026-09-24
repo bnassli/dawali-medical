@@ -61,6 +61,19 @@ const PMH_TAB = "past_medical_hx";
 const ASSESSMENT_TAB = "assessment_plan";
 
 const tabsNav = (page: Page) => page.getByRole("navigation", { name: "Clinical tabs" });
+
+/**
+ * The three documented tabs, in order. Tabs are data, and the Vitest step of CI
+ * shares its database with this suite (clinical-definitions tests leave extra
+ * sections such as "A later tab" behind), so foreign tabs are ignored here.
+ */
+async function expectDocumentedTabs(page: Page): Promise<void> {
+  await expect
+    .poll(async () =>
+      (await tabsNav(page).locator(".tab").allTextContents()).filter((t) => TABS.includes(t.trim())),
+    )
+    .toEqual(TABS);
+}
 const fieldLabels = (page: Page) => page.locator(".clinical-field .field-head label");
 const tabUrl = (v: VisitFixture, code: string) => `${visitUrl(v)}?tab=${code}`;
 const SAVE_API = "**/api/visits/*/clinical-entries/*";
@@ -81,7 +94,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await loginAs(page, "doctor");
     await page.goto(visitUrl(visit));
 
-    await expect(tabsNav(page).locator(".tab")).toHaveText(TABS);
+    await expectDocumentedTabs(page);
     await expect(tabsNav(page).locator(".tab.active")).toHaveText("Subj Complaints Habits");
     await expect(fieldLabels(page)).toHaveText(SUBJ_ORDER); // Subj unchanged
     await expect(page.locator(".clinical-form")).toHaveCount(1);
@@ -372,7 +385,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
 
     await loginAs(page, "nurse");
     await page.goto(tabUrl(visit, PMH_TAB));
-    await expect(tabsNav(page).locator(".tab")).toHaveText(TABS);
+    await expectDocumentedTabs(page);
     await expect(page.getByRole("button", { name: "+ Add New" })).toHaveCount(0);
     await field(page, "prior_test_results").locator("textarea").fill("nurse entry");
     await expect(statusOf(page, "prior_test_results")).toHaveText("Saved");
