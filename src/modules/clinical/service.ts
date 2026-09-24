@@ -5,6 +5,7 @@ import {
   clinicalFieldDefinitions,
   clinicalOptionLists,
   clinicalOptions,
+  clinicalSectionFields,
   clinicalSections,
   visits,
   type ClinicalEntryValue,
@@ -13,15 +14,13 @@ import { writeAudit } from "@/modules/audit/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { requirePermission } from "@/modules/permissions/service";
 import type { ActorContext } from "@/modules/permissions/types";
+import { FIELD_TYPES, isSelectType } from "./definitions";
 import {
-  FIELD_TYPES,
-  isSelectType,
-  SUBJ_COMPLAINTS_HABITS_SECTION_CODE,
-} from "./definitions";
-import type {
-  AddClinicalOptionInput,
-  SaveClinicalEntryInput,
-  SetClinicalOptionActiveInput,
+  characterCount,
+  MAX_FREE_TEXT_LENGTH,
+  type AddClinicalOptionInput,
+  type SaveClinicalEntryInput,
+  type SetClinicalOptionActiveInput,
 } from "./schema";
 
 export class VisitNotFoundError extends Error {
@@ -106,17 +105,23 @@ export class DuplicateOptionError extends Error {
   }
 }
 
-function isUniqueViolation(err: unknown): boolean {
-  const codeOf = (e: unknown): unknown =>
-    typeof e === "object" && e !== null && "code" in e
-      ? (e as { code?: unknown }).code
+function pgErrorField(err: unknown, field: "code" | "constraint"): unknown {
+  const read = (e: unknown): unknown =>
+    typeof e === "object" && e !== null && field in e
+      ? (e as Record<string, unknown>)[field]
       : undefined;
   const cause =
     typeof err === "object" && err !== null && "cause" in err
       ? (err as { cause?: unknown }).cause
       : undefined;
-  return codeOf(err) === "23505" || codeOf(cause) === "23505";
+  return read(err) ?? read(cause);
 }
+
+function isUniqueViolation(err: unknown): boolean {
+  return pgErrorField(err, "code") === "23505";
+}
+
+const MUTATION_ID_INDEX = "clinical_entries_client_mutation_id_idx";
 
 export interface ClinicalOptionView {
   id: string;
@@ -130,6 +135,11 @@ export interface ClinicalFieldView {
   label: string;
   fieldType: string;
   allowsFreeText: boolean;
+  /**
+   * False for a retired field that still has history on this visit: it is
+   * shown read-only so recorded data never disappears (ADR-026).
+   */
+  isActive: boolean;
   options: ClinicalOptionView[];
   version: number;
   value: ClinicalEntryValue;
@@ -192,20 +202,20 @@ export async function getClinicalSectionForVisit(
     .limit(1);
   if (!section) throw new ClinicalSectionNotFoundError(sectionCode);
 
-  const fields = await db
-    .select()
-    .from(clinicalFieldDefinitions)
-    .where(
-      and(
-        eq(clinicalFieldDefinitions.sectionId, section.id),
-        eq(clinicalFieldDefinitions.isActive, true),
-      ),
+  // Global fields placed in this section, in placement order.
+  const placements = await db
+    .select({ field: clinicalFieldDefinitions })
+    .from(clinicalSectionFields)
+    .innerJoin(
+      clinicalFieldDefinitions,
+      eq(clinicalFieldDefinitions.id, clinicalSectionFields.fieldDefinitionId),
     )
-    .orderBy(asc(clinicalFieldDefinitions.sortOrder));
+    .where(eq(clinicalSectionFields.sectionId, section.id))
+    .orderBy(asc(clinicalSectionFields.sortOrder), asc(clinicalFieldDefinitions.code));
 
-  const fieldIds = fields.map((f) => f.id);
+  const placedIds = placements.map((p) => p.field.id);
   const currentEntries =
-    fieldIds.length === 0
+    placedIds.length === 0
       ? []
       : await db
           .selectDistinctOn([clinicalEntries.fieldDefinitionId])
@@ -213,11 +223,17 @@ export async function getClinicalSectionForVisit(
           .where(
             and(
               eq(clinicalEntries.visitId, visitId),
-              inArray(clinicalEntries.fieldDefinitionId, fieldIds),
+              inArray(clinicalEntries.fieldDefinitionId, placedIds),
             ),
           )
           .orderBy(clinicalEntries.fieldDefinitionId, desc(clinicalEntries.version));
   const entryByField = new Map(currentEntries.map((e) => [e.fieldDefinitionId, e]));
+
+  // Active fields, plus retired fields that still have history on this visit
+  // (shown read-only so history never disappears).
+  const fields = placements
+    .map((p) => p.field)
+    .filter((f) => f.isActive || entryByField.has(f.id));
 
   const listIds = fields.map((f) => f.optionListId).filter((v): v is string => v !== null);
   const optionRows =
@@ -242,6 +258,7 @@ export async function getClinicalSectionForVisit(
       label: field.label,
       fieldType: field.fieldType,
       allowsFreeText: field.allowsFreeText,
+      isActive: field.isActive,
       options,
       version: entry?.version ?? 0,
       value,
@@ -290,132 +307,164 @@ export async function saveClinicalEntry(
     visitId: input.visitId,
   });
 
-  return db.transaction(async (tx) => {
-    // Row lock serialises saves per visit (version numbering) and makes the
-    // status check race-free against a concurrent status change.
-    const [visit] = await tx
-      .select({ id: visits.id, patientId: visits.patientId, status: visits.status })
-      .from(visits)
-      .where(eq(visits.id, input.visitId))
-      .limit(1)
-      .for("update");
-    if (!visit) throw new VisitNotFoundError(input.visitId);
-
-    // Replay of an already-applied mutation: return the original result.
-    // Runs under the visit lock, so concurrent duplicates serialise here.
-    const [applied] = await tx
-      .select()
-      .from(clinicalEntries)
-      .where(eq(clinicalEntries.clientMutationId, input.clientMutationId))
-      .limit(1);
-    if (applied) {
-      if (
-        applied.visitId !== visit.id ||
-        applied.fieldDefinitionId !== input.fieldId ||
-        applied.createdBy !== actor.userId
-      ) {
-        throw new MutationIdReuseError();
-      }
-      return {
-        changed: false,
-        replayed: true,
-        version: applied.version,
-        value: applied.value,
-        entry: applied,
-      };
+  try {
+    return await db.transaction((tx) => saveInTransaction(tx, actor, input));
+  } catch (err) {
+    // Belt and braces: the advisory lock below already serialises concurrent
+    // reuse of one clientMutationId; if the unique index still fires, the
+    // outcome is the same deterministic 400, never a 500.
+    if (isUniqueViolation(err) && pgErrorField(err, "constraint") === MUTATION_ID_INDEX) {
+      throw new MutationIdReuseError();
     }
+    throw err;
+  }
+}
 
-    if (visit.status !== "open") throw new VisitNotOpenError(visit.id, visit.status);
+async function saveInTransaction(
+  tx: Database,
+  actor: ActorContext,
+  input: SaveClinicalEntryInput,
+): Promise<SaveClinicalEntryResult> {
+  // Serialise everything that uses this clientMutationId, across visits and
+  // users, so a concurrent reuse is decided deterministically by the check
+  // below instead of racing into the unique index. Always taken BEFORE the
+  // visit row lock (fixed lock order => no deadlock).
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.clientMutationId}, 0))`,
+  );
 
-    const [field] = await tx
-      .select()
-      .from(clinicalFieldDefinitions)
-      .where(
-        and(
-          eq(clinicalFieldDefinitions.id, input.fieldId),
-          eq(clinicalFieldDefinitions.isActive, true),
-        ),
-      )
-      .limit(1);
-    if (!field) throw new ClinicalFieldNotFoundError(input.fieldId);
+  // Row lock serialises saves per visit (version numbering) and makes the
+  // status check race-free against a concurrent status change.
+  const [visit] = await tx
+    .select({ id: visits.id, patientId: visits.patientId, status: visits.status })
+    .from(visits)
+    .where(eq(visits.id, input.visitId))
+    .limit(1)
+    .for("update");
+  if (!visit) throw new VisitNotFoundError(input.visitId);
 
-    const [current] = await tx
-      .select()
-      .from(clinicalEntries)
-      .where(
-        and(
-          eq(clinicalEntries.visitId, input.visitId),
-          eq(clinicalEntries.fieldDefinitionId, field.id),
-        ),
-      )
-      .orderBy(desc(clinicalEntries.version))
-      .limit(1);
-
-    const previousValue = current?.value ?? EMPTY_VALUE;
-    const currentVersion = current?.version ?? 0;
-
-    if (input.expectedVersion !== currentVersion) {
-      throw new ClinicalConflictError({
-        version: currentVersion,
-        value: previousValue,
-        options: await loadFieldOptions(tx, field, previousValue),
-      });
-    }
-
-    const next = await normalizeValue(tx, field, input, previousValue);
-
-    if (valuesEqual(previousValue, next)) {
-      return {
-        changed: false,
-        replayed: false,
-        version: currentVersion,
-        value: previousValue,
-        entry: current ?? null,
-      };
-    }
-
-    const version = currentVersion + 1;
-    const [created] = await tx
-      .insert(clinicalEntries)
-      .values({
-        visitId: visit.id,
-        fieldDefinitionId: field.id,
-        version,
-        value: next,
-        clientMutationId: input.clientMutationId,
-        createdBy: actor.userId,
-      })
-      .returning();
-    if (!created) throw new Error("Failed to save clinical entry");
-
-    await writeAudit(tx, {
-      actorUserId: actor.userId,
-      action: current ? "clinical_entry.update" : "clinical_entry.create",
-      entityType: "clinical_entry",
-      entityId: created.id,
-      patientId: visit.patientId,
-      visitId: visit.id,
-      before: current
-        ? { version: current.version, value: current.value }
-        : null,
-      after: { version: created.version, value: created.value },
-      metadata: {
-        ip: actor.ip ?? null,
-        userAgent: actor.userAgent ?? null,
-        fieldCode: field.code,
-        fieldDefinitionId: field.id,
-        clientMutationId: input.clientMutationId,
-      },
-    });
-
-    return {
-      changed: true,
-      replayed: false,
-      version: created.version,
-      value: created.value,
-      entry: created,
+  // Replay of an already-applied mutation: return the original result, but
+  // ONLY if it is genuinely the same request — same visit, field and user,
+  // same base version and the same canonical value. Anything else is reuse
+  // of the id for a different change and is rejected.
+  const [applied] = await tx
+    .select()
+    .from(clinicalEntries)
+    .where(eq(clinicalEntries.clientMutationId, input.clientMutationId))
+    .limit(1);
+  if (applied) {
+    const canonical: ClinicalEntryValue = {
+      optionIds: [...new Set(input.optionIds)].sort(),
+      freeText: input.freeText.trim(),
     };
+    if (
+      applied.visitId !== visit.id ||
+      applied.fieldDefinitionId !== input.fieldId ||
+      applied.createdBy !== actor.userId ||
+      applied.version !== input.expectedVersion + 1 ||
+      !valuesEqual(applied.value, canonical)
+    ) {
+      throw new MutationIdReuseError();
+    }
+    return {
+      changed: false,
+      replayed: true,
+      version: applied.version,
+      value: applied.value,
+      entry: applied,
+    };
+  }
+
+  if (visit.status !== "open") throw new VisitNotOpenError(visit.id, visit.status);
+
+  const [field] = await tx
+    .select()
+    .from(clinicalFieldDefinitions)
+    .where(
+      and(
+        eq(clinicalFieldDefinitions.id, input.fieldId),
+        eq(clinicalFieldDefinitions.isActive, true),
+      ),
+    )
+    .limit(1);
+  if (!field) throw new ClinicalFieldNotFoundError(input.fieldId);
+
+  const [current] = await tx
+    .select()
+    .from(clinicalEntries)
+    .where(
+      and(
+        eq(clinicalEntries.visitId, input.visitId),
+        eq(clinicalEntries.fieldDefinitionId, field.id),
+      ),
+    )
+    .orderBy(desc(clinicalEntries.version))
+    .limit(1);
+
+  const previousValue = current?.value ?? EMPTY_VALUE;
+  const currentVersion = current?.version ?? 0;
+
+  if (input.expectedVersion !== currentVersion) {
+    throw new ClinicalConflictError({
+      version: currentVersion,
+      value: previousValue,
+      options: await loadFieldOptions(tx, field, previousValue),
+    });
+  }
+
+  const next = await normalizeValue(tx, field, input, previousValue);
+
+  if (valuesEqual(previousValue, next)) {
+    return {
+      changed: false,
+      replayed: false,
+      version: currentVersion,
+      value: previousValue,
+      entry: current ?? null,
+    };
+  }
+
+  const version = currentVersion + 1;
+  const [created] = await tx
+    .insert(clinicalEntries)
+    .values({
+      visitId: visit.id,
+      fieldDefinitionId: field.id,
+      version,
+      value: next,
+      clientMutationId: input.clientMutationId,
+      createdBy: actor.userId,
+    })
+    .returning();
+  if (!created) throw new Error("Failed to save clinical entry");
+
+  await writeAudit(tx, {
+    actorUserId: actor.userId,
+    action: current ? "clinical_entry.update" : "clinical_entry.create",
+    entityType: "clinical_entry",
+    entityId: created.id,
+    patientId: visit.patientId,
+    visitId: visit.id,
+    before: current
+      ? { version: current.version, value: current.value }
+      : null,
+    after: { version: created.version, value: created.value },
+    metadata: {
+      ip: actor.ip ?? null,
+      userAgent: actor.userAgent ?? null,
+      fieldCode: field.code,
+      fieldDefinitionId: field.id,
+      clientMutationId: input.clientMutationId,
+    },
   });
+
+  return {
+    changed: true,
+    replayed: false,
+    version: created.version,
+    value: created.value,
+    entry: created,
+  };
 }
 
 /** Options of a field's list; retired ones only when the given value selects them. */
@@ -439,21 +488,15 @@ async function loadFieldOptions(
 const REASON_FIELD_CODE = "reason_for_visit";
 
 async function loadReasonField(db: Database) {
-  const [row] = await db
-    .select({ field: clinicalFieldDefinitions })
+  const [field] = await db
+    .select()
     .from(clinicalFieldDefinitions)
-    .innerJoin(clinicalSections, eq(clinicalSections.id, clinicalFieldDefinitions.sectionId))
-    .where(
-      and(
-        eq(clinicalSections.code, SUBJ_COMPLAINTS_HABITS_SECTION_CODE),
-        eq(clinicalFieldDefinitions.code, REASON_FIELD_CODE),
-      ),
-    )
+    .where(eq(clinicalFieldDefinitions.code, REASON_FIELD_CODE))
     .limit(1);
-  if (!row) {
+  if (!field) {
     throw new Error("Reason for Visit field definition is missing — run db:migrate and db:seed.");
   }
-  return row.field;
+  return field;
 }
 
 /**
@@ -471,6 +514,12 @@ export async function recordInitialReasonForVisit(
 ): Promise<void> {
   const text = reason.trim();
   if (!text) return;
+  // Defense in depth: the form and schema enforce the same limit.
+  if (characterCount(text) > MAX_FREE_TEXT_LENGTH) {
+    throw new InvalidClinicalValueError(
+      `Reason for visit must be at most ${MAX_FREE_TEXT_LENGTH} characters.`,
+    );
+  }
   const field = await loadReasonField(tx);
   const [created] = await tx
     .insert(clinicalEntries)
@@ -557,6 +606,9 @@ async function normalizeValue(
   previous: ClinicalEntryValue,
 ): Promise<ClinicalEntryValue> {
   const freeText = input.freeText.trim();
+  if (characterCount(freeText) > MAX_FREE_TEXT_LENGTH) {
+    throw new InvalidClinicalValueError(`Text must be at most ${MAX_FREE_TEXT_LENGTH} characters.`);
+  }
   const optionIds = [...new Set(input.optionIds)].sort();
 
   if (field.fieldType === FIELD_TYPES.TEXT || field.fieldType === FIELD_TYPES.TEXTAREA) {

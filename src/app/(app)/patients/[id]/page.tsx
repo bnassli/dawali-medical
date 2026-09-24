@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { requireActor } from "@/modules/auth/current-actor";
+import { MAX_FREE_TEXT_LENGTH } from "@/modules/clinical/schema";
 import { getVisitReasons } from "@/modules/clinical/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { getPatientById } from "@/modules/patients/service";
@@ -163,7 +164,7 @@ export default async function PatientPage({
             <input type="hidden" name="patientId" value={patient.id} />
             <div className="field">
               <label htmlFor="reason">Reason for new visit</label>
-              <input id="reason" name="reason" />
+              <input id="reason" name="reason" maxLength={MAX_FREE_TEXT_LENGTH} />
             </div>
             <button type="submit">New visit</button>
           </form>

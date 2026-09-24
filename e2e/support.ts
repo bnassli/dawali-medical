@@ -9,6 +9,7 @@ import {
   sessions,
 } from "../src/db/schema";
 import { loadActorContext } from "../src/modules/auth/service";
+import { saveClinicalEntry } from "../src/modules/clinical/service";
 import { createPatient } from "../src/modules/patients/service";
 import { createVisit } from "../src/modules/visits/service";
 import type { E2EUser, E2EUserKey } from "./global-setup";
@@ -151,6 +152,43 @@ export async function clinicalAudits(visitId: string) {
   );
 }
 
+/** Creates a clinical entry (version 1) the way a doctor would, for fixtures. */
+export async function seedEntry(
+  visitId: string,
+  fieldCode: string,
+  freeText: string,
+  optionIds: string[] = [],
+): Promise<void> {
+  await withDb(async (db) => {
+    const actor = await loadActorContext(db, user("doctor").userId);
+    if (!actor) throw new Error("doctor actor not found");
+    const [def] = await db
+      .select({ id: clinicalFieldDefinitions.id })
+      .from(clinicalFieldDefinitions)
+      .where(eq(clinicalFieldDefinitions.code, fieldCode))
+      .limit(1);
+    if (!def) throw new Error(`field ${fieldCode} not seeded`);
+    await saveClinicalEntry(db, actor, {
+      visitId,
+      fieldId: def.id,
+      optionIds,
+      freeText,
+      expectedVersion: 0,
+      clientMutationId: randomUUID(),
+    });
+  });
+}
+
+export async function setFieldActive(fieldCode: string, active: boolean): Promise<void> {
+  await withDb((db) =>
+    db.execute(sql`UPDATE clinical_field_definitions SET is_active = ${active} WHERE code = ${fieldCode}`),
+  );
+}
+
+export async function closeVisit(visitId: string): Promise<void> {
+  await withDb((db) => db.execute(sql`UPDATE visits SET status = 'closed' WHERE id = ${visitId}`));
+}
+
 export async function revokeSessions(userId: string): Promise<void> {
   await withDb((db) =>
     db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.userId, userId)),
@@ -176,6 +214,10 @@ export async function optionLabels(): Promise<string[]> {
 /** Container of one clinical field, addressed by its stable field code. */
 export function field(page: Page, code: string): Locator {
   return page.locator(`[data-field="${code}"]`);
+}
+
+export function discardDialog(page: Page): Locator {
+  return page.getByRole("alertdialog", { name: "Leave without saving?" });
 }
 
 export function statusOf(page: Page, code: string): Locator {

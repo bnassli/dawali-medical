@@ -24,6 +24,7 @@ const EXPECTED_TABLES = [
   "clinical_option_lists",
   "clinical_options",
   "clinical_field_definitions",
+  "clinical_section_fields",
   "clinical_entries",
 ];
 
@@ -112,7 +113,7 @@ async function main() {
     try {
       const report = await verifyLegacyReasonBackfill(verifyDb);
       console.log(
-        `legacy non-empty reasons: ${report.legacyNonEmpty}, missing clinical entry: ${report.missing}`,
+        `legacy non-empty reasons: ${report.legacyNonEmpty}, missing clinical entry: ${report.missing}, over limit: ${report.overLimit}`,
       );
       if (report.missing > 0) failed = true;
     } finally {

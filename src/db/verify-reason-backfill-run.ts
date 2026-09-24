@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   try {
     const report = await verifyLegacyReasonBackfill(db);
     console.log(
-      `legacy non-empty reasons: ${report.legacyNonEmpty}; missing clinical entry: ${report.missing}; ` +
+      `legacy non-empty reasons: ${report.legacyNonEmpty}; missing clinical entry: ${report.missing}; over limit: ${report.overLimit}; ` +
         `differs from legacy text (kept in audit log): ${report.divergent}`,
     );
     if (report.missing > 0) {

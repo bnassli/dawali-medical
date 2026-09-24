@@ -100,105 +100,236 @@ Rollback: drop the trigger/function only; never delete rows. Dropping the
 with no clinical data or after a verified backup.
 
 ADR-019: Option lists are data. `clinical_option_lists` / `clinical_options`
-hold dropdown values; the seed creates sections, field definitions (order and
-type from `src/modules/clinical/definitions.ts`, following
-`docs/CLINICAL_TABS.md`) and EMPTY option lists — no clinical option values
-are hard-coded (CLAUDE.md rule #10). "+ Add New" inserts a permanent option
-(`clinical_option.create`, requires `clinical_option.add`). Visit-only free
-text is stored inside the entry value (`{ optionIds, freeText }`) and never
-enters an option list. Options are never renamed or deleted: an administrator
-can retire/reactivate them (`clinical_option.update`); a retired option stays
-visible on entries that already selected it but cannot be newly selected.
-Duplicate labels within a list are rejected case-insensitively (retired ones
-included).
+hold dropdown values; the seed creates sections, GLOBAL field definitions and
+their placements (ADR-026; order and type from
+`src/modules/clinical/definitions.ts`, following `docs/CLINICAL_TABS.md`) and
+EMPTY option lists — no clinical option values are hard-coded (CLAUDE.md rule
+#10). "+ Add New" inserts a permanent option (`clinical_option.create`,
+requires `clinical_option.add`). Visit-only free text is stored inside the
+entry value (`{ optionIds, freeText }`) and never enters an option list.
+Options are never renamed or deleted: an administrator can retire/reactivate
+them (`clinical_option.update`); a retired option stays visible on entries that
+already selected it but cannot be newly selected. Duplicate labels within a
+list are rejected case-insensitively (retired ones included).
 
 ADR-020: Clinical permissions: `clinical.read`, `clinical.write`,
 `clinical_option.add`, `clinical_option.manage`. Doctor: read/write/add.
 Nurse/Assistant: read/write (visit-only free text, no permanent options).
 Admin: read/add/manage but deliberately NOT write — an admin who edits
 clinical data must also hold the Doctor role. Reception and Inventory have
-no clinical access.
+no clinical access (but see the narrow intake exception in ADR-024).
 
-ADR-021: Auto-save is client-side, per field (`src/modules/clinical/autosave-client.ts`,
-unit-tested with fake timers): edits are debounced (typing ~700 ms, choices
-~150 ms) and flushed on blur. On `pagehide`/`visibilitychange`(hidden)/`beforeunload`
-every pending field is flushed with `fetch(..., { keepalive: true })` so the
-request outlives the page; while anything is unsaved a banner says so and
-`beforeunload` shows the browser's leave-page prompt. Unsent text lives in
-memory only — no localStorage/sessionStorage/IndexedDB (enforced by a test).
-At most one request per field is in flight; edits made meanwhile are sent next.
-A request whose outcome is unknown (network failure) is retried with the SAME
-`clientMutationId` before anything newer is sent, so a save that did reach the
-server is never mistaken for someone else's edit. 401 keeps the text, shows
-"Session expired" with a Sign-in-again link and Retry; 423 marks the field
-locked; 409 opens the Conflict panel (ADR-022). Clinical writes are rejected
-unless `visits.status = 'open'` (no close/finalize action exists yet).
-Superseded: the first Sprint 2 cut used a Server Action and last-write-wins;
-both were removed.
+ADR-021: Auto-save is client-side, per field
+(`src/modules/clinical/autosave-client.ts`, unit-tested with fake timers).
+Edits are debounced (typing ~700 ms, choices ~150 ms) and flushed on blur.
+Unsent text lives in memory only — no localStorage/sessionStorage/IndexedDB
+(enforced by a test). At most one request per field is in flight; edits made
+meanwhile are sent next. A request whose outcome is unknown (network failure)
+is retried with the SAME `clientMutationId` before anything newer is sent.
+
+*Nothing unsaved is dropped silently.* A field counts as unsaved while it has a
+pending edit, a request in flight, an unresolved failed request, or a
+conflict; failures are `error` (network/5xx), `session-expired` (401),
+`actor-mismatch` (ADR-023), `locked` (423) and `conflict` (409). While any
+field is unsaved a banner says so, and:
+- In-app navigation: capture-phase document listeners intercept same-origin
+  link clicks (`navigation-guard.ts`: new-tab, modified, download and
+  cross-origin clicks are left alone) and ANY form submit on the page — this
+  includes Logout. The navigation is held, everything is flushed
+  (`fetch keepalive`), and only if something is still not safely stored does an
+  accessible dialog (`role=alertdialog`, focus starts on "Stay on page", Tab is
+  trapped, Escape = stay) list the affected fields and require an explicit
+  "Discard unsaved text and leave". Discarding drops the text from the savers
+  first, so the unmount flush cannot resurrect it. If the flush succeeded there
+  is no prompt at all.
+- Hard navigation (reload, close, typed URL): `pagehide`/`visibilitychange`
+  flush with keepalive plus the browser's own `beforeunload` prompt.
+- Unmount (including browser Back/Forward): best-effort keepalive flush. Known
+  limit: the App Router gives no reliable hook to CANCEL a history traversal,
+  so text in a failed state is lost if the user leaves that way; the banner and
+  the per-field status make the state visible beforehand.
+- Failure controls ("Retry save", "Sign in again") stay mounted while a retry is
+  in flight (`failure` in the snapshot). Pressing them blurs the field, which
+  re-sends; unmounting the control under the pointer would swallow the click.
+
+*Fresh state.* The visit page is server-rendered, but Back/Forward restores a
+cached render. On mount, when a tab becomes visible and on `pageshow`
+(persisted), the form GETs the current section state
+(`/api/visits/{id}/clinical-sections/{section}`, `no-store`) and reconciles:
+fields with nothing unsaved adopt a newer version (and new options); fields
+with unsaved text keep it and a later save surfaces a normal conflict.
+
+*Visit isolation.* Savers, visit id and field list are created once per
+(visit, user): the form is keyed by `visitId:actorId` (twice: on the page and
+inside the component), a `SaverGroup` refuses savers of another visit, and
+every request URL is built from the saver's own visit id. Switching V1 -> V2 ->
+V1 therefore cannot reuse state, and the E2E suite asserts every POST went to
+the visit on screen.
+
+Clinical writes are rejected unless `visits.status = 'open'` (no
+close/finalize action exists yet). Superseded: the first Sprint 2 cut used a
+Server Action and last-write-wins; both were removed.
 
 ADR-022: Optimistic concurrency and idempotency. Every save sends
 `expectedVersion` (version the client last saw; 0 = none) and a client-generated
-`clientMutationId` (UUID, stored in `clinical_entries.client_mutation_id`, unique
-where not null — migration 0004). Under the visit row lock the service (1) returns
-the original result if the mutation id was already applied (same visit, field and
-user; any other reuse is 400) — replays never create a revision or audit row;
-(2) rejects a version mismatch, stale OR ahead, with `ClinicalConflictError`
-carrying the current version, value and options — nothing is written, no audit
-row; (3) treats an equal normalised value as a no-op; (4) otherwise inserts
-version + 1 and audits it. A stale save with an identical value is still a
-conflict (predictable rule). The UI resolves conflicts explicitly: Keep mine
-re-sends my value with expectedVersion = their version (a new revision on top;
-theirs stays in history and in the audit `before`), Use theirs adopts their
-value without writing. Last-write-wins is not possible.
+`clientMutationId` (UUID, stored in `clinical_entries.client_mutation_id`,
+partial unique index `clinical_entries_client_mutation_id_idx`, created in
+0002). Inside one transaction the service:
+1. takes `pg_advisory_xact_lock(hashtextextended(clientMutationId))` — so
+   EVERY use of one id, across visits and users, is serialised — and then the
+   visit row lock (fixed order, no deadlock);
+2. if the id was already applied: a replay is accepted only when it is the same
+   request — same visit, field and user, `expectedVersion + 1` equals the stored
+   version and the CANONICAL value (options sorted/deduplicated, text trimmed)
+   is equal; anything else is `MutationIdReuseError` (HTTP 400). Concurrent
+   reuse on different visits/users is decided by the lock, so exactly one
+   wins and the other is 400; a residual unique-index violation is mapped to
+   the same 400, never a 500;
+3. rejects a version mismatch, stale OR ahead, with `ClinicalConflictError`
+   carrying the current version, value and options — nothing is written, no
+   audit row;
+4. treats an equal normalised value as a no-op (its id is not recorded, so it
+   can later be used for a real change);
+5. otherwise inserts version + 1 and audits it.
+A stale save with an identical value is still a conflict (predictable rule).
+The UI resolves conflicts explicitly: Keep mine re-sends my value with
+expectedVersion = their version (a new revision on top; theirs stays in history
+and in the audit `before`), Use theirs adopts their value without writing.
+Last-write-wins is not possible.
 
-ADR-023: Autosave transport is a Route Handler, not a Server Action, so status
-codes are real HTTP semantics and an expired session yields 401 JSON instead of
-a login redirect. `POST /api/visits/{visitId}/clinical-entries/{fieldId}` and
-`POST /api/clinical/fields/{fieldId}/options` delegate to
+ADR-023: Autosave transport is Route Handlers, not Server Actions, so status
+codes are real HTTP semantics and an expired session yields 401 JSON instead
+of a login redirect. `POST /api/visits/{visitId}/clinical-entries/{fieldId}`,
+`POST /api/clinical/fields/{fieldId}/options` and the read-only
+`GET /api/visits/{visitId}/clinical-sections/{sectionCode}` delegate to
 `src/modules/clinical/api.ts` (Request -> Response, testable without Next).
-Checks in order: same-origin (Origin must match Host/X-Forwarded-Host, or
-Sec-Fetch-Site same-origin) -> 403; session -> 401; Content-Type JSON -> 415;
-body limit (32 KB save / 2 KB option, enforced while streaming, not just by
-Content-Length) -> 413; JSON -> 400; strict schema (unknown keys such as
-`patientId` rejected) -> 400; then the service: permission 403 (audited),
-unknown visit/field 404, conflict 409 (also duplicate option), invalid value 400,
-visit not open 423. `patientId` is always derived from the visit. `src/proxy.ts`
-no longer redirects `/api/*` (handlers authenticate themselves); the app-layout
-guard for pages is unchanged. `Cache-Control: no-store` on every response.
+Checks for the POSTs, in order:
+- *Origin*: compared with the canonical `APP_ORIGIN` (scheme + host + port,
+  normalised; default ports and case ignored) -> 403 `cross_origin`. When Origin
+  is absent, `Sec-Fetch-Site: same-origin` is required. The opaque `null` origin
+  is rejected. `X-Forwarded-Host`, `X-Forwarded-Proto` and `Host` are NEVER
+  trusted. `APP_ORIGIN` is REQUIRED in production: without it the API fails
+  closed (403 `origin_not_configured`); in development/test the request URL's own
+  origin is used. Behind a TLS-terminating proxy set the PUBLIC https URL.
+- session -> 401; Content-Type JSON -> 415; body limit (32 KB save / 2 KB
+  option, enforced while streaming, not just by Content-Length) -> 413; JSON ->
+  400; strict schema (unknown keys such as `patientId` rejected) -> 400.
+- *Actor binding*: the body carries `expectedUserId`, the user the page was
+  rendered for. If the session now belongs to someone else (user B signed in on
+  the same browser), the request is refused with 403 `actor_mismatch`, an
+  `access.denied` audit row (reason `actor_mismatch`) is written and NOTHING is
+  saved; the client keeps the text unsaved, shows why, and only a retry as the
+  original user can save it — attributed to that user. `+ Add New` is bound the
+  same way. (Service level: replays also require the same `createdBy`.)
+- then the service: permission 403 (audited), unknown visit/field/section 404,
+  conflict 409 (also duplicate option), invalid value / id reuse 400, visit not
+  open 423. `patientId` is always derived from the visit.
+`src/proxy.ts` does not redirect `/api/*` (handlers authenticate themselves);
+the app-layout guard for pages is unchanged. `Cache-Control: no-store` on all.
+*Denial audit for untrusted ids*: `access.denied` rows used to reference the
+URL's visit/patient id in FK columns, so probing a nonexistent id would fail the
+audit insert (a 500 instead of 403). `auditAccessDenied` now resolves each id
+first: an id is stored in `visit_id`/`patient_id` only if the row exists;
+otherwise the FK columns stay null and the attempted ids are recorded, clipped,
+in `metadata.attempted`. Malformed ids are never sent to the database.
 
 ADR-024: Reason for Visit has exactly one authoritative writable source:
 `clinical_entries` field `reason_for_visit`. Before Sprint 2 `visits.reason`
-also held it. Migration 0005 (idempotent): ensures the section/list/field rows
-exist, backfills every non-empty `visits.reason` as version 1
-(`{ optionIds: [], freeText: trimmed text }`, created_by = the visit's creator)
-with a `clinical_entry.backfill` audit row holding the raw legacy value, records
-a `clinical_entry.backfill_skipped` audit row (raw value kept) when a visit
-already has a reason entry, then VERIFIES in SQL that no non-empty legacy value
-lacks an entry (the migration aborts otherwise), and installs a trigger that
-makes `visits.reason` read-only. `visits.reason` is kept as a deprecated legacy
-column for rollback safety only; no application path reads or writes it (visit
-queries select explicit columns; a test scans the source). Visit creation records
-the intake reason as a `reason_for_visit` v1 entry in the same transaction,
-authorised by `visit.create` (intake) — the one clinical write not gated by
-`clinical.write`; Reception can therefore record an intake reason but cannot read
-it back (`clinical.read`). Verification for production:
-`npm run db:verify-reason-backfill` (exit 1 if any legacy reason is missing;
-`db:validate` runs the same check). Later removal: after production validation
-shows `missing = 0` and a release cycle has passed, a new migration drops the
-trigger and the `visits.reason` column (destructive: take a backup first).
-Rollback of 0005: `DROP TRIGGER visits_reason_read_only ON visits;
+also held it. Migration `0004_reason_for_visit_single_source.sql` runs in the
+migrator's single transaction and:
+1. `LOCK TABLE visits, clinical_entries IN SHARE ROW EXCLUSIVE MODE` first —
+   blocks every concurrent INSERT/UPDATE/DELETE on both tables until commit, so
+   old application code (or an ad-hoc writer) cannot race the backfill, the
+   verification or the trigger installation. (Reads continue. Deploy with the
+   new code; there is no supported window where old code writes
+   `visits.reason` after this migration.)
+2. ensures the section / option list / global field / placement rows for
+   `reason_for_visit` exist (identical to the seed, which refuses drift);
+3. snapshots every non-empty legacy reason once, trimmed exactly like
+   `String.prototype.trim` (shared regex, asserted equal to the TypeScript
+   constant) and ABORTS with a clear error if any trimmed reason is longer than
+   5000 characters. It NEVER truncates and never modifies `visits.reason`; fix
+   the reported rows by hand and re-run;
+4. records `clinical_entry.backfill_skipped` — raw legacy text preserved — for
+   EVERY non-empty legacy reason whose visit already had a `reason_for_visit`
+   entry, whether the text is identical or not, at any version (it references the
+   latest entry and flags `identicalToExisting`);
+5. backfills the rest as version 1 (`{ optionIds: [], freeText: trimmed }`,
+   `created_by` = the visit's creator) with a `clinical_entry.backfill` audit
+   row (actor null = system, raw legacy value and `visitCreatedBy` in metadata);
+6. VERIFIES in SQL that no non-empty legacy value lacks an entry (aborts
+   otherwise) and installs a trigger making `visits.reason` read-only.
+The migration file is pure ASCII (a test enforces it), idempotent, and re-running
+never duplicates entries or audit rows. `visits.reason` is kept as a deprecated
+legacy column for rollback safety only; no application path reads or writes it
+(visit queries select explicit columns; a test scans the source).
+*Length rule* (one rule everywhere): free text and the intake reason are limited
+to `MAX_FREE_TEXT_LENGTH` = 5000 CHARACTERS, counted as Unicode code points (the
+TypeScript helper `characterCount`, zod refinements, the service's defense in
+depth and PostgreSQL `char_length` in the migration all agree). The intake
+`<input maxLength>` counts UTF-16 units, so for astral characters (emoji) the
+browser is stricter than the server, never looser. Visit creation validates
+in the schema, the HTML, and again in `recordInitialReasonForVisit`, which
+throws (rolling back the whole visit) rather than truncating.
+*Intake exception (PENDING FINAL USER CONFIRMATION)*: visit creation records the
+intake reason as a `reason_for_visit` v1 entry in the same transaction, authorised
+by `visit.create` — the one clinical write not gated by `clinical.write`. Product
+assumption for now: Reception may enter this single intake Reason for Visit under
+`visit.create` but cannot read the clinical chart afterwards (no `clinical.read`,
+so they do not even see the reason in the visit list). If that is not wanted, the
+alternative is to drop the reason input for roles without `clinical.write`.
+Verification for production: `npm run db:verify-reason-backfill` (exit 1 if any
+legacy reason is missing; `db:validate` runs the same check and reports
+`over limit`). Later removal: after production validation shows `missing = 0` and
+a release cycle has passed, a new migration drops the trigger and the
+`visits.reason` column (destructive: take a backup first).
+Rollback of 0004: `DROP TRIGGER visits_reason_read_only ON visits;
 DROP FUNCTION visits_reason_read_only();` — no data needs restoring because
 `visits.reason` was never modified; backfilled entries/audit rows are history
 and stay.
 
 ADR-025: Browser E2E (Playwright, `npm run test:e2e`) runs against the
-production build (`next start`) and a real PostgreSQL. CI adds Chromium install
-and this step after the build. Specs live in `e2e/`; a global setup migrates,
-seeds and creates one user per role per run. No retries (a pass-on-retry would
-hide autosave/conflict races). Vitest is restricted to `test/**` so the two
-runners do not collide. Local runs: `PW_CHANNEL=chrome` reuses an installed
-browser. Known limitation: PGlite's multi-connection multiplexer can return
-wrong results under concurrent connections (observed: a valid session row
-missing from a filtered SELECT while the browser's keepalive POST and the reload
-GET overlap), so on PGlite the suite is only reliable behind a
-transaction-serialising proxy; a real PostgreSQL (CI) has no such issue.
+production build (`next start`, with `APP_ORIGIN` set) and a real PostgreSQL.
+CI adds the Chromium install and this step after the build. Specs live in
+`e2e/`; a global setup migrates, seeds and creates one user per role per run.
+No retries (a pass-on-retry would hide autosave/conflict races). Vitest is
+restricted to `test/**` so the two runners do not collide. Local runs:
+`PW_CHANNEL=chrome` reuses an installed browser. `src/db/embedded.ts` now
+initialises the throwaway PostgreSQL with `--encoding=UTF8` (Windows otherwise
+defaults to WIN1252, which cannot store clinical text and differs from CI).
+Known limitation: PGlite's multi-connection multiplexer can return wrong results
+under concurrent connections (observed: a valid session row missing from a
+filtered SELECT while the browser's keepalive POST and the reload GET overlap),
+so on PGlite the suite is only reliable behind a transaction-serialising proxy
+and tests that need real concurrency skip when `TEST_DB_SERIALIZED` is set; a
+real PostgreSQL (CI, or the embedded one) has no such issue.
+
+ADR-026: Global field definitions, separate from section placement, with
+reusable option lists. A clinical concept (Current Meds, Allergies, Family
+History, Social Hx, ...) must have ONE source of truth however many tabs show it
+(`docs/CLINICAL_TABS.md` repeats several across tabs and warns against
+conflicting sources). Therefore:
+- `clinical_field_definitions` is global: `code` is unique across the system
+  (no `section_id`, no `sort_order`); `field_type`, `option_list_id`,
+  `allows_free_text`, `is_active`, `label`.
+- `clinical_section_fields` (section_id, field_definition_id, sort_order; PK on
+  the pair) places a field in a section. The same field may be placed in many
+  sections; entries stay keyed by (visit, field), so the same value shows
+  everywhere and is edited from anywhere, with one version stream.
+- `clinical_option_lists` are independent of fields: several fields may
+  reference one list (`optionList` in the definitions; default = the field's own
+  code) and therefore share values.
+- Structure is code + migration, presentation is data. The seed only ever
+  UPDATES cosmetic things (labels, section names, placement order); if an
+  existing field's `field_type`, option list or free-text flag differs from the
+  definitions it throws `StructuralDefinitionChangeError` before changing
+  anything (one transaction) — clinical entries may already exist, so a
+  structural change needs a migration. Nothing is deleted.
+- A RETIRED field (`is_active = false`) that still has history on a visit stays
+  visible there, read-only (marked "retired field"), so history never
+  disappears; it cannot be edited (404/`ClinicalFieldNotFoundError`) and is
+  hidden on visits with no data for it.
+These Sprint 2 migrations had not been merged or deployed, so they were revised
+in place (0002 foundation incl. the idempotency column and global fields, 0003
+append-only trigger, 0004 Reason for Visit) rather than stacking a
+compatibility migration.

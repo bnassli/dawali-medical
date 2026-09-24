@@ -1,6 +1,6 @@
 import type { ZodType } from "zod";
 import type { Database } from "@/db/client";
-import { ForbiddenError } from "@/modules/permissions/service";
+import { auditAccessDenied, ForbiddenError } from "@/modules/permissions/service";
 import type { ActorContext } from "@/modules/permissions/types";
 import {
   addClinicalOptionBodySchema,
@@ -11,6 +11,8 @@ import {
 import {
   addClinicalOption,
   ClinicalConflictError,
+  ClinicalSectionNotFoundError,
+  getClinicalSectionForVisit,
   ClinicalFieldNotFoundError,
   ClinicalOptionNotFoundError,
   DuplicateOptionError,
@@ -27,9 +29,10 @@ import {
  * directly in tests; the Next.js route files only wire in the session lookup.
  *
  * Status mapping: 401 no/expired session, 400 malformed/invalid input,
- * 403 permission denied or cross-origin request, 404 unknown visit/field,
- * 409 optimistic-concurrency conflict (or duplicate option), 413 body too
- * large, 415 non-JSON body, 423 visit not open (locked).
+ * 403 permission denied, cross-origin request or a session that now belongs
+ * to a different user than the page was rendered for, 404 unknown
+ * visit/field, 409 optimistic-concurrency conflict (or duplicate option),
+ * 413 body too large, 415 non-JSON body, 423 visit not open (locked).
  */
 export const MAX_SAVE_BODY_BYTES = 32 * 1024;
 export const MAX_OPTION_BODY_BYTES = 2 * 1024;
@@ -38,6 +41,13 @@ export interface ApiDeps {
   db: Database;
   /** Resolves the authenticated actor for this request, or null (=> 401). */
   resolveActor: () => Promise<ActorContext | null>;
+  /** Canonical public origin (APP_ORIGIN, already normalised to scheme://host[:port]). */
+  appOrigin: string | null;
+  /**
+   * Development/test only: when appOrigin is not configured, fall back to the
+   * request's own origin. MUST be false in production (fail closed).
+   */
+  allowRequestOrigin: boolean;
 }
 
 function json(status: number, body: Record<string, unknown>): Response {
@@ -51,19 +61,40 @@ function fail(status: number, error: string, message: string, extra: Record<stri
   return json(status, { ok: false, error, message, ...extra });
 }
 
-/** Same-origin only: Origin must match the host, or (no Origin) Sec-Fetch-Site must be same-origin. */
-export function isSameOrigin(request: Request): boolean {
-  const host =
-    request.headers.get("x-forwarded-host") ??
-    request.headers.get("host") ??
-    new URL(request.url).host;
+/** Canonical form (scheme://host[:port], default ports dropped, lower-cased host) or null. */
+export function normalizeOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The origin browsers must present. APP_ORIGIN wins. Without it, dev/test may
+ * use the request's own URL origin; production fails closed (null).
+ * X-Forwarded-Host / X-Forwarded-Proto / Host are NEVER trusted: a client (or a
+ * misconfigured proxy) controls them, so they must not decide who we trust.
+ */
+export function expectedOriginFor(request: Request, deps: ApiDeps): string | null {
+  if (deps.appOrigin) return normalizeOrigin(deps.appOrigin);
+  if (deps.allowRequestOrigin) return normalizeOrigin(request.url);
+  return null;
+}
+
+/**
+ * Same-origin check against the canonical origin, comparing scheme + host +
+ * port. Browsers send Origin on every POST; if it is absent, Sec-Fetch-Site
+ * (set by the browser, not scriptable) must say same-origin. Anything else,
+ * including the opaque "null" origin, is rejected.
+ */
+export function isSameOrigin(request: Request, expectedOrigin: string | null): boolean {
+  if (!expectedOrigin) return false;
   const origin = request.headers.get("origin");
-  if (origin) {
-    try {
-      return new URL(origin).host === host;
-    } catch {
-      return false;
-    }
+  if (origin !== null) {
+    return normalizeOrigin(origin) === expectedOrigin;
   }
   return request.headers.get("sec-fetch-site") === "same-origin";
 }
@@ -115,6 +146,7 @@ function mapError(err: unknown): Response {
   if (
     err instanceof VisitNotFoundError ||
     err instanceof ClinicalFieldNotFoundError ||
+    err instanceof ClinicalSectionNotFoundError ||
     err instanceof ClinicalOptionNotFoundError
   ) {
     return fail(404, "not_found", err.message);
@@ -133,7 +165,15 @@ async function prepare<T>(
   maxBytes: number,
   schema: ZodType<T>,
 ): Promise<{ ok: true; actor: ActorContext; body: T } | { ok: false; response: Response }> {
-  if (!isSameOrigin(request)) {
+  const expectedOrigin = expectedOriginFor(request, deps);
+  if (!expectedOrigin) {
+    console.error("clinical api: APP_ORIGIN is not configured; refusing request (fail closed).");
+    return {
+      ok: false,
+      response: fail(403, "origin_not_configured", "The server has no canonical origin configured."),
+    };
+  }
+  if (!isSameOrigin(request, expectedOrigin)) {
     return { ok: false, response: fail(403, "cross_origin", "Cross-origin requests are not allowed.") };
   }
   const actor = await deps.resolveActor();
@@ -152,6 +192,29 @@ async function prepare<T>(
   return { ok: true, actor, body: parsed.data };
 }
 
+/**
+ * The page was rendered for expectedUserId. If the session now belongs to a
+ * different user (someone signed in on the same browser), refuse: text typed
+ * as user A must never be saved under user B. Audited; nothing is written.
+ */
+async function actorMismatch(
+  deps: ApiDeps,
+  actor: ActorContext,
+  expectedUserId: string,
+  context: { entityType: string; entityId: string; visitId?: string },
+): Promise<Response | null> {
+  if (actor.userId === expectedUserId) return null;
+  await auditAccessDenied(deps.db, actor, context, {
+    reason: "actor_mismatch",
+    expectedUserId,
+  });
+  return fail(
+    403,
+    "actor_mismatch",
+    "You are now signed in as a different user than the one this page was opened for. Nothing was saved.",
+  );
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** POST /api/visits/{visitId}/clinical-entries/{fieldId}. patientId is derived from the visit, never accepted. */
@@ -165,8 +228,15 @@ export async function handleSaveClinicalEntry(
   if (!UUID_PATTERN.test(params.visitId) || !UUID_PATTERN.test(params.fieldId)) {
     return fail(400, "invalid_input", "Invalid visit or field id.");
   }
+  const { expectedUserId, ...rest } = prepared.body;
+  const mismatch = await actorMismatch(deps, prepared.actor, expectedUserId, {
+    entityType: "clinical_entry",
+    entityId: params.fieldId,
+    visitId: params.visitId,
+  });
+  if (mismatch) return mismatch;
   const input = saveClinicalEntrySchema.parse({
-    ...prepared.body,
+    ...rest,
     visitId: params.visitId,
     fieldId: params.fieldId,
   });
@@ -184,6 +254,47 @@ export async function handleSaveClinicalEntry(
   }
 }
 
+const SECTION_CODE_PATTERN = /^[a-z0-9_]{1,64}$/;
+
+/**
+ * GET /api/visits/{visitId}/clinical-sections/{sectionCode}: the CURRENT
+ * (never cached) values and options of a section. The page calls it on mount
+ * and when it becomes visible again so a page restored from the browser's
+ * back/forward cache, or left open for a while, reconciles with the server
+ * instead of showing a stale server render. Read-only; requires clinical.read.
+ */
+export async function handleGetClinicalSection(
+  request: Request,
+  params: { visitId: string; sectionCode: string },
+  deps: ApiDeps,
+): Promise<Response> {
+  void request;
+  const actor = await deps.resolveActor();
+  if (!actor) {
+    return fail(401, "unauthenticated", "Your session has expired. Sign in again.");
+  }
+  if (!UUID_PATTERN.test(params.visitId) || !SECTION_CODE_PATTERN.test(params.sectionCode)) {
+    return fail(400, "invalid_input", "Invalid visit or section.");
+  }
+  try {
+    const view = await getClinicalSectionForVisit(deps.db, actor, params.visitId, params.sectionCode);
+    return json(200, {
+      ok: true,
+      visitId: view.visit.id,
+      visitStatus: view.visit.status,
+      fields: view.fields.map((f) => ({
+        id: f.id,
+        version: f.version,
+        value: f.value,
+        options: f.options,
+        isActive: f.isActive,
+      })),
+    });
+  } catch (err) {
+    return mapError(err);
+  }
+}
+
 /** POST /api/clinical/fields/{fieldId}/options ("+ Add New"). */
 export async function handleAddClinicalOption(
   request: Request,
@@ -195,7 +306,13 @@ export async function handleAddClinicalOption(
   if (!UUID_PATTERN.test(params.fieldId)) {
     return fail(400, "invalid_input", "Invalid field id.");
   }
-  const input = addClinicalOptionSchema.parse({ ...prepared.body, fieldId: params.fieldId });
+  const { expectedUserId, ...rest } = prepared.body;
+  const mismatch = await actorMismatch(deps, prepared.actor, expectedUserId, {
+    entityType: "clinical_option",
+    entityId: params.fieldId,
+  });
+  if (mismatch) return mismatch;
+  const input = addClinicalOptionSchema.parse({ ...rest, fieldId: params.fieldId });
   try {
     const option = await addClinicalOption(deps.db, prepared.actor, input);
     return json(200, { ok: true, option });

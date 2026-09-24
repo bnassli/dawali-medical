@@ -39,6 +39,8 @@ export default defineConfig({
     env: {
       ...(databaseUrl ? { DATABASE_URL: databaseUrl } : {}),
       NODE_ENV: "production",
+      // Production fails closed without a canonical origin (ADR-023).
+      APP_ORIGIN: baseURL,
     },
   },
 });

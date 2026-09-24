@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -65,30 +66,50 @@ export const clinicalOptions = pgTable(
   ],
 );
 
-export const clinicalFieldDefinitions = pgTable(
-  "clinical_field_definitions",
+/**
+ * GLOBAL field definitions (ADR-026). A concept such as Current Meds or
+ * Allergies is defined exactly once here (globally unique `code`), so its
+ * entries have a single source of truth however many tabs show it. Which tab
+ * shows it, and in what order, lives in clinical_section_fields. Several
+ * fields may point at the same option list (reusable lists).
+ *
+ * Structural columns (field_type, option_list_id, allows_free_text) are never
+ * changed by the seed: changing them requires a migration, because clinical
+ * entries may already exist.
+ */
+export const clinicalFieldDefinitions = pgTable("clinical_field_definitions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  code: text("code").notNull().unique(),
+  label: text("label").notNull(),
+  // 'select' | 'multiselect' | 'text' | 'textarea'
+  fieldType: text("field_type").notNull(),
+  optionListId: uuid("option_list_id").references(
+    () => clinicalOptionLists.id,
+    { onDelete: "restrict" },
+  ),
+  allowsFreeText: boolean("allows_free_text").notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+/**
+ * Placement of a global field inside a section (tab): order only, no data.
+ * The same field may be placed in several sections; entries stay keyed by
+ * (visit, field), so repeated UI sections never create a second source.
+ */
+export const clinicalSectionFields = pgTable(
+  "clinical_section_fields",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
     sectionId: uuid("section_id")
       .notNull()
       .references(() => clinicalSections.id, { onDelete: "restrict" }),
-    code: text("code").notNull(),
-    label: text("label").notNull(),
-    // 'select' | 'multiselect' | 'text' | 'textarea'
-    fieldType: text("field_type").notNull(),
-    optionListId: uuid("option_list_id").references(
-      () => clinicalOptionLists.id,
-      { onDelete: "restrict" },
-    ),
-    allowsFreeText: boolean("allows_free_text").notNull().default(true),
+    fieldDefinitionId: uuid("field_definition_id")
+      .notNull()
+      .references(() => clinicalFieldDefinitions.id, { onDelete: "restrict" }),
     sortOrder: integer("sort_order").notNull(),
-    isActive: boolean("is_active").notNull().default(true),
   },
   (table) => [
-    uniqueIndex("clinical_field_definitions_section_code_idx").on(
-      table.sectionId,
-      table.code,
-    ),
+    primaryKey({ columns: [table.sectionId, table.fieldDefinitionId] }),
+    index("clinical_section_fields_field_idx").on(table.fieldDefinitionId),
   ],
 );
 

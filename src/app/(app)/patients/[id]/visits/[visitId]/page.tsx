@@ -80,7 +80,10 @@ export default async function VisitChartPage({
               </p>
             ) : null}
             <ClinicalSectionForm
+              key={visit.id}
               visitId={visit.id}
+              actorId={actor.userId}
+              sectionCode={section.section.code}
               fields={section.fields}
               readOnly={!canWrite || !visitOpen}
               canWrite={canWrite}

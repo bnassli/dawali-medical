@@ -17,7 +17,12 @@ const text = (freeText: string): EntryValue => ({ optionIds: [], freeText });
 interface Call {
   url: string;
   init: RequestInit;
-  body: { expectedVersion: number; clientMutationId: string; freeText: string };
+  body: {
+    expectedUserId: string;
+    expectedVersion: number;
+    clientMutationId: string;
+    freeText: string;
+  };
 }
 
 function makeFetch(responses: Array<() => Response | Promise<Response>>) {
@@ -53,6 +58,7 @@ function makeSaver(fetchImpl: ReturnType<typeof makeFetch>["fetchImpl"], version
   return new FieldSaver({
     visitId: "visit-1",
     fieldId: "field-1",
+    actorId: "user-1",
     initialVersion: version,
     initialValue: EMPTY,
     initialOptions: [],
@@ -234,7 +240,7 @@ describe("FieldSaver (client autosave engine)", () => {
   it("SaverGroup counts unsaved fields and flushAll sends every pending field", async () => {
     const a = makeFetch([ok(1, text("a"))]);
     const b = makeFetch([ok(1, text("b"))]);
-    const group = new SaverGroup();
+    const group = new SaverGroup("visit-1", "user-1");
     const sa = makeSaver(a.fetchImpl);
     const sb = makeSaver(b.fetchImpl);
     group.add("a", sa);
@@ -267,11 +273,12 @@ describe("FieldSaver (client autosave engine)", () => {
   });
 
   it("postNewOption maps 401 to a session-expired outcome", async () => {
-    const expired = await postNewOption("f", "x", async () => new Response("{}", { status: 401 }));
+    const expired = await postNewOption("f", "x", "user-1", async () => new Response("{}", { status: 401 }));
     expect(expired).toMatchObject({ ok: false, sessionExpired: true });
     const good = await postNewOption(
       "f",
       "x",
+      "user-1",
       async () =>
         new Response(JSON.stringify({ ok: true, option: { id: "o", label: "x", isActive: true } }), {
           status: 200,

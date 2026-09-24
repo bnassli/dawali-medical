@@ -267,4 +267,93 @@ describe("clinical entries: optimistic concurrency and idempotency", () => {
     await save(other, visit.id, fid, "v2", 1);
     await expect(save(actor, visit.id, fid, "v2", 1)).rejects.toBeInstanceOf(ClinicalConflictError);
   });
+
+  it("one clientMutationId used CONCURRENTLY on different visits by different users: exactly one wins, the other is a deterministic MutationIdReuseError (never a raw DB error)", async () => {
+    const { actor: alice } = await createTestUser(db, { roleCode: "DOCTOR" });
+    const { actor: bob } = await createTestUser(db, { roleCode: "DOCTOR" });
+    const fid = await fieldId("comments");
+
+    for (let round = 0; round < 8; round += 1) {
+      const { visit: visitA } = await newVisit(alice);
+      const { visit: visitB } = await newVisit(bob);
+      const id = randomUUID();
+      const results = await Promise.allSettled([
+        save(alice, visitA.id, fid, "from alice", 0, id),
+        save(bob, visitB.id, fid, "from bob", 0, id),
+      ]);
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      expect(fulfilled, `round ${round}`).toHaveLength(1);
+      expect(rejected, `round ${round}`).toHaveLength(1);
+      expect(rejected[0]?.reason, `round ${round}`).toBeInstanceOf(MutationIdReuseError);
+
+      const rows = await db.select().from(clinicalEntries).where(eq(clinicalEntries.clientMutationId, id));
+      expect(rows).toHaveLength(1);
+      // The losing visit got nothing: no entry, no audit row.
+      const loserVisit = results[0]?.status === "rejected" ? visitA : visitB;
+      expect(await counts(loserVisit.id)).toEqual({ entries: 0, audits: 0 });
+    }
+  });
+
+  it("the same clientMutationId used concurrently by two users on the SAME visit and field also resolves to one winner and one MutationIdReuseError", async () => {
+    const { actor: alice } = await createTestUser(db, { roleCode: "DOCTOR" });
+    const { actor: bob } = await createTestUser(db, { roleCode: "NURSE_ASSISTANT" });
+    const { visit } = await newVisit(alice);
+    const fid = await fieldId("comments");
+    const id = randomUUID();
+
+    const results = await Promise.allSettled([
+      save(alice, visit.id, fid, "same text", 0, id),
+      save(bob, visit.id, fid, "same text", 0, id),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]?.reason).toBeInstanceOf(MutationIdReuseError);
+    expect(await counts(visit.id)).toEqual({ entries: 1, audits: 1 });
+  });
+
+  it("a replayed clientMutationId with a DIFFERENT canonical value or base version is rejected as reuse; an equivalent spelling is a valid replay", async () => {
+    const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
+    const { visit } = await newVisit(actor);
+    const fid = await fieldId("problem_list");
+    const s = uniqueSuffix();
+    const a = await addClinicalOption(db, actor, { fieldId: fid, label: `A ${s}` });
+    const b = await addClinicalOption(db, actor, { fieldId: fid, label: `B ${s}` });
+    const id = randomUUID();
+
+    const first = await save(actor, visit.id, fid, "  note  ", 0, id, [b.id, a.id]);
+    expect(first).toMatchObject({ changed: true, version: 1 });
+    const after = await counts(visit.id);
+
+    // Different free text, different options, different base version: all reuse.
+    await expect(save(actor, visit.id, fid, "other note", 0, id, [b.id, a.id])).rejects.toBeInstanceOf(
+      MutationIdReuseError,
+    );
+    await expect(save(actor, visit.id, fid, "note", 0, id, [a.id])).rejects.toBeInstanceOf(
+      MutationIdReuseError,
+    );
+    await expect(save(actor, visit.id, fid, "note", 1, id, [a.id, b.id])).rejects.toBeInstanceOf(
+      MutationIdReuseError,
+    );
+    await expect(save(actor, visit.id, fid, "", 0, id)).rejects.toBeInstanceOf(MutationIdReuseError);
+    expect(await counts(visit.id)).toEqual(after);
+
+    // Same request spelled differently (order, duplicates, whitespace) is a genuine replay.
+    const replay = await save(actor, visit.id, fid, "note", 0, id, [a.id, b.id, a.id]);
+    expect(replay).toMatchObject({ changed: false, replayed: true, version: 1 });
+    expect(await counts(visit.id)).toEqual(after);
+  });
+
+  it("mutation ids of no-op saves are not recorded, so reusing one for a real change is not blocked", async () => {
+    const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
+    const { visit } = await newVisit(actor);
+    const fid = await fieldId("comments");
+    const id = randomUUID();
+    await save(actor, visit.id, fid, "base", 0);
+    const noop = await save(actor, visit.id, fid, "base", 1, id);
+    expect(noop).toMatchObject({ changed: false, replayed: false });
+    const real = await save(actor, visit.id, fid, "changed", 1, id);
+    expect(real).toMatchObject({ changed: true, version: 2 });
+  });
 });

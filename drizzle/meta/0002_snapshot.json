@@ -1,5 +1,5 @@
 {
-  "id": "babbc332-b728-471f-a1fa-a8cfc43107fd",
+  "id": "78e3e6d5-fc81-4258-b8f4-8805ad6556ba",
   "prevId": "e2608551-268c-4559-9b35-bd77239edb82",
   "version": "7",
   "dialect": "postgresql",
@@ -1021,6 +1021,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "client_mutation_id": {
+          "name": "client_mutation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_by": {
           "name": "created_by",
           "type": "uuid",
@@ -1059,6 +1065,22 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "clinical_entries_client_mutation_id_idx": {
+          "name": "clinical_entries_client_mutation_id_idx",
+          "columns": [
+            {
+              "expression": "client_mutation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"clinical_entries\".\"client_mutation_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1137,12 +1159,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "section_id": {
-          "name": "section_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "code": {
           "name": "code",
           "type": "text",
@@ -1174,12 +1190,6 @@
           "notNull": true,
           "default": true
         },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
         "is_active": {
           "name": "is_active",
           "type": "boolean",
@@ -1188,43 +1198,8 @@
           "default": true
         }
       },
-      "indexes": {
-        "clinical_field_definitions_section_code_idx": {
-          "name": "clinical_field_definitions_section_code_idx",
-          "columns": [
-            {
-              "expression": "section_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "code",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "clinical_field_definitions_section_id_clinical_sections_id_fk": {
-          "name": "clinical_field_definitions_section_id_clinical_sections_id_fk",
-          "tableFrom": "clinical_field_definitions",
-          "tableTo": "clinical_sections",
-          "columnsFrom": [
-            "section_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "clinical_field_definitions_option_list_id_clinical_option_lists_id_fk": {
           "name": "clinical_field_definitions_option_list_id_clinical_option_lists_id_fk",
           "tableFrom": "clinical_field_definitions",
@@ -1240,7 +1215,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "clinical_field_definitions_code_unique": {
+          "name": "clinical_field_definitions_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1388,6 +1371,88 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.clinical_section_fields": {
+      "name": "clinical_section_fields",
+      "schema": "",
+      "columns": {
+        "section_id": {
+          "name": "section_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "field_definition_id": {
+          "name": "field_definition_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "clinical_section_fields_field_idx": {
+          "name": "clinical_section_fields_field_idx",
+          "columns": [
+            {
+              "expression": "field_definition_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "clinical_section_fields_section_id_clinical_sections_id_fk": {
+          "name": "clinical_section_fields_section_id_clinical_sections_id_fk",
+          "tableFrom": "clinical_section_fields",
+          "tableTo": "clinical_sections",
+          "columnsFrom": [
+            "section_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "clinical_section_fields_field_definition_id_clinical_field_definitions_id_fk": {
+          "name": "clinical_section_fields_field_definition_id_clinical_field_definitions_id_fk",
+          "tableFrom": "clinical_section_fields",
+          "tableTo": "clinical_field_definitions",
+          "columnsFrom": [
+            "field_definition_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "clinical_section_fields_section_id_field_definition_id_pk": {
+          "name": "clinical_section_fields_section_id_field_definition_id_pk",
+          "columns": [
+            "section_id",
+            "field_definition_id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
