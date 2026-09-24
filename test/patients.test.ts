@@ -198,6 +198,34 @@ describe("patients", () => {
     expect(prefix.some((p) => p.id === target.id)).toBe(true);
   });
 
+  it("treats % and _ in search input literally, not as wildcards", async () => {
+    const { actor } = await createTestUser(db, { roleCode: "RECEPTION" });
+    const suffix = uniqueSuffix();
+    const make = (icareFileNo: string, lastName: string) =>
+      createPatient(db, actor, {
+        firstName: `Wild-${suffix}`,
+        lastName,
+        middleName: undefined,
+        dateOfBirth: undefined,
+        sex: undefined,
+        phone: undefined,
+        email: undefined,
+        icareFileNo,
+      });
+    const literal = await make(`WLD-${suffix}-1_3`, `Under_score-${suffix}`);
+    const lookalike = await make(`WLD-${suffix}-123`, `Underxscore-${suffix}`);
+
+    const byFileNo = await searchPatients(db, actor, crit({ externalId: `WLD-${suffix}-1_` }));
+    expect(byFileNo.map((p) => p.id)).toEqual([literal.id]);
+
+    const byName = await searchPatients(db, actor, crit({ name: `Under_score-${suffix}` }));
+    expect(byName.map((p) => p.id)).toEqual([literal.id]);
+    expect(byName.some((p) => p.id === lookalike.id)).toBe(false);
+
+    const percent = await searchPatients(db, actor, crit({ name: "%" }));
+    expect(percent).toEqual([]);
+  });
+
   it("searches patients by phone", async () => {
     const { actor } = await createTestUser(db, { roleCode: "RECEPTION" });
     const suffix = uniqueSuffix();

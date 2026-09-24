@@ -189,6 +189,15 @@ export async function getPatientById(
   return { ...patient, externalIds };
 }
 
+/**
+ * Escapes LIKE metacharacters so user input matches literally: a typed `%`
+ * or `_` must not act as a wildcard (e.g. file number "12_" must not match
+ * "123"). Backslash is PostgreSQL's default LIKE escape character.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 export async function searchPatients(
   db: Database,
   actor: ActorContext,
@@ -199,7 +208,7 @@ export async function searchPatients(
   const conditions = [];
 
   if (criteria.name) {
-    const pattern = `%${criteria.name}%`;
+    const pattern = `%${escapeLike(criteria.name)}%`;
     const nameCondition = or(
       ilike(patients.firstName, pattern),
       ilike(patients.lastName, pattern),
@@ -207,7 +216,7 @@ export async function searchPatients(
     if (nameCondition) conditions.push(nameCondition);
   }
   if (criteria.phone) {
-    conditions.push(ilike(patients.phone, `%${criteria.phone}%`));
+    conditions.push(ilike(patients.phone, `%${escapeLike(criteria.phone)}%`));
   }
   if (criteria.dateOfBirth) {
     conditions.push(eq(patients.dateOfBirth, criteria.dateOfBirth));
@@ -222,7 +231,7 @@ export async function searchPatients(
         db
           .select({ patientId: patientExternalIds.patientId })
           .from(patientExternalIds)
-          .where(ilike(patientExternalIds.value, `${criteria.externalId}%`)),
+          .where(ilike(patientExternalIds.value, `${escapeLike(criteria.externalId)}%`)),
       ),
     );
   }
