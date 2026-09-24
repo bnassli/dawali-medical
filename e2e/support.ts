@@ -105,6 +105,7 @@ export interface EntryRow {
   version: number;
   freeText: string;
   optionIds: string[];
+  checked: boolean | undefined;
   createdBy: string | null;
 }
 
@@ -127,6 +128,7 @@ export async function entryHistory(visitId: string, fieldCode: string): Promise<
       version: r.version,
       freeText: r.value.freeText,
       optionIds: r.value.optionIds,
+      checked: r.value.checked,
       createdBy: r.createdBy,
     }));
   });
