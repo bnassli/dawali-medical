@@ -16,7 +16,13 @@ import type { ActorContext } from "@/modules/permissions/types";
 export async function saveCurrent(
   db: Database,
   actor: ActorContext,
-  input: { visitId: string; fieldId: string; optionIds: string[]; freeText: string },
+  input: {
+    visitId: string;
+    fieldId: string;
+    optionIds: string[];
+    freeText: string;
+    checked?: boolean;
+  },
 ): Promise<SaveClinicalEntryResult> {
   const [latest] = await db
     .select({ version: clinicalEntries.version })

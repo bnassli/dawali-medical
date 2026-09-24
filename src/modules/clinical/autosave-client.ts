@@ -21,6 +21,8 @@
 export interface EntryValue {
   optionIds: string[];
   freeText: string;
+  /** Checkbox fields only (ADR-027). */
+  checked?: boolean;
 }
 
 export interface OptionView {
@@ -108,6 +110,7 @@ function parseValue(v: unknown): EntryValue | null {
   return {
     optionIds: v.optionIds.filter((x): x is string => typeof x === "string"),
     freeText: v.freeText,
+    ...(typeof v.checked === "boolean" ? { checked: v.checked } : {}),
   };
 }
 
@@ -408,6 +411,8 @@ export class FieldSaver {
             clientMutationId: m.id,
             optionIds: m.value.optionIds,
             freeText: m.value.freeText,
+            // undefined is dropped by JSON.stringify: only checkbox fields send it.
+            checked: m.value.checked,
           }),
         },
       );

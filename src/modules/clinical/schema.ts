@@ -29,6 +29,8 @@ export const saveClinicalEntryBodySchema = z
     expectedVersion: z.number().int().min(0),
     clientMutationId: z.string().uuid(),
     optionIds: z.array(z.string().uuid()).max(200),
+    // Only for checkbox fields (ADR-027); the service rejects it elsewhere.
+    checked: z.boolean().optional(),
     freeText: z
       .string()
       .refine((v) => characterCount(v) <= MAX_FREE_TEXT_LENGTH, freeTextTooLongMessage),

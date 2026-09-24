@@ -14,7 +14,7 @@ import { writeAudit } from "@/modules/audit/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { requirePermission } from "@/modules/permissions/service";
 import type { ActorContext } from "@/modules/permissions/types";
-import { FIELD_TYPES, isSelectType } from "./definitions";
+import { FIELD_EXCLUSION_RULES, FIELD_TYPES, isSelectType } from "./definitions";
 import {
   characterCount,
   MAX_FREE_TEXT_LENGTH,
@@ -96,6 +96,18 @@ export class MutationIdReuseError extends Error {
   }
 }
 
+/**
+ * A value that may not coexist with another field's current value on the same
+ * visit (ADR-027), e.g. "Unknown" together with Past Medical Hx values.
+ * Nothing is written and nothing on the other field is changed.
+ */
+export class ClinicalExclusionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClinicalExclusionError";
+  }
+}
+
 export class DuplicateOptionError extends Error {
   constructor(label: string) {
     super(
@@ -162,9 +174,14 @@ export interface ClinicalEntryRecord {
 
 const EMPTY_VALUE: ClinicalEntryValue = { optionIds: [], freeText: "" };
 
+function isEmptyValue(v: ClinicalEntryValue): boolean {
+  return v.optionIds.length === 0 && v.freeText === "" && v.checked !== true;
+}
+
 function valuesEqual(a: ClinicalEntryValue, b: ClinicalEntryValue): boolean {
   return (
     a.freeText === b.freeText &&
+    (a.checked ?? false) === (b.checked ?? false) &&
     a.optionIds.length === b.optionIds.length &&
     a.optionIds.every((id, i) => id === b.optionIds[i])
   );
@@ -204,7 +221,7 @@ export async function getClinicalSectionForVisit(
 
   // Global fields placed in this section, in placement order.
   const placements = await db
-    .select({ field: clinicalFieldDefinitions })
+    .select({ field: clinicalFieldDefinitions, labelOverride: clinicalSectionFields.labelOverride })
     .from(clinicalSectionFields)
     .innerJoin(
       clinicalFieldDefinitions,
@@ -231,6 +248,7 @@ export async function getClinicalSectionForVisit(
 
   // Active fields, plus retired fields that still have history on this visit
   // (shown read-only so history never disappears).
+  const labelOverrideById = new Map(placements.map((p) => [p.field.id, p.labelOverride]));
   const fields = placements
     .map((p) => p.field)
     .filter((f) => f.isActive || entryByField.has(f.id));
@@ -255,7 +273,8 @@ export async function getClinicalSectionForVisit(
     return {
       id: field.id,
       code: field.code,
-      label: field.label,
+      // The tab's own label (e.g. "Family Medical Hx") over the global one (ADR-027).
+      label: labelOverrideById.get(field.id) ?? field.label,
       fieldType: field.fieldType,
       allowsFreeText: field.allowsFreeText,
       isActive: field.isActive,
@@ -270,6 +289,26 @@ export async function getClinicalSectionForVisit(
     visit,
     fields: views,
   };
+}
+
+export interface ClinicalSectionTab {
+  id: string;
+  code: string;
+  name: string;
+}
+
+/** The clinical tabs, in display order (data-driven; ADR-027). Requires clinical.read. */
+export async function listClinicalSections(
+  db: Database,
+  actor: ActorContext,
+): Promise<ClinicalSectionTab[]> {
+  await requirePermission(db, actor, PERMISSIONS.CLINICAL_READ, {
+    entityType: "clinical_entry",
+  });
+  return db
+    .select({ id: clinicalSections.id, code: clinicalSections.code, name: clinicalSections.name })
+    .from(clinicalSections)
+    .orderBy(asc(clinicalSections.sortOrder), asc(clinicalSections.code));
 }
 
 export interface SaveClinicalEntryResult {
@@ -356,6 +395,7 @@ async function saveInTransaction(
     const canonical: ClinicalEntryValue = {
       optionIds: [...new Set(input.optionIds)].sort(),
       freeText: input.freeText.trim(),
+      ...(input.checked === undefined ? {} : { checked: input.checked }),
     };
     if (
       applied.visitId !== visit.id ||
@@ -423,6 +463,8 @@ async function saveInTransaction(
       entry: current ?? null,
     };
   }
+
+  await assertNoExclusion(tx, visit.id, field, next);
 
   const version = currentVersion + 1;
   const [created] = await tx
@@ -599,6 +641,55 @@ export async function getVisitReasons(
   return result;
 }
 
+/**
+ * Enforces FIELD_EXCLUSION_RULES against the other fields' CURRENT values on
+ * this visit. Runs inside the save transaction, under the visit row lock, so
+ * two concurrent saves on one visit cannot both pass. Only a value that is
+ * "active" (checked flag / non-empty excluded field) is checked: clearing is
+ * always allowed, and an already-inconsistent pair can always be resolved.
+ */
+async function assertNoExclusion(
+  tx: Database,
+  visitId: string,
+  field: typeof clinicalFieldDefinitions.$inferSelect,
+  next: ClinicalEntryValue,
+): Promise<void> {
+  const currentByCode = async (code: string) => {
+    const [row] = await tx
+      .select({ value: clinicalEntries.value, label: clinicalFieldDefinitions.label })
+      .from(clinicalEntries)
+      .innerJoin(
+        clinicalFieldDefinitions,
+        eq(clinicalFieldDefinitions.id, clinicalEntries.fieldDefinitionId),
+      )
+      .where(and(eq(clinicalEntries.visitId, visitId), eq(clinicalFieldDefinitions.code, code)))
+      .orderBy(desc(clinicalEntries.version))
+      .limit(1);
+    return row ?? null;
+  };
+
+  for (const rule of FIELD_EXCLUSION_RULES) {
+    if (rule.flag === field.code && next.checked === true) {
+      for (const code of rule.excludes) {
+        const other = await currentByCode(code);
+        if (other && !isEmptyValue(other.value)) {
+          throw new ClinicalExclusionError(
+            `"${field.label}" cannot be set while "${other.label}" has values. Clear "${other.label}" first.`,
+          );
+        }
+      }
+    }
+    if (rule.excludes.includes(field.code) && !isEmptyValue(next)) {
+      const flag = await currentByCode(rule.flag);
+      if (flag?.value.checked === true) {
+        throw new ClinicalExclusionError(
+          `"${field.label}" cannot have values while "${flag.label}" is checked. Uncheck "${flag.label}" first.`,
+        );
+      }
+    }
+  }
+}
+
 async function normalizeValue(
   tx: Database,
   field: typeof clinicalFieldDefinitions.$inferSelect,
@@ -610,6 +701,19 @@ async function normalizeValue(
     throw new InvalidClinicalValueError(`Text must be at most ${MAX_FREE_TEXT_LENGTH} characters.`);
   }
   const optionIds = [...new Set(input.optionIds)].sort();
+
+  if (field.fieldType === FIELD_TYPES.CHECKBOX) {
+    if (optionIds.length > 0 || freeText !== "") {
+      throw new InvalidClinicalValueError(`Field "${field.label}" is a checkbox.`);
+    }
+    if (input.checked === undefined) {
+      throw new InvalidClinicalValueError(`Field "${field.label}" requires checked true or false.`);
+    }
+    return { optionIds: [], freeText: "", checked: input.checked };
+  }
+  if (input.checked !== undefined) {
+    throw new InvalidClinicalValueError(`Field "${field.label}" is not a checkbox.`);
+  }
 
   if (field.fieldType === FIELD_TYPES.TEXT || field.fieldType === FIELD_TYPES.TEXTAREA) {
     if (optionIds.length > 0) {

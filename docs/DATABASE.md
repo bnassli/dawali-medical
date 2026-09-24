@@ -105,3 +105,14 @@ not exist (or are malformed) are recorded in `metadata.attempted` instead, so a
 probe of a nonexistent id yields a normal 403 and a normal audit row. Extra
 metadata: `requiredPermission`, or `reason: actor_mismatch` with
 `expectedUserId`.
+
+## Sprint 3A additions (ADR-027)
+
+- `clinical_section_fields.label_override` (text, nullable, migration `0005_clinical_section_field_label.sql`): presentation-only label of a placement. NULL = the field's own label. It lets a tab show a shared global field under its SonoSoft name (Past Medical Hx shows `family_history` as "Family Medical Hx") without creating a second field. The seed sets or clears it from `labelOverrides` in `definitions.ts`.
+- New field type `checkbox` (`clinical_field_definitions.field_type` is free text, so no schema change). Its entry value is `{ "optionIds": [], "freeText": "", "checked": true|false }`. `checked` is additive and optional in `ClinicalEntryValue`: it is always present on checkbox rows and never on any other field's rows, so every existing row and code path is unchanged.
+- No new tables and no new triggers; `clinical_entries` stays append-only.
+- New global fields are created by the seed (no migration): `past_medical_history`, `past_medical_unknown`, `prior_test_results`, `past_medical_additional_comments`, `surgical_history`, `impression`, `recommendations`, `stockings_type`, `stockings_compression`, `stockings_gender`, `stockings_color`, `stockings_measurements`, `assessment_additional_comments`; new sections `past_medical_hx` (sort 2) and `assessment_plan` (sort 3). Option lists start empty.
+- Rollback of 0005: `ALTER TABLE clinical_section_fields DROP COLUMN label_override;` — drops only presentation labels (re-created by re-seeding after the column is re-added); no clinical data is touched. Take a backup first anyway. Entries written for the new fields are history and stay.
+
+### Sprint 3B (deferred): Treatment Plan
+Planned, NOT built: `treatment_plans` / `treatment_plan_items` (named above) with append-only item revisions, per-item versioning and audit, tombstone removal, an option list for the treatment/procedure, and no inventory or Procedure linkage. It requires an ADR and Product Owner answers first (ADR-027 "Deferred").

@@ -18,3 +18,5 @@ Inventory: future stock-specific permissions.
 | clinical_option.manage | yes | no | no | no |
 
 An admin who also needs to edit clinical entries must additionally be assigned the Doctor role.
+
+Sprint 3A adds no permissions: Past Medical Hx and Assessment Plan+ use the four clinical permissions above unchanged. A Nurse/Assistant writes visit-only text and may check Unknown; only Doctor/Admin add permanent options; Admin is read-only unless also a Doctor; Reception has no clinical access and sees no tabs. If Treatment Plan (Sprint 3B) needs a separate approval right, that is a new permission to be decided then.

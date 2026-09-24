@@ -1,0 +1,1 @@
+ALTER TABLE "clinical_section_fields" ADD COLUMN "label_override" text;

@@ -201,12 +201,18 @@ export async function seedClinicalDefinitions(
       for (const [index, code] of section.fieldCodes.entries()) {
         const fieldId = fieldIdByCode.get(code);
         if (!fieldId) throw new Error(`Unknown field ${code} in section ${section.code}`);
+        const labelOverride = section.labelOverrides?.[code] ?? null;
         await tx
           .insert(clinicalSectionFields)
-          .values({ sectionId: sectionRow.id, fieldDefinitionId: fieldId, sortOrder: index + 1 })
+          .values({
+            sectionId: sectionRow.id,
+            fieldDefinitionId: fieldId,
+            sortOrder: index + 1,
+            labelOverride,
+          })
           .onConflictDoUpdate({
             target: [clinicalSectionFields.sectionId, clinicalSectionFields.fieldDefinitionId],
-            set: { sortOrder: index + 1 },
+            set: { sortOrder: index + 1, labelOverride },
           });
       }
     }
