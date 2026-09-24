@@ -334,3 +334,98 @@ These Sprint 2 migrations had not been merged or deployed, so they were revised
 in place (0002 foundation incl. the idempotency column and global fields, 0003
 append-only trigger, 0004 Reason for Visit) rather than stacking a
 compatibility migration.
+
+## Sprint 3A clinical-expansion decisions
+
+ADR-027: Past Medical Hx and Assessment Plan+ as data-driven tabs on the Sprint 2 model.
+Product Owner approved the recommended defaults for every point below. Field codes
+are DURABLE (reports and later tabs bind to them; a code cannot be renamed, only
+retired and replaced), so they are recorded here and in `PROMPT_SPRINT_3A.md`.
+
+*Tabs are data.* The visit page lists `clinical_sections` in `sort_order` (Subj
+Complaints Habits 1, Past Medical Hx 2, Assessment Plan+ 3) and renders exactly ONE
+section form: `?tab=<section code>`, default the first section, unknown code = 404 (no
+silent fallback). The active tab is plain text, the others are ordinary links, so the
+Sprint 2 unsaved-navigation guard (ADR-021) intercepts them like any in-app navigation
+(flush first; explicit discard only if something is still unsaved). The form is keyed by
+visit + section + user, so savers are never reused across tabs. No new route or API: the
+existing section GET already takes any section code. Users without `clinical.read` get no
+tabs.
+
+*Explicit placement.* Every section lists its `fieldCodes` explicitly (Subj included:
+its 20 fields are unchanged). It must never be derived from the whole field list: the seed
+never removes placements (ADR-026), so a field placed in the wrong tab would stay there in
+every database it reached.
+
+*Field codes.* Past Medical Hx (section `past_medical_hx`), in order: `past_medical_history`
+(multiselect), `family_history` (existing, shared), `past_medical_unknown` (checkbox),
+`prior_test_results` (textarea), `past_medical_additional_comments` (textarea),
+`surgical_history` (multiselect). Assessment Plus (section `assessment_plan`), in order:
+`impression` (multiselect), `recommendations` (multiselect), `stockings_type`,
+`stockings_compression`, `stockings_gender`, `stockings_color` (each single-select, own
+option list), `stockings_measurements` (textarea), `assessment_additional_comments`
+(textarea). Multiselect/select fields allow visit-only free text and use dynamic option
+lists that start empty ("+ Add New", ADR-019); no option value is hard-coded. Lists are
+per field, so nothing leaks between Impression and Recommendations. `impression` and
+`recommendations` are the general assessment fields; a later Ultrasound impression must be
+a different field (`ultrasound_impression`) and the Comprehensive tab will PLACE these
+global fields, not redefine them (ADR-026).
+
+*Family Medical Hx is `family_history`.* One global field, one option list, one version
+stream, shown in Subj as "Family History" and here as "Family Medical Hx". The label is a
+presentation-only placement attribute: `clinical_section_fields.label_override` (nullable
+text, migration 0005, additive). Not a second field, so there is no duplicate source.
+
+*Stockings.* Five independent global fields (type, compression, gender/cut, color as
+single-selects; measurements as free text). No top-level yes/no, no auto-population from
+patient demographics ("gender" is the stocking cut, not `patients.sex`), no combined
+record: each field has its own append-only history, audit rows, concurrency and
+idempotency. Structured per-site numeric measurements are NOT built; if they are wanted
+later, a new field plus a migration is the path (the free-text field is then retired and
+stays visible, ADR-026).
+
+*Unknown.* A new additive field type `checkbox`: its entry value is
+`{ optionIds: [], freeText: "", checked: boolean }` (`checked` optional in
+`ClinicalEntryValue`, always present on checkbox rows, rejected on all other fields, no
+options or text allowed on a checkbox). Everything else about saving is unchanged
+(append-only version rows, audit `clinical_entry.create/update` with before/after,
+`expectedVersion`, `clientMutationId`, visit lock, origin and actor binding); the value
+plumbing only adds the optional `checked` (zod body, service canonical form/equality,
+autosave client parse/send). Unknown is a separate field, so it can be documented in its
+own SonoSoft position and audited on its own. Exclusivity is a code-level rule
+(`FIELD_EXCLUSION_RULES` in `definitions.ts`, validated at load): while Unknown is checked,
+`past_medical_history` must be empty (no option, no free text), and while
+`past_medical_history` has a value Unknown cannot be checked. It is enforced by the save
+service INSIDE the per-visit row lock (ADR-018), so two concurrent saves on one visit
+cannot both win; the loser is HTTP 409 `exclusive_value` (not a version conflict: no
+`current` payload; nothing written, no audit row) which the client shows as a normal "Not
+saved" rejection with the text kept. Clearing (an empty value) is always allowed and a no-op
+save never fails, so already-inconsistent data can always be resolved. The UI mirrors the
+rule by DISABLING the counterpart with an explanation ("Clear Past Medical Hx to mark this as
+Unknown", "Uncheck Unknown to enter values here"); it never clears or rewrites the other
+field for the user. Scope is deliberately narrow: only Past Medical Hx values (Family
+Medical Hx, Surgical Hx, Prior Test Results and the comments are unaffected). Widening it
+is a one-line change to the rule and does not need a migration.
+
+*Reused unchanged:* permissions (no new codes), append-only history and triggers, audit,
+optimistic concurrency, idempotency, visit lock, canonical-origin and actor binding, Route
+Handlers, autosave and navigation guard, retired-field handling.
+
+*DB impact:* one additive nullable column (migration 0005; rollback in DATABASE.md), no
+data migration. New sections/fields/placements come from the seed. Existing databases
+must run `npm run db:migrate` then `npm run db:seed`.
+
+*Deferred (not built):*
+- **Female-specific Past Medical Hx field** and any conditional visibility (`patients.sex`
+  is free text). Waiting for a SonoSoft reference screen (label, type, who edits, always
+  visible or conditional). It is last in the tab, so adding it later is a seed-only addition.
+- **Sprint 3B — Treatment Plan.** Not started. It needs new tables and an ADR, and these
+  Product Owner answers: layout (three lists vs one list with a status), meaning of "in
+  order" and whether reorder is needed, meaning and owner of "Approval" (consent,
+  insurance, doctor sign-off; a new permission?), fixed lifecycle vs configurable
+  statuses, per-visit vs per-patient scope, dates on Scheduled/Completed, any link to a
+  Procedure (Sprint 4), who may edit (Nurse/Assistant?), per-item vs plan-level comments.
+  Inventory linkage stays out of scope (later, nullable, without changing the doctor
+  workflow).
+- Structured stocking measurements; carry-forward of a prescription across visits;
+  report bindings (Sprint 6).
