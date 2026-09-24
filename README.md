@@ -72,6 +72,13 @@ required.
   2. Set `TEST_DATABASE_URL` to a real reachable PostgreSQL instance (e.g.
      the one started by `docker-compose up -d`, or a Postgres inside WSL).
   3. Run inside WSL / Linux, where this restriction does not apply.
+  4. Quick local fallback with no install: serve an in-memory PGlite
+     (PostgreSQL compiled to WASM) over the wire protocol, then point
+     `TEST_DATABASE_URL` at it:
+     `npm i --no-save @electric-sql/pglite @electric-sql/pglite-socket`
+     `npx pglite-server --port=54331 --max-connections=50`
+     `TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54331/postgres?sslmode=disable" npm test`
+     Use a fresh server per run. CI remains the authoritative gate.
   This does not affect `.github/workflows/ci.yml`, which always uses a
   real `postgres` service container.
 - `docker-compose.yml` is provided for local development but has not been

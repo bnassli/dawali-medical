@@ -78,3 +78,6 @@ blocks `embedded-postgres` specifically in that sandbox; it does not
 affect Linux CI runners (`.github/workflows/ci.yml` uses a real `postgres`
 service container instead) or a Windows dev machine running as a standard
 user. See README.md "Known limitations" for details and workarounds.
+Sprint 1 local validation (`npm test`, `npm run db:validate`) was run
+against an in-memory PGlite server via `TEST_DATABASE_URL` for this reason;
+the CI job against a real `postgres:16` container is the authoritative gate.
