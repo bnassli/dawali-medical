@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "@/db/client";
-import { auditLogs } from "@/db/schema";
+import { auditLogs, patients } from "@/db/schema";
 import { ForbiddenError } from "@/modules/permissions/service";
 import {
   createPatient,
@@ -157,6 +157,45 @@ describe("patients", () => {
 
     const noMatch = await searchPatients(db, actor, crit({ externalId: `NOPE-${suffix}` }));
     expect(noMatch.some((p) => p.id === patient.id)).toBe(false);
+  });
+
+  it("finds a patient by file number even when more than 100 other patients sort before it", async () => {
+    // Regression (PR #1 review): the external-ID filter used to run in
+    // JavaScript AFTER ORDER BY last_name LIMIT 100, so a match outside the
+    // alphabetically first 100 patients was silently dropped.
+    const { actor } = await createTestUser(db, { roleCode: "RECEPTION" });
+    const suffix = uniqueSuffix();
+
+    // 105 patients whose last names sort before every other test patient.
+    await db.insert(patients).values(
+      Array.from({ length: 105 }, (_, i) => ({
+        firstName: `Filler-${i}`,
+        lastName: `0000-${suffix}-${String(i).padStart(3, "0")}`,
+      })),
+    );
+
+    const fileNo = `ICR-LATE-${suffix}`;
+    const target = await createPatient(db, actor, {
+      firstName: `Zed-${suffix}`,
+      lastName: `zzzz-${suffix}`,
+      middleName: undefined,
+      dateOfBirth: undefined,
+      sex: undefined,
+      phone: undefined,
+      email: undefined,
+      icareFileNo: fileNo,
+    });
+
+    // Precondition: without a filter the target really is past the first page.
+    const firstPage = await searchPatients(db, actor, crit({}));
+    expect(firstPage).toHaveLength(100);
+    expect(firstPage.some((p) => p.id === target.id)).toBe(false);
+
+    const exact = await searchPatients(db, actor, crit({ externalId: fileNo }));
+    expect(exact.map((p) => p.id)).toEqual([target.id]);
+
+    const prefix = await searchPatients(db, actor, crit({ externalId: `ICR-LATE-${suffix.slice(0, 4)}` }));
+    expect(prefix.some((p) => p.id === target.id)).toBe(true);
   });
 
   it("searches patients by phone", async () => {

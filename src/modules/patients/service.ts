@@ -1,4 +1,4 @@
-import { and, eq, ilike, or } from "drizzle-orm";
+import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { patientExternalIds, patients } from "@/db/schema";
 import { writeAudit } from "@/modules/audit/service";
@@ -213,14 +213,18 @@ export async function searchPatients(
     conditions.push(eq(patients.dateOfBirth, criteria.dateOfBirth));
   }
 
-  let candidateIds: string[] | null = null;
   if (criteria.externalId) {
-    const matches = await db
-      .select({ patientId: patientExternalIds.patientId })
-      .from(patientExternalIds)
-      .where(ilike(patientExternalIds.value, `${criteria.externalId}%`));
-    candidateIds = matches.map((m) => m.patientId);
-    if (candidateIds.length === 0) return [];
+    // Filter in SQL (before ORDER BY / LIMIT) so a matching file number is
+    // never dropped because its patient falls outside the first page.
+    conditions.push(
+      inArray(
+        patients.id,
+        db
+          .select({ patientId: patientExternalIds.patientId })
+          .from(patientExternalIds)
+          .where(ilike(patientExternalIds.value, `${criteria.externalId}%`)),
+      ),
+    );
   }
 
   const rows = await db
@@ -230,11 +234,8 @@ export async function searchPatients(
     .orderBy(patients.lastName, patients.firstName)
     .limit(100);
 
-  const ids = candidateIds;
-  const filtered = ids ? rows.filter((r) => ids.includes(r.id)) : rows;
-
   const results: PatientRecord[] = [];
-  for (const row of filtered) {
+  for (const row of rows) {
     const externalIds = await loadExternalIds(db, row.id);
     results.push({ ...row, externalIds });
   }
