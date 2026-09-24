@@ -11,6 +11,7 @@ import {
 import {
   addClinicalOption,
   ClinicalConflictError,
+  ClinicalExclusionError,
   ClinicalSectionNotFoundError,
   getClinicalSectionForVisit,
   ClinicalFieldNotFoundError,
@@ -31,7 +32,8 @@ import {
  * Status mapping: 401 no/expired session, 400 malformed/invalid input,
  * 403 permission denied, cross-origin request or a session that now belongs
  * to a different user than the page was rendered for, 404 unknown
- * visit/field, 409 optimistic-concurrency conflict (or duplicate option),
+ * visit/field, 409 optimistic-concurrency conflict (or duplicate option, or a
+ * value that contradicts another field, `exclusive_value`),
  * 413 body too large, 415 non-JSON body, 423 visit not open (locked).
  */
 export const MAX_SAVE_BODY_BYTES = 32 * 1024;
@@ -152,6 +154,8 @@ function mapError(err: unknown): Response {
     return fail(404, "not_found", err.message);
   }
   if (err instanceof DuplicateOptionError) return fail(409, "duplicate_option", err.message);
+  // Not a version conflict (no `current`): the value would contradict another field (ADR-027).
+  if (err instanceof ClinicalExclusionError) return fail(409, "exclusive_value", err.message);
   if (err instanceof InvalidClinicalValueError || err instanceof MutationIdReuseError) {
     return fail(400, "invalid_value", err.message);
   }

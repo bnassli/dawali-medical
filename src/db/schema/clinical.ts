@@ -21,6 +21,11 @@ import { visits } from "./visits";
 export interface ClinicalEntryValue {
   optionIds: string[];
   freeText: string;
+  /**
+   * Only for `checkbox` fields (ADR-027): always present (true/false) on
+   * their rows, never present on any other field's rows. Absent = unchecked.
+   */
+  checked?: boolean;
 }
 
 export const clinicalSections = pgTable("clinical_sections", {
@@ -106,6 +111,9 @@ export const clinicalSectionFields = pgTable(
       .notNull()
       .references(() => clinicalFieldDefinitions.id, { onDelete: "restrict" }),
     sortOrder: integer("sort_order").notNull(),
+    // Presentation only: the tab's own label for this field (ADR-027), e.g.
+    // "Family Medical Hx" for the shared family_history. NULL = the field's label.
+    labelOverride: text("label_override"),
   },
   (table) => [
     primaryKey({ columns: [table.sectionId, table.fieldDefinitionId] }),
