@@ -12,6 +12,9 @@ export const PERMISSIONS = {
   PATIENT_READ: "patient.read",
   PATIENT_CREATE: "patient.create",
   PATIENT_UPDATE: "patient.update",
+  PATIENT_SET_ACTIVE: "patient.set_active",
+  PATIENT_OPTION_ADD: "patient_option.add",
+  PATIENT_OPTION_MANAGE: "patient_option.manage",
   VISIT_READ: "visit.read",
   VISIT_CREATE: "visit.create",
   USER_READ: "user.read",
@@ -33,6 +36,12 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
   [PERMISSIONS.PATIENT_READ]: "View patient demographics and search",
   [PERMISSIONS.PATIENT_CREATE]: "Create new patients",
   [PERMISSIONS.PATIENT_UPDATE]: "Update patient demographics",
+  [PERMISSIONS.PATIENT_SET_ACTIVE]:
+    "Mark a patient inactive or reactivate them (inactive patients get no new visits)",
+  [PERMISSIONS.PATIENT_OPTION_ADD]:
+    "Add new Nationality / Preferred Language options (+ Add New)",
+  [PERMISSIONS.PATIENT_OPTION_MANAGE]:
+    "Retire/reactivate Nationality / Preferred Language options",
   [PERMISSIONS.VISIT_READ]: "View visits",
   [PERMISSIONS.VISIT_CREATE]: "Create new visits",
   [PERMISSIONS.USER_READ]: "View user accounts",
@@ -66,7 +75,8 @@ export const ROLE_NAMES: Record<RoleCode, string> = {
 };
 
 export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
-  // Admin deliberately lacks clinical.write: an admin who also needs to edit
+  // Admin is the only role with patient.set_active and patient_option.manage
+  // (ADR-028). Admin deliberately lacks clinical.write: an admin who also needs to edit
   // clinical entries must additionally be assigned the DOCTOR role.
   [ROLES.ADMIN]: ALL_PERMISSION_CODES.filter(
     (code) => code !== PERMISSIONS.CLINICAL_WRITE,
@@ -75,6 +85,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     PERMISSIONS.PATIENT_READ,
     PERMISSIONS.PATIENT_CREATE,
     PERMISSIONS.PATIENT_UPDATE,
+    PERMISSIONS.PATIENT_OPTION_ADD,
     PERMISSIONS.VISIT_READ,
     PERMISSIONS.VISIT_CREATE,
     PERMISSIONS.CLINICAL_READ,
@@ -92,6 +103,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     PERMISSIONS.PATIENT_READ,
     PERMISSIONS.PATIENT_CREATE,
     PERMISSIONS.PATIENT_UPDATE,
+    PERMISSIONS.PATIENT_OPTION_ADD,
     PERMISSIONS.VISIT_READ,
     PERMISSIONS.VISIT_CREATE,
   ],

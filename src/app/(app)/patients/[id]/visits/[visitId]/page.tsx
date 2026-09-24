@@ -8,8 +8,8 @@ import {
   listClinicalSections,
 } from "@/modules/clinical/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
-import { getPatientById } from "@/modules/patients/service";
 import { getVisitById } from "@/modules/visits/service";
+import { loadPatient } from "../../../page-data";
 import { ClinicalSectionForm } from "./clinical-section-form";
 
 export default async function VisitChartPage({
@@ -23,7 +23,8 @@ export default async function VisitChartPage({
   const { id, visitId } = await params;
   const { tab } = await searchParams;
 
-  const patient = await getPatientById(getDb(), actor, id);
+  // Loaded once per request, shared with the patient layout (header).
+  const patient = await loadPatient(id);
   if (!patient) notFound();
 
   const visit = await getVisitById(getDb(), actor, visitId);
@@ -51,22 +52,13 @@ export default async function VisitChartPage({
 
   return (
     <div>
-      {/* Header / demographics area */}
-      <div className="card">
-        <h1 style={{ margin: 0 }}>
-          {patient.lastName}, {patient.firstName}
-          {patient.middleName ? ` ${patient.middleName}` : ""}
-        </h1>
-        <p style={{ margin: "0.35rem 0 0" }}>
-          DOB: {patient.dateOfBirth ?? "—"} &nbsp;|&nbsp; Sex: {patient.sex ?? "—"}
-          &nbsp;|&nbsp; Phone: {patient.phone ?? "—"}
-        </p>
-        <p style={{ margin: "0.35rem 0 0" }}>
-          Visit date: {new Date(visit.visitDate).toLocaleString()} &nbsp;|&nbsp; Status:{" "}
-          {visit.status}
-          {reason ? ` | Reason: ${reason}` : ""}
-        </p>
-      </div>
+      {/* Visit context. Patient context is the persistent Patient Header
+          rendered by the patient layout (FINAL_V1_REQUIREMENTS §3). */}
+      <p className="visit-context">
+        Visit date: {new Date(visit.visitDate).toLocaleString()} &nbsp;|&nbsp; Status:{" "}
+        {visit.status}
+        {reason ? ` | Reason: ${reason}` : ""}
+      </p>
 
       {/* Tab area — data-driven from clinical_sections (docs/CLINICAL_TABS.md
           order). The active tab is plain text; the others are links, which the

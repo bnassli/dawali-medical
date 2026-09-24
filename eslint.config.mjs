@@ -22,6 +22,8 @@ const eslintConfig = defineConfig([
     // Generated Playwright output (HTML report bundles), not source.
     "playwright-report/**",
     "test-results/**",
+    // Local Claude Code state (worktrees, caches): never linted, never committed.
+    ".claude/**",
   ]),
 ]);
 

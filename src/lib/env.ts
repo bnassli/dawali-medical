@@ -28,6 +28,21 @@ const envSchema = z.object({
     .refine((v) => /^https?:$/.test(new URL(v).protocol), "APP_ORIGIN must be http(s)")
     .transform((v) => new URL(v).origin)
     .optional(),
+  /**
+   * IANA time zone of the clinic, used for calendar-date calculations such as
+   * a patient's age "today". Defaults to Asia/Riyadh.
+   */
+  APP_TIME_ZONE: z
+    .string()
+    .refine((tz) => {
+      try {
+        new Intl.DateTimeFormat("en-US", { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    }, "APP_TIME_ZONE must be a valid IANA time zone")
+    .default("Asia/Riyadh"),
   SEED_ADMIN_EMAIL: z.string().email().optional(),
   SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
 });

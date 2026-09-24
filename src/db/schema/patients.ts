@@ -1,14 +1,54 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
+  check,
   date,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { users } from "./core";
+
+/**
+ * Configurable DEMOGRAPHIC option lists (ADR-028): Nationality and Preferred
+ * Language. Deliberately separate from clinical_options: they are patient
+ * registration data (Reception adds them), not clinical dropdowns, and must not
+ * appear in or be governed by the clinical option permissions. The list codes are
+ * structural (CHECK constraint); the VALUES are data, added with "+ Add New".
+ * Options are never renamed or deleted: retiring sets is_active = false so a
+ * patient that references a retired option keeps showing it.
+ */
+export const demographicOptions = pgTable(
+  "demographic_options",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listCode: text("list_code").notNull(),
+    label: text("label").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("demographic_options_list_lower_label_idx").on(
+      table.listCode,
+      sql`lower(${table.label})`,
+    ),
+    check(
+      "demographic_options_list_code_check",
+      sql`${table.listCode} IN ('nationality', 'preferred_language')`,
+    ),
+  ],
+);
 
 /**
  * Patient — internal UUID primary key. External identifiers such as the
@@ -23,10 +63,32 @@ export const patients = pgTable(
     lastName: text("last_name").notNull(),
     middleName: text("middle_name"),
     dateOfBirth: date("date_of_birth"),
-    // Free text on purpose: not a hard-coded clinical dropdown (CLAUDE.md #10).
+    // 'F' | 'M' | NULL (unknown/blank). Normalised by migration 0006 (ADR-028):
+    // a demographic code the Female-specific clinical rule depends on, not a
+    // clinical dropdown.
     sex: text("sex"),
+    // Mobile / cell phone.
     phone: text("phone"),
     email: text("email"),
+    nationalityOptionId: uuid("nationality_option_id").references(
+      (): AnyPgColumn => demographicOptions.id,
+      { onDelete: "restrict" },
+    ),
+    preferredLanguageOptionId: uuid("preferred_language_option_id").references(
+      (): AnyPgColumn => demographicOptions.id,
+      { onDelete: "restrict" },
+    ),
+    // NOT unique: several patients (e.g. a family) may share one (ADR-028).
+    insuranceId: text("insurance_id"),
+    // Inactive patients are hidden from default search and cannot get new
+    // visits; only Admin may change this (patient.set_active).
+    isActive: boolean("is_active").notNull().default(true),
+    emergencyContactName: text("emergency_contact_name"),
+    emergencyContactPhone: text("emergency_contact_phone"),
+    emergencyContactRelationship: text("emergency_contact_relationship"),
+    // Optimistic concurrency for demographic edits: every update must supply
+    // the version it was based on and bumps it by one.
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -44,13 +106,17 @@ export const patients = pgTable(
     index("patients_last_name_lower_idx").on(sql`lower(${table.lastName})`),
     index("patients_first_name_lower_idx").on(sql`lower(${table.firstName})`),
     index("patients_phone_idx").on(table.phone),
+    index("patients_insurance_id_lower_idx").on(sql`lower(${table.insuranceId})`),
+    check("patients_sex_check", sql`${table.sex} IN ('F', 'M')`),
   ],
 );
 
 /**
  * External identifiers for a patient in a foreign system, e.g.
- * { system: 'ICARE_FILE_NO', value: '12345' }. A patient may have zero or
- * more of these. Never used as a primary key anywhere in this application.
+ * { system: 'ICARE_FILE_NO', value: '12345' } — the File / Medical ID shown to
+ * users — or { system: 'NATIONAL_ID', ... } (National ID / Iqama). A patient
+ * has at most one value per system (enforced by the service). Never used as a
+ * primary key anywhere in this application.
  */
 export const patientExternalIds = pgTable(
   "patient_external_ids",

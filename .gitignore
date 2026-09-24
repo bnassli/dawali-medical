@@ -86,3 +86,6 @@ desktop.ini
 # Playwright
 playwright-report/
 test-results/
+
+# Local Claude Code state (worktrees, caches, local settings)
+.claude/

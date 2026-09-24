@@ -116,3 +116,24 @@ metadata: `requiredPermission`, or `reason: actor_mismatch` with
 
 ### Sprint 3B (deferred): Treatment Plan
 Planned, NOT built: `treatment_plans` / `treatment_plan_items` (named above) with append-only item revisions, per-item versioning and audit, tombstone removal, an option list for the treatment/procedure, and no inventory or Procedure linkage. It requires an ADR and Product Owner answers first (ADR-027 "Deferred").
+
+## R1a additions (ADR-028) — migration `0006_patient_v1_demographics.sql`
+
+| Change | Notes |
+|---|---|
+| `demographic_options` (new) | `id`, `list_code` (CHECK: `nationality` \| `preferred_language`), `label`, `sort_order`, `is_active`, `created_by`, `created_at`. Unique on (`list_code`, `lower(label)`). Never renamed/deleted; retired via `is_active`. |
+| `patients.nationality_option_id`, `patients.preferred_language_option_id` | uuid, nullable, FK → `demographic_options` (ON DELETE RESTRICT). |
+| `patients.insurance_id` | text, nullable, NOT unique; index on `lower(insurance_id)`. |
+| `patients.is_active` | boolean NOT NULL default true. |
+| `patients.emergency_contact_name/phone/relationship` | text, nullable. |
+| `patients.version` | integer NOT NULL default 1 — optimistic concurrency for demographic edits. |
+| `patients_sex_check` | `sex IN ('F','M')` (NULL allowed), after normalising existing values (audited as `patient.sex_normalized`; aborts on unknown values). |
+| `patient_external_ids` | unchanged; new system `NATIONAL_ID` alongside `ICARE_FILE_NO`. |
+
+Rollback: see the header of the migration file. It drops the new constraint, indexes,
+columns and table — which DESTROYS the new demographic data, so take a verified backup
+first. Normalised sex values are not reverted automatically; the raw values are in the
+`patient.sex_normalized` audit rows.
+
+Audit actions added: `patient.deactivate`, `patient.reactivate`, `patient.sex_normalized`,
+`demographic_option.create`, `demographic_option.update`.
