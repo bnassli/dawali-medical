@@ -27,9 +27,11 @@ SEED_ADMIN_PASSWORD=change-me-please
 ```
 
 `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` are only required when you want
-`npm run db:seed` to create/update the initial admin user — there is no
+`npm run db:seed` to bootstrap the initial admin user — there is no
 default password baked into the code. If you set one of the two, you must
-set both.
+set both. The admin is created only if no user with that email exists;
+re-running the seed never resets an existing password, re-activates a
+disabled account or changes its roles.
 
 ### Install, migrate, seed, run
 ```

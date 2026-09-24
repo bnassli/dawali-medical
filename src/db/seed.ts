@@ -10,14 +10,69 @@ import {
   ROLES,
 } from "@/modules/permissions/constants";
 import { permissions, rolePermissions, roles, userRoles, users } from "./schema";
-import { createDb } from "./client";
+import { createDb, type Database } from "./client";
 
 /**
  * Idempotent seed: safe to run repeatedly. Fully recomputes
  * role_permissions from the ROLE_PERMISSIONS constant each run so removing
  * a permission from a role in code also removes it in the database.
  */
-export async function seed(connectionString: string): Promise<void> {
+export interface AdminBootstrap {
+  email: string;
+  password: string;
+}
+
+/**
+ * Creates the initial administrator ONLY if no user with that email exists.
+ * An existing account is never modified: its password, active state and
+ * roles are left exactly as they are, so re-running the seed cannot restore
+ * a bootstrap credential or re-enable a deliberately disabled admin.
+ * User + ADMIN role are inserted in one transaction so a partial bootstrap
+ * cannot leave a role-less account that later runs would then skip.
+ *
+ * Returns "created" or "exists".
+ */
+export async function bootstrapAdmin(
+  db: Database,
+  admin: AdminBootstrap,
+): Promise<"created" | "exists"> {
+  const email = admin.email.trim().toLowerCase();
+
+  const [existing] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${email}`)
+    .limit(1);
+  if (existing) return "exists";
+
+  const passwordHash = await hashPassword(admin.password);
+
+  return db.transaction(async (tx) => {
+    const [adminRole] = await tx
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.code, ROLES.ADMIN))
+      .limit(1);
+    if (!adminRole) throw new Error("ADMIN role missing — seed roles first.");
+
+    // ON CONFLICT DO NOTHING on the unique lower(email) index covers a
+    // concurrent bootstrap: the loser changes nothing.
+    const [created] = await tx
+      .insert(users)
+      .values({ email, displayName: "Administrator", passwordHash, isActive: true })
+      .onConflictDoNothing()
+      .returning({ id: users.id });
+    if (!created) return "exists";
+
+    await tx.insert(userRoles).values({ userId: created.id, roleId: adminRole.id });
+    return "created";
+  });
+}
+
+export async function seed(
+  connectionString: string,
+  options: { admin?: AdminBootstrap } = {},
+): Promise<void> {
   const { db, pool } = createDb(connectionString);
   try {
     // 1. Permissions (idempotent upsert on unique `code`).
@@ -68,47 +123,20 @@ export async function seed(connectionString: string): Promise<void> {
       }
     }
 
-    // 4. Initial admin user, only if both env vars are provided.
+    // 4. Initial admin user: explicit option, else both env vars.
     const env = getEnv();
-    if (env.SEED_ADMIN_EMAIL && env.SEED_ADMIN_PASSWORD) {
-      const email = env.SEED_ADMIN_EMAIL.trim().toLowerCase();
-      const passwordHash = await hashPassword(env.SEED_ADMIN_PASSWORD);
-
-      const [existing] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(sql`lower(${users.email}) = ${email}`)
-        .limit(1);
-
-      let adminId: string;
-      if (existing) {
-        await db
-          .update(users)
-          .set({ passwordHash, isActive: true, updatedAt: new Date() })
-          .where(eq(users.id, existing.id));
-        adminId = existing.id;
-      } else {
-        const [created] = await db
-          .insert(users)
-          .values({
-            email,
-            displayName: "Administrator",
-            passwordHash,
-            isActive: true,
-          })
-          .returning();
-        if (!created) throw new Error("Failed to create admin user");
-        adminId = created.id;
-      }
-
-      const adminRoleId = roleIdByCode.get(ROLES.ADMIN);
-      if (adminRoleId) {
-        await db
-          .insert(userRoles)
-          .values({ userId: adminId, roleId: adminRoleId })
-          .onConflictDoNothing();
-      }
-      console.log(`Seeded admin user: ${email}`);
+    const admin =
+      options.admin ??
+      (env.SEED_ADMIN_EMAIL && env.SEED_ADMIN_PASSWORD
+        ? { email: env.SEED_ADMIN_EMAIL, password: env.SEED_ADMIN_PASSWORD }
+        : undefined);
+    if (admin) {
+      const outcome = await bootstrapAdmin(db, admin);
+      console.log(
+        outcome === "created"
+          ? `Created initial admin user: ${admin.email.trim().toLowerCase()}`
+          : "Admin user already exists — left unchanged (password, active state, roles).",
+      );
     } else if (env.SEED_ADMIN_EMAIL || env.SEED_ADMIN_PASSWORD) {
       throw new Error(
         "Both SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must be set together to seed the admin user.",
