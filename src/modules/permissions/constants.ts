@@ -17,6 +17,10 @@ export const PERMISSIONS = {
   USER_READ: "user.read",
   USER_MANAGE: "user.manage",
   AUDIT_READ: "audit.read",
+  CLINICAL_READ: "clinical.read",
+  CLINICAL_WRITE: "clinical.write",
+  CLINICAL_OPTION_ADD: "clinical_option.add",
+  CLINICAL_OPTION_MANAGE: "clinical_option.manage",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -34,6 +38,13 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
   [PERMISSIONS.USER_READ]: "View user accounts",
   [PERMISSIONS.USER_MANAGE]: "Create/update user accounts and roles",
   [PERMISSIONS.AUDIT_READ]: "View audit log history",
+  [PERMISSIONS.CLINICAL_READ]: "View clinical entries for a visit",
+  [PERMISSIONS.CLINICAL_WRITE]:
+    "Create/update clinical entries, including visit-only free text",
+  [PERMISSIONS.CLINICAL_OPTION_ADD]:
+    "Add new permanent options to clinical option lists (+ Add New)",
+  [PERMISSIONS.CLINICAL_OPTION_MANAGE]:
+    "Retire/reactivate clinical option list options",
 };
 
 export const ROLES = {
@@ -55,18 +66,27 @@ export const ROLE_NAMES: Record<RoleCode, string> = {
 };
 
 export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
-  [ROLES.ADMIN]: ALL_PERMISSION_CODES,
+  // Admin deliberately lacks clinical.write: an admin who also needs to edit
+  // clinical entries must additionally be assigned the DOCTOR role.
+  [ROLES.ADMIN]: ALL_PERMISSION_CODES.filter(
+    (code) => code !== PERMISSIONS.CLINICAL_WRITE,
+  ),
   [ROLES.DOCTOR]: [
     PERMISSIONS.PATIENT_READ,
     PERMISSIONS.PATIENT_CREATE,
     PERMISSIONS.PATIENT_UPDATE,
     PERMISSIONS.VISIT_READ,
     PERMISSIONS.VISIT_CREATE,
+    PERMISSIONS.CLINICAL_READ,
+    PERMISSIONS.CLINICAL_WRITE,
+    PERMISSIONS.CLINICAL_OPTION_ADD,
   ],
   [ROLES.NURSE_ASSISTANT]: [
     PERMISSIONS.PATIENT_READ,
     PERMISSIONS.VISIT_READ,
     PERMISSIONS.VISIT_CREATE,
+    PERMISSIONS.CLINICAL_READ,
+    PERMISSIONS.CLINICAL_WRITE,
   ],
   [ROLES.RECEPTION]: [
     PERMISSIONS.PATIENT_READ,

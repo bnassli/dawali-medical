@@ -61,7 +61,67 @@ them, against a `postgres` service container — see
 `embedded-postgres` instance automatically — no Docker or local `psql`
 required.
 
+### Sprint 2 — clinical entry
+The visit chart now has the "Subj Complaints Habits" tab with auto-save.
+After pulling Sprint 2, run `npm run db:migrate` **and** `npm run db:seed`
+(the seed creates the clinical sections/fields and the new role
+permissions). Option lists start empty: doctors add values with
+"+ Add New"; administrators retire/reactivate them under
+`/admin/options`. See ADR-018..026 in `docs/DECISIONS.md` and
+`PROMPT_SPRINT_2.md`.
+
+**Configuration: `APP_ORIGIN` is required in production.** Set it to the
+public origin users type (scheme + host [+ port], e.g.
+`https://clinic.example.com`). The autosave API only accepts requests whose
+`Origin` matches it exactly, ignores `X-Forwarded-*` headers, and fails closed
+(403) if it is missing in production. Behind a TLS-terminating proxy use the
+public https URL, not the internal one. In development/test it may be omitted.
+See `.env.example`.
+
+Reason for Visit is stored only in `clinical_entries` (ADR-024). Migration
+0004 backfills the legacy `visits.reason` values and makes that column
+read-only. After migrating an environment that has existing visits, confirm:
+```
+npm run db:verify-reason-backfill   # must report "missing clinical entry: 0"
+```
+The legacy column is dropped only in a later release, after this has been
+validated in production. Migration 0004 takes a table lock on `visits` and
+`clinical_entries` (deploy it together with the new application version), and
+it refuses to run — without changing or truncating anything — if a legacy
+reason is longer than 5000 characters; it names the visit ids to fix by hand.
+
+Browser E2E (Playwright, production build, real PostgreSQL):
+```
+npm run build
+npx playwright install chromium          # once (or set PW_CHANNEL=chrome to use installed Chrome)
+E2E_DATABASE_URL=postgresql://... npm run test:e2e
+```
+If you run the built app yourself, also set `APP_ORIGIN` (Playwright does).
+It migrates/seeds the database and creates throwaway users itself; use a
+disposable database. CI runs it after the build.
+
 ### Known limitations
+- Sprint 2: field types for Subj Complaints Habits are a best guess (no
+  SonoSoft reference screens in the repo); adjust
+  `src/modules/clinical/definitions.ts` and re-seed.
+- Sprint 2: Reception can neither enter a Reason for Visit (the field is not
+  shown and the server refuses it) nor read the clinical chart. Only roles with
+  `clinical.write` (Doctor, Nurse/Assistant) can supply it at visit creation.
+- Sprint 2: browser Back/Forward cannot be intercepted reliably by the App
+  Router. In-app links and forms (including Logout) are guarded; a history
+  traversal only gets a best-effort keepalive flush, so text stuck in a failed
+  state (offline / expired session / conflict) is lost that way. The unsaved
+  banner and per-field status show the state beforehand. Hard navigations
+  (reload/close) get the browser's own leave-page prompt.
+- Sprint 2: the length limit (5000) counts characters (code points); the HTML
+  `maxLength` on the intake input counts UTF-16 units, so it is stricter for
+  emoji.
+- **PGlite and concurrency**: PGlite's multi-connection multiplexer is not
+  a real PostgreSQL. Under concurrent connections it was observed to return
+  a wrong (empty) result for a valid query, which makes the Playwright suite
+  (browser + server + test process all connected) flaky on plain PGlite.
+  Use a real PostgreSQL (CI does), or a transaction-serialising proxy in
+  front of a single-connection PGlite (`--max-connections=1`).
 - **Windows + Administrator account**: real PostgreSQL refuses to start
   under a Windows process token that holds the built-in Administrator
   group ("Execution of PostgreSQL by a user with administrative

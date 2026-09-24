@@ -62,6 +62,10 @@ export async function startEmbeddedPostgres(
     user: "postgres",
     password: "postgres",
     persistent: false,
+    // Match CI/production (UTF8). On Windows initdb otherwise defaults to the
+    // ANSI code page (WIN1252), which cannot store clinical text such as
+    // non-Latin characters and would make local runs differ from CI.
+    initdbFlags: ["--encoding=UTF8"],
     onLog: record,
     onError: record,
   });

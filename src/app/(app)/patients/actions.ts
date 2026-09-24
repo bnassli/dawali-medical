@@ -12,6 +12,7 @@ import {
   updatePatient,
 } from "@/modules/patients/service";
 import { createVisitSchema } from "@/modules/visits/schema";
+import { InvalidClinicalValueError } from "@/modules/clinical/service";
 import { createVisit, PatientNotFoundError } from "@/modules/visits/service";
 
 function formValue(formData: FormData, key: string): string {
@@ -108,7 +109,11 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     const visit = await createVisit(getDb(), actor, parsed.data);
     redirect(`/patients/${patientId}/visits/${visit.id}`);
   } catch (err) {
-    if (err instanceof ForbiddenError || err instanceof PatientNotFoundError) {
+    if (
+      err instanceof ForbiddenError ||
+      err instanceof PatientNotFoundError ||
+      err instanceof InvalidClinicalValueError
+    ) {
       redirect(`/patients/${patientId}?error=${encodeURIComponent(err.message)}`);
     }
     throw err;

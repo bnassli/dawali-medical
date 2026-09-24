@@ -19,6 +19,9 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "drizzle/**",
+    // Generated Playwright output (HTML report bundles), not source.
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 

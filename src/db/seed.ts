@@ -3,13 +3,29 @@ import { eq, sql } from "drizzle-orm";
 import { getEnv } from "@/lib/env";
 import { hashPassword } from "@/lib/password";
 import {
+  assertDefinitionsConsistent,
+  DEFAULT_CLINICAL_DEFINITIONS,
+  optionListCodeFor,
+  type ClinicalDefinitions,
+} from "@/modules/clinical/definitions";
+import {
   ALL_PERMISSION_CODES,
   PERMISSION_DESCRIPTIONS,
   ROLE_NAMES,
   ROLE_PERMISSIONS,
   ROLES,
 } from "@/modules/permissions/constants";
-import { permissions, rolePermissions, roles, userRoles, users } from "./schema";
+import {
+  clinicalFieldDefinitions,
+  clinicalOptionLists,
+  clinicalSectionFields,
+  clinicalSections,
+  permissions,
+  rolePermissions,
+  roles,
+  userRoles,
+  users,
+} from "./schema";
 import { createDb, type Database } from "./client";
 
 /**
@@ -69,6 +85,134 @@ export async function bootstrapAdmin(
   });
 }
 
+/**
+ * Thrown when the seed finds an existing global field whose structure
+ * (type / option list / free-text flag) differs from the definitions. Clinical
+ * entries may already exist for it, so the seed refuses to alter it silently:
+ * write a migration instead (ADR-026).
+ */
+export class StructuralDefinitionChangeError extends Error {
+  constructor(fieldCode: string, differences: string[]) {
+    super(
+      `Clinical field "${fieldCode}" already exists with a different structure (${differences.join("; ")}). ` +
+        "Changing a field's type, option list or free-text flag requires a migration; the seed will not do it silently.",
+    );
+    this.name = "StructuralDefinitionChangeError";
+  }
+}
+
+/**
+ * Idempotent, non-destructive seed of sections, GLOBAL fields, option lists
+ * and section placements (ADR-026). Existing rows are only ever updated in
+ * cosmetic ways (labels, names, placement order); structural differences abort
+ * the seed before anything is changed. Nothing is deleted; option rows are
+ * never touched.
+ */
+export async function seedClinicalDefinitions(
+  db: Database,
+  definitions: ClinicalDefinitions = DEFAULT_CLINICAL_DEFINITIONS,
+): Promise<void> {
+  assertDefinitionsConsistent(definitions);
+
+  await db.transaction(async (tx) => {
+    // 1. Option lists (reusable: several fields may share one).
+    const listIdByCode = new Map<string, string>();
+    for (const field of definitions.fields) {
+      const listCode = optionListCodeFor(field);
+      if (!listCode || listIdByCode.has(listCode)) continue;
+      const [list] = await tx
+        .insert(clinicalOptionLists)
+        .values({ code: listCode, name: field.label })
+        .onConflictDoNothing()
+        .returning();
+      if (list) {
+        listIdByCode.set(listCode, list.id);
+        continue;
+      }
+      const [existing] = await tx
+        .select()
+        .from(clinicalOptionLists)
+        .where(eq(clinicalOptionLists.code, listCode))
+        .limit(1);
+      if (!existing) throw new Error(`Failed to seed option list ${listCode}`);
+      listIdByCode.set(listCode, existing.id);
+    }
+
+    // 2. Global field definitions. Detect structural drift first.
+    const existingFields = await tx.select().from(clinicalFieldDefinitions);
+    const existingByCode = new Map(existingFields.map((f) => [f.code, f]));
+    const listCodeById = new Map<string, string>();
+    for (const [code, id] of listIdByCode) listCodeById.set(id, code);
+    const allLists = await tx.select().from(clinicalOptionLists);
+    for (const l of allLists) listCodeById.set(l.id, l.code);
+
+    for (const field of definitions.fields) {
+      const existing = existingByCode.get(field.code);
+      if (!existing) continue;
+      const differences: string[] = [];
+      if (existing.fieldType !== field.type) {
+        differences.push(`type ${existing.fieldType} -> ${field.type}`);
+      }
+      const wantedList = optionListCodeFor(field);
+      const currentList = existing.optionListId
+        ? (listCodeById.get(existing.optionListId) ?? existing.optionListId)
+        : null;
+      if (currentList !== wantedList) {
+        differences.push(`option list ${currentList ?? "none"} -> ${wantedList ?? "none"}`);
+      }
+      if (!existing.allowsFreeText) differences.push("free text allowed true <- false");
+      if (differences.length > 0) throw new StructuralDefinitionChangeError(field.code, differences);
+    }
+
+    const fieldIdByCode = new Map<string, string>();
+    for (const field of definitions.fields) {
+      const listCode = optionListCodeFor(field);
+      const [row] = await tx
+        .insert(clinicalFieldDefinitions)
+        .values({
+          code: field.code,
+          label: field.label,
+          fieldType: field.type,
+          optionListId: listCode ? (listIdByCode.get(listCode) ?? null) : null,
+          allowsFreeText: true,
+        })
+        .onConflictDoUpdate({
+          target: clinicalFieldDefinitions.code,
+          // Cosmetic only; structure was verified identical above.
+          set: { label: field.label },
+        })
+        .returning();
+      if (!row) throw new Error(`Failed to seed clinical field ${field.code}`);
+      fieldIdByCode.set(field.code, row.id);
+    }
+
+    // 3. Sections and placements.
+    for (const section of definitions.sections) {
+      const [sectionRow] = await tx
+        .insert(clinicalSections)
+        .values({ code: section.code, name: section.name, sortOrder: section.sortOrder })
+        .onConflictDoUpdate({
+          target: clinicalSections.code,
+          set: { name: section.name, sortOrder: section.sortOrder },
+        })
+        .returning();
+      if (!sectionRow) throw new Error(`Failed to seed clinical section ${section.code}`);
+
+      for (const [index, code] of section.fieldCodes.entries()) {
+        const fieldId = fieldIdByCode.get(code);
+        if (!fieldId) throw new Error(`Unknown field ${code} in section ${section.code}`);
+        await tx
+          .insert(clinicalSectionFields)
+          .values({ sectionId: sectionRow.id, fieldDefinitionId: fieldId, sortOrder: index + 1 })
+          .onConflictDoUpdate({
+            target: [clinicalSectionFields.sectionId, clinicalSectionFields.fieldDefinitionId],
+            set: { sortOrder: index + 1 },
+          });
+      }
+    }
+  });
+}
+
 export async function seed(
   connectionString: string,
   options: { admin?: AdminBootstrap } = {},
@@ -122,6 +266,10 @@ export async function seed(
         );
       }
     }
+
+    // 3b. Clinical sections/global fields/placements/option lists (structure
+    // only, no option values). Never deletes; refuses structural changes.
+    await seedClinicalDefinitions(db);
 
     // 4. Initial admin user: explicit option, else both env vars.
     const env = getEnv();

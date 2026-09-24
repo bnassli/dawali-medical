@@ -1,11 +1,40 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { createDb, type Database } from "@/db/client";
-import { roles, userRoles, users } from "@/db/schema";
+import { clinicalEntries, roles, userRoles, users } from "@/db/schema";
+import { saveClinicalEntry, type SaveClinicalEntryResult } from "@/modules/clinical/service";
 import { hashPassword } from "@/lib/password";
 import { loadActorContext } from "@/modules/auth/service";
 import type { RoleCode } from "@/modules/permissions/constants";
 import type { ActorContext } from "@/modules/permissions/types";
+
+/**
+ * Saves a clinical entry the way a well-behaved sequential client would:
+ * expectedVersion = the current stored version, fresh clientMutationId.
+ * (Concurrency/idempotency behaviour is tested explicitly elsewhere.)
+ */
+export async function saveCurrent(
+  db: Database,
+  actor: ActorContext,
+  input: { visitId: string; fieldId: string; optionIds: string[]; freeText: string },
+): Promise<SaveClinicalEntryResult> {
+  const [latest] = await db
+    .select({ version: clinicalEntries.version })
+    .from(clinicalEntries)
+    .where(
+      and(
+        eq(clinicalEntries.visitId, input.visitId),
+        eq(clinicalEntries.fieldDefinitionId, input.fieldId),
+      ),
+    )
+    .orderBy(desc(clinicalEntries.version))
+    .limit(1);
+  return saveClinicalEntry(db, actor, {
+    ...input,
+    expectedVersion: latest?.version ?? 0,
+    clientMutationId: randomUUID(),
+  });
+}
 
 export function getTestConnectionString(): string {
   const url = process.env.TEST_DATABASE_URL;

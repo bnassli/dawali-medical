@@ -16,5 +16,26 @@ High-priority automated tests:
 
 Low priority: cosmetic spacing, static labels, broad snapshot tests.
 
+Sprint 2 additions:
+- Vitest (`npm test`, real PostgreSQL): clinical save/load, append-only trigger,
+  option lists, permissions per role, visit lock, optimistic concurrency,
+  idempotent replays, Route Handler status mapping, Reason-for-Visit backfill,
+  client autosave engine (fake timers/fetch).
+- Playwright E2E (`npm run build && npm run test:e2e`, production build + real
+  PostgreSQL, no retries): exact field order, selection persistence, permanent
+  vs visit-only options, keyboard operation, concurrent conflict, session expiry
+  with pending text, reload/navigation flush, Reason for Visit single source,
+  role differences, unsaved-changes guard on in-app links and Logout (session
+  expired, server unreachable, conflict, locked, pending flush, explicit
+  discard, keyboard/focus in the dialog), actor change on the same browser,
+  V1 -> V2 -> V1 visit switching, intake reason length, retired fields.
+  CI installs Chromium; locally set `PW_CHANNEL=chrome`.
+- Migration tests (Vitest, real PostgreSQL): Reason-for-Visit backfill —
+  trimming, idempotency, over-limit abort without truncation, table lock
+  (`pg_locks`, plus a real blocked-writer test), skipped-audit for every
+  pre-existing reason case, verification abort, ASCII-only file.
+- Definitions tests: global field uniqueness, one concept in two tabs, shared
+  option lists, seed refuses structural drift, retired fields stay visible.
+
 Core target smoke flow:
 Login → Search/Create Patient → Open/Create Visit → Patient Chart → Save clinical data → Create Diagram → Generate Report → Logout.

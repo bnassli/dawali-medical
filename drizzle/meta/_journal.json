@@ -15,6 +15,27 @@
       "when": 1790211604644,
       "tag": "0001_audit_logs_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790254377691,
+      "tag": "0002_clinical_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790254382032,
+      "tag": "0003_clinical_entries_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790254386464,
+      "tag": "0004_reason_for_visit_single_source",
+      "breakpoints": true
     }
   ]
 }

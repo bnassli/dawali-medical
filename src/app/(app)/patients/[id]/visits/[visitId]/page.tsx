@@ -2,8 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { requireActor } from "@/modules/auth/current-actor";
+import { SUBJ_COMPLAINTS_HABITS_SECTION_CODE } from "@/modules/clinical/definitions";
+import { getClinicalSectionForVisit, getVisitReasons } from "@/modules/clinical/service";
+import { PERMISSIONS } from "@/modules/permissions/constants";
 import { getPatientById } from "@/modules/patients/service";
 import { getVisitById } from "@/modules/visits/service";
+import { ClinicalSectionForm } from "./clinical-section-form";
 
 export default async function VisitChartPage({
   params,
@@ -18,6 +22,24 @@ export default async function VisitChartPage({
 
   const visit = await getVisitById(getDb(), actor, visitId);
   if (!visit || visit.patientId !== patient.id) notFound();
+
+  const canRead = actor.permissions.has(PERMISSIONS.CLINICAL_READ);
+  const canWrite = actor.permissions.has(PERMISSIONS.CLINICAL_WRITE);
+  const canAddOption = actor.permissions.has(PERMISSIONS.CLINICAL_OPTION_ADD);
+  const visitOpen = visit.status === "open";
+
+  const section = canRead
+    ? await getClinicalSectionForVisit(
+        getDb(),
+        actor,
+        visit.id,
+        SUBJ_COMPLAINTS_HABITS_SECTION_CODE,
+      )
+    : null;
+
+  const reason = canRead
+    ? ((await getVisitReasons(getDb(), actor, [visit.id])).get(visit.id) ?? null)
+    : null;
 
   return (
     <div>
@@ -34,19 +56,43 @@ export default async function VisitChartPage({
         <p style={{ margin: "0.35rem 0 0" }}>
           Visit date: {new Date(visit.visitDate).toLocaleString()} &nbsp;|&nbsp; Status:{" "}
           {visit.status}
-          {visit.reason ? ` | Reason: ${visit.reason}` : ""}
+          {reason ? ` | Reason: ${reason}` : ""}
         </p>
       </div>
 
-      {/* Tab area placeholder — clinical tab names/content are explicitly
-          out of scope for Sprint 1 (SonoSoft-style tabs arrive later). */}
-      <div className="tab-placeholder">Clinical tabs arrive in later sprints.</div>
+      {/* Tab area — only the Sprint 2 tab exists; later tabs are added in
+          their own sprints in docs/CLINICAL_TABS.md order. */}
+      <nav className="tabs" aria-label="Clinical tabs">
+        <span className="tab active" aria-current="page">
+          {section?.section.name ?? "Subj Complaints Habits"}
+        </span>
+      </nav>
 
       {/* Content area */}
-      <div className="card" style={{ minHeight: 160 }}>
-        <p style={{ color: "gray" }}>
-          Clinical documentation for this visit will appear here in a future sprint.
-        </p>
+      <div className="card">
+        {section ? (
+          <>
+            {!canWrite ? (
+              <p className="muted">You have read-only access to clinical entries.</p>
+            ) : !visitOpen ? (
+              <p className="muted">
+                This visit is {visit.status}; clinical entries are read-only.
+              </p>
+            ) : null}
+            <ClinicalSectionForm
+              key={visit.id}
+              visitId={visit.id}
+              actorId={actor.userId}
+              sectionCode={section.section.code}
+              fields={section.fields}
+              readOnly={!canWrite || !visitOpen}
+              canWrite={canWrite}
+              canAddOption={canAddOption}
+            />
+          </>
+        ) : (
+          <p className="muted">You do not have access to clinical entries.</p>
+        )}
       </div>
 
       {/* Action area */}

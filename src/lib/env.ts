@@ -16,6 +16,18 @@ const envSchema = z.object({
     .min(1, "DATABASE_URL is required")
     .optional(),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
+  /**
+   * Canonical public origin of the app (scheme + host + optional port, no
+   * path), e.g. https://clinic.example.com. State-changing API requests must
+   * carry exactly this Origin. REQUIRED in production (the API fails closed
+   * without it); in development/test the request's own origin is used.
+   */
+  APP_ORIGIN: z
+    .string()
+    .url()
+    .refine((v) => /^https?:$/.test(new URL(v).protocol), "APP_ORIGIN must be http(s)")
+    .transform((v) => new URL(v).origin)
+    .optional(),
   SEED_ADMIN_EMAIL: z.string().email().optional(),
   SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
 });
