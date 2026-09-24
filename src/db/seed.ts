@@ -16,10 +16,15 @@ import {
   ROLES,
 } from "@/modules/permissions/constants";
 import {
+  DEFAULT_DEMOGRAPHIC_OPTIONS,
+  DEMOGRAPHIC_LIST_CODES,
+} from "@/modules/patients/constants";
+import {
   clinicalFieldDefinitions,
   clinicalOptionLists,
   clinicalSectionFields,
   clinicalSections,
+  demographicOptions,
   permissions,
   rolePermissions,
   roles,
@@ -219,6 +224,22 @@ export async function seedClinicalDefinitions(
   });
 }
 
+/**
+ * Inserts the Product Owner's initial demographic options (ADR-028) when they do
+ * not exist yet (case-insensitive). Never updates, reactivates or deletes: an
+ * option an administrator retired stays retired across seed runs.
+ */
+export async function seedDemographicOptions(db: Database): Promise<void> {
+  for (const listCode of DEMOGRAPHIC_LIST_CODES) {
+    for (const [index, label] of DEFAULT_DEMOGRAPHIC_OPTIONS[listCode].entries()) {
+      await db
+        .insert(demographicOptions)
+        .values({ listCode, label, sortOrder: index + 1 })
+        .onConflictDoNothing();
+    }
+  }
+}
+
 export async function seed(
   connectionString: string,
   options: { admin?: AdminBootstrap } = {},
@@ -276,6 +297,9 @@ export async function seed(
     // 3b. Clinical sections/global fields/placements/option lists (structure
     // only, no option values). Never deletes; refuses structural changes.
     await seedClinicalDefinitions(db);
+
+    // 3c. Initial demographic options (Preferred Language: Arabic, English).
+    await seedDemographicOptions(db);
 
     // 4. Initial admin user: explicit option, else both env vars.
     const env = getEnv();

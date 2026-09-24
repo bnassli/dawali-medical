@@ -429,3 +429,74 @@ must run `npm run db:migrate` then `npm run db:seed`.
   workflow).
 - Structured stocking measurements; carry-forward of a prescription across visits;
   report bindings (Sprint 6).
+
+## V1 reconciliation decisions
+
+ADR-028: R1a — Persistent Patient Header, Patient Search, V1 Create/Edit Patient,
+Inactive patients. Source: `docs/FINAL_V1_REQUIREMENTS_RECONCILIATION.md` §3–§5 and the
+Product Owner decisions of 2026-09-24 (recorded in the R1a review). Where this conflicts
+with earlier docs, this ADR wins.
+
+*File / Medical ID = iCare file number.* The number shown to users as "File / Medical ID"
+is the `patient_external_ids` row with system `ICARE_FILE_NO`. There is no second clinic
+file number. The internal UUID stays the primary key (ADR-001). The iCare number can now be
+edited (and cleared) on the Edit Patient form; it stays unique, and a later iCare sync
+(R6) writes the same row. National ID / Iqama is a second external id (`NATIONAL_ID`, also
+unique). A patient has at most one value per system.
+
+*New patient columns (migration 0006, additive):* `nationality_option_id`,
+`preferred_language_option_id`, `insurance_id` (NOT unique — patients may share one;
+case-insensitive index), `is_active` (default true), `emergency_contact_name/phone/relationship`,
+`version` (optimistic concurrency). Age is never stored; it is derived from the date of birth
+in the clinic time zone (`APP_TIME_ZONE`, default Asia/Riyadh).
+
+*Sex is a code:* `'F' | 'M' | NULL`, enforced by `patients_sex_check`. It is a demographic
+code the Female-specific Past Medical Hx rule (R1b) depends on, not a clinical dropdown, so
+CLAUDE.md #10 does not apply. Migration 0006 normalises existing free text (f/female → F,
+m/male → M, blank → NULL; trimmed, case-insensitive), writes one `patient.sex_normalized`
+audit row per changed patient with the raw value, and ABORTS without changing anything if
+any other value exists.
+
+*Nationality and Preferred Language are configurable lists* in a NEW table
+`demographic_options` (list codes fixed by a CHECK: `nationality`, `preferred_language`),
+separate from `clinical_options`: they are registration data that Reception maintains, must
+not be governed by clinical permissions, and must not appear among clinical lists. Same rules
+as clinical options: "+ Add New", case-insensitive unique per list, never renamed/deleted,
+retired via `is_active`; a patient keeps showing a retired option and may keep it on save,
+but it cannot be newly selected. Preferred Language is seeded once with Arabic and English
+(the seed never reactivates a retired option).
+
+*Permissions (new):* `patient.set_active` (Admin only), `patient_option.add` (Admin, Doctor,
+Reception), `patient_option.manage` (Admin only).
+
+*Inactive patients:* only Admin changes the flag, through its own audited action
+(`patient.deactivate` / `patient.reactivate`); the normal edit never touches it. Inactive
+patients are hidden from default search ("Include inactive" shows them, marked) and
+`createVisit` refuses them (`PatientInactiveError`, checked under a `FOR SHARE` row lock so a
+concurrent deactivation cannot slip between). History, visits and clinical data are unchanged.
+
+*Concurrency and audit:* edits and the Inactive change carry `expectedVersion`; a stale one
+fails with `PatientConflictError` (nothing written, no audit row). `patient.create` /
+`patient.update` audit rows now include the full record with external ids, so iCare / National
+ID changes are audited with before/after.
+
+*Patient Search:* one component used on the Patients page and in the header's modal dialog.
+Criteria: Medical/File ID (iCare, prefix), Last Name, First Name (contains), Insurance ID
+(prefix), Birthdate (exact), Cell/Mobile (contains); all case-insensitive and literal (`%`/`_`
+escaped). Results: File ID, Last, First, Birthdate; double-click, Enter or Open opens the
+patient through its real link (so the clinical unsaved-changes guard still applies);
+"Create New Patient Record" opens the create form prefilled from the typed criteria, in place.
+Criteria are sent by POST (server action), never in the URL, so PHI does not reach browser
+history or access logs. The search UI is deliberately not a `<form>`: the unsaved-changes
+guard treats every form submit on a visit page as navigation. External ids and option labels
+are loaded in one query each (no N+1).
+
+*Persistent Patient Header:* `src/app/(app)/patients/[id]/layout.tsx`, on the Patient Chart
+and every visit screen: File/Medical ID, name, Sex, Birthdate, Age, Nationality (when set),
+Inactive badge; actions Home, Create New Patient, Patient Search, View Patient Chart, Create
+Report (disabled until R5), current user. No legacy SonoSoft navigation row. No Save button:
+clinical screens autosave. The visit page no longer repeats patient details. Actions that
+change a patient revalidate the patient layout so the header never shows stale data.
+
+*Not changed:* clinical model, autosave, navigation guard, clinical permissions, audit and
+append-only triggers.

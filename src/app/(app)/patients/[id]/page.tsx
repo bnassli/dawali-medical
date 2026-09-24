@@ -4,27 +4,32 @@ import { getDb } from "@/db/client";
 import { requireActor } from "@/modules/auth/current-actor";
 import { MAX_FREE_TEXT_LENGTH } from "@/modules/clinical/schema";
 import { getVisitReasons } from "@/modules/clinical/service";
+import { EXTERNAL_ID_SYSTEMS } from "@/modules/patients/constants";
+import { externalIdOf } from "@/modules/patients/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
-import { getPatientById } from "@/modules/patients/service";
 import { listVisitsForPatient } from "@/modules/visits/service";
-import { createVisitAction, updatePatientAction } from "../actions";
+import { createVisitAction, setPatientActiveAction } from "../actions";
+import { clinicToday, loadDemographicOptions, loadPatient } from "../page-data";
+import { PatientForm } from "../patient-form";
 
 export default async function PatientPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const actor = await requireActor();
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, saved } = await searchParams;
 
-  const patient = await getPatientById(getDb(), actor, id);
+  // Validated and loaded (once per request) by the patient layout.
+  const patient = await loadPatient(id);
   if (!patient) notFound();
 
   const visits = await listVisitsForPatient(getDb(), actor, id);
   const canUpdate = actor.permissions.has(PERMISSIONS.PATIENT_UPDATE);
+  const canSetActive = actor.permissions.has(PERMISSIONS.PATIENT_SET_ACTIVE);
   const canCreateVisit = actor.permissions.has(PERMISSIONS.VISIT_CREATE);
   // Reason for Visit lives only in clinical_entries (ADR-024); roles without
   // clinical.read (e.g. Reception) do not see it, and only clinical.write
@@ -41,94 +46,65 @@ export default async function PatientPage({
 
   return (
     <div>
-      <h1>
-        {patient.lastName}, {patient.firstName}
-        {patient.middleName ? ` ${patient.middleName}` : ""}
-      </h1>
-      <p>
-        {patient.externalIds.map((e) => (
-          <span key={e.system} className="badge" style={{ marginRight: 6 }}>
-            {e.system}: {e.value}
-          </span>
-        ))}
-      </p>
+      <h1>Patient Chart</h1>
 
       {error ? <div className="error-banner">{error}</div> : null}
+      {saved && !error ? (
+        <p className="muted" role="status">
+          Patient details saved.
+        </p>
+      ) : null}
 
       <section className="card">
-        <h2>Demographics</h2>
-        <form action={updatePatientAction}>
-          <input type="hidden" name="id" value={patient.id} />
-          <div className="field">
-            <label htmlFor="firstName">First name</label>
-            <input
-              id="firstName"
-              name="firstName"
-              defaultValue={patient.firstName}
-              disabled={!canUpdate}
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="lastName">Last name</label>
-            <input
-              id="lastName"
-              name="lastName"
-              defaultValue={patient.lastName}
-              disabled={!canUpdate}
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="middleName">Middle name</label>
-            <input
-              id="middleName"
-              name="middleName"
-              defaultValue={patient.middleName ?? ""}
-              disabled={!canUpdate}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="dateOfBirth">Date of birth</label>
-            <input
-              id="dateOfBirth"
-              name="dateOfBirth"
-              type="date"
-              defaultValue={patient.dateOfBirth ?? ""}
-              disabled={!canUpdate}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="sex">Sex</label>
-            <input
-              id="sex"
-              name="sex"
-              defaultValue={patient.sex ?? ""}
-              disabled={!canUpdate}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="phone">Phone</label>
-            <input
-              id="phone"
-              name="phone"
-              defaultValue={patient.phone ?? ""}
-              disabled={!canUpdate}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              defaultValue={patient.email ?? ""}
-              disabled={!canUpdate}
-            />
-          </div>
-          {canUpdate ? <button type="submit">Save changes</button> : null}
-        </form>
+        <h2>Patient Details</h2>
+        <PatientForm
+          // Remount on every saved version so the form shows the stored values.
+          key={patient.version}
+          mode="edit"
+          patientId={patient.id}
+          expectedVersion={patient.version}
+          initial={{
+            icareFileNo: externalIdOf(patient, EXTERNAL_ID_SYSTEMS.ICARE_FILE_NO) ?? "",
+            firstName: patient.firstName,
+            middleName: patient.middleName ?? "",
+            lastName: patient.lastName,
+            sex: patient.sex ?? "",
+            dateOfBirth: patient.dateOfBirth ?? "",
+            phone: patient.phone ?? "",
+            email: patient.email ?? "",
+            nationalityOptionId: patient.nationalityOptionId ?? "",
+            preferredLanguageOptionId: patient.preferredLanguageOptionId ?? "",
+            nationalId: externalIdOf(patient, EXTERNAL_ID_SYSTEMS.NATIONAL_ID) ?? "",
+            insuranceId: patient.insuranceId ?? "",
+            emergencyContactName: patient.emergencyContactName ?? "",
+            emergencyContactPhone: patient.emergencyContactPhone ?? "",
+            emergencyContactRelationship: patient.emergencyContactRelationship ?? "",
+          }}
+          options={await loadDemographicOptions()}
+          today={clinicToday()}
+          canAddOption={actor.permissions.has(PERMISSIONS.PATIENT_OPTION_ADD)}
+          readOnly={!canUpdate}
+        />
       </section>
+
+      {canSetActive ? (
+        <section className="card">
+          <h2>Inactive Patient</h2>
+          <p className="muted">
+            {patient.isActive
+              ? "Inactive patients are hidden from the default search and cannot get new visits. Their history is kept."
+              : "This patient is inactive: hidden from the default search, and no new visits can be created until reactivated."}
+          </p>
+          <form action={setPatientActiveAction}>
+            <input type="hidden" name="id" value={patient.id} />
+            <input type="hidden" name="expectedVersion" value={patient.version} />
+            <input type="hidden" name="isActive" value={(!patient.isActive).toString()} />
+            <button type="submit" className="secondary">
+              {patient.isActive ? "Mark patient inactive" : "Reactivate patient"}
+            </button>
+          </form>
+        </section>
+      ) : null}
 
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -161,7 +137,12 @@ export default async function PatientPage({
           </table>
         )}
 
-        {canCreateVisit ? (
+        {canCreateVisit && !patient.isActive ? (
+          <p className="muted" style={{ marginTop: "1rem" }}>
+            This patient is inactive. An administrator must reactivate the patient before a new
+            visit can be created.
+          </p>
+        ) : canCreateVisit ? (
           <form action={createVisitAction} style={{ marginTop: "1rem" }}>
             <input type="hidden" name="patientId" value={patient.id} />
             {canEnterReason ? (

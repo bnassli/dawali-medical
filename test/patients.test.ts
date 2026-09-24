@@ -88,6 +88,7 @@ describe("patients", () => {
 
     const updated = await updatePatient(db, actor, {
       id: patient.id,
+      expectedVersion: patient.version,
       firstName: `Bob-${suffix}`,
       lastName: `Baker-${suffix}`,
       middleName: undefined,
@@ -319,6 +320,7 @@ describe("patients", () => {
     await expect(
       updatePatient(db, nurse, {
         id: patient.id,
+        expectedVersion: patient.version,
         firstName: `Hank-${suffix}`,
         lastName: `Hill-${suffix}`,
         middleName: undefined,

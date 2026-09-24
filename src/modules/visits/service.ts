@@ -15,6 +15,14 @@ export class PatientNotFoundError extends Error {
   }
 }
 
+/** Inactive patients cannot get new visits until an Admin reactivates them (ADR-028). */
+export class PatientInactiveError extends Error {
+  constructor() {
+    super("This patient is inactive. An administrator must reactivate the patient before a new visit can be created.");
+    this.name = "PatientInactiveError";
+  }
+}
+
 export interface VisitRecord {
   id: string;
   patientId: string;
@@ -59,13 +67,19 @@ export async function createVisit(
   return db.transaction(async (tx) => {
     // Visits must reference an existing patient (CLAUDE.md rule #6: Patient
     // and Visit remain separate entities, but a visit is never orphaned).
+    // FOR SHARE: a concurrent deactivation (which takes FOR UPDATE) cannot
+    // commit between this check and the insert.
     const [patient] = await tx
-      .select({ id: patients.id })
+      .select({ id: patients.id, isActive: patients.isActive })
       .from(patients)
       .where(eq(patients.id, input.patientId))
-      .limit(1);
+      .limit(1)
+      .for("share");
     if (!patient) {
       throw new PatientNotFoundError(input.patientId);
+    }
+    if (!patient.isActive) {
+      throw new PatientInactiveError();
     }
 
     const [created] = await tx
