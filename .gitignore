@@ -1,0 +1,76 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+
+# Next.js / build output
+.next/
+out/
+build/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Secrets / environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials*.json
+service-account*.json
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Database dumps and backups
+*.sql
+*.dump
+*.bak
+*.backup
+*.sqlite
+*.sqlite3
+*.db
+backups/
+db-backups/
+pgdata/
+
+# Patient data, medical files, reports, scans, images
+patient-files/
+patient_files/
+uploads/
+storage/
+private-files/
+reports/
+generated-reports/
+exports/
+scans/
+medical-images/
+*.dcm
+*.dicom
+*.zip
+# Note: *.pdf/*.docx/*.csv/*.xlsx are intentionally NOT ignored globally so clean
+# templates/reference files can be versioned. Never commit patient data in these formats.
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# Vercel / misc
+.vercel
+.turbo/
