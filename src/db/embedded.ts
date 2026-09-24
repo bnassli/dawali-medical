@@ -38,23 +38,46 @@ export async function startEmbeddedPostgres(
   const port = await findFreePort();
   const dataDir = mkdtempSync(path.join(tmpdir(), "dawali-embedded-pg-"));
 
+  // Capture recent log/error lines so that if the underlying postgres
+  // process exits early (which the `embedded-postgres` package surfaces as
+  // an opaque, reason-less rejection), we can still throw something
+  // actionable instead of "undefined". A common cause on Windows is running
+  // as an Administrator — real PostgreSQL refuses to start under an
+  // administrative account for security reasons; run as a standard
+  // (non-admin) OS user, or set TEST_DATABASE_URL to point at a real
+  // reachable PostgreSQL instance instead.
+  const recentOutput: string[] = [];
+  const record = (messageOrError: unknown) => {
+    const text =
+      messageOrError instanceof Error
+        ? messageOrError.message
+        : String(messageOrError);
+    recentOutput.push(text.trim());
+    if (recentOutput.length > 40) recentOutput.shift();
+  };
+
   const pg = new EmbeddedPostgres({
     databaseDir: dataDir,
     port,
     user: "postgres",
     password: "postgres",
     persistent: false,
-    onLog: () => {
-      /* silence embedded postgres logs in test/validation output */
-    },
-    onError: () => {
-      /* silence embedded postgres logs in test/validation output */
-    },
+    onLog: record,
+    onError: record,
   });
 
-  await pg.initialise();
-  await pg.start();
-  await pg.createDatabase(databaseName);
+  try {
+    await pg.initialise();
+    await pg.start();
+    await pg.createDatabase(databaseName);
+  } catch (err) {
+    const detail = recentOutput.filter(Boolean).join("\n");
+    throw new Error(
+      `Embedded PostgreSQL failed to start (port ${port}, dataDir ${dataDir}).` +
+        (detail ? `\n--- postgres output ---\n${detail}` : "") +
+        `\n--- original error ---\n${String(err instanceof Error ? err.stack ?? err.message : err)}`,
+    );
+  }
 
   const connectionString = `postgresql://postgres:postgres@127.0.0.1:${port}/${databaseName}`;
 

@@ -79,16 +79,16 @@ function checkNoSchemaDrift(): { drift: boolean; detail: string } {
 async function main() {
   let stop: (() => Promise<void>) | undefined;
   let connectionString = process.env.TEST_DATABASE_URL;
-
-  if (!connectionString) {
-    console.log("TEST_DATABASE_URL not set — starting embedded PostgreSQL...");
-    const embedded = await startEmbeddedPostgres("dawali_validate");
-    connectionString = embedded.connectionString;
-    stop = embedded.stop;
-  }
-
   let failed = false;
+
   try {
+    if (!connectionString) {
+      console.log("TEST_DATABASE_URL not set — starting embedded PostgreSQL...");
+      const embedded = await startEmbeddedPostgres("dawali_validate");
+      connectionString = embedded.connectionString;
+      stop = embedded.stop;
+    }
+
     console.log("Applying migrations from scratch...");
     await runMigrations(connectionString);
 
@@ -120,4 +120,7 @@ async function main() {
   process.exit(0);
 }
 
-main();
+main().catch((err: unknown) => {
+  console.error("db:validate crashed:", err);
+  process.exit(1);
+});
