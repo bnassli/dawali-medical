@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790211591287,
+      "tag": "0000_zippy_silhouette",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790211604644,
+      "tag": "0001_audit_logs_append_only",
+      "breakpoints": true
+    }
+  ]
+}
