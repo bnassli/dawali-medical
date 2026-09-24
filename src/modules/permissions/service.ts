@@ -1,4 +1,4 @@
-import type { Tx } from "@/modules/audit/service";
+import type { Database } from "@/db/client";
 import { writeAudit } from "@/modules/audit/service";
 import type { PermissionCode } from "./constants";
 import { ForbiddenError } from "./errors";
@@ -9,14 +9,17 @@ export type { ActorContext } from "./types";
 
 /**
  * Throws a ForbiddenError if the actor lacks `code`. On denial, writes an
- * `access.denied` audit row inside the same transaction (CLAUDE.md rule #8;
- * PROMPT_SPRINT_1 permission-denial requirement).
+ * `access.denied` audit row (CLAUDE.md rule #8; PROMPT_SPRINT_1
+ * permission-denial requirement).
  *
- * Callers must run this inside a db.transaction() so the audit write is
- * durable even though the guarded action never proceeds.
+ * MUST be called with the top-level Database handle, BEFORE opening the
+ * transaction for the guarded action — never with a transaction handle.
+ * The denial audit row is committed on its own; if it were written inside
+ * the guarded transaction, the ForbiddenError thrown here would roll it back
+ * and the denial would silently disappear from the audit trail.
  */
 export async function requirePermission(
-  tx: Tx,
+  db: Database,
   actor: ActorContext,
   code: PermissionCode,
   context?: { entityType?: string; entityId?: string; patientId?: string | null },
@@ -25,7 +28,7 @@ export async function requirePermission(
     return;
   }
 
-  await writeAudit(tx, {
+  await writeAudit(db, {
     actorUserId: actor.userId,
     action: "access.denied",
     entityType: context?.entityType ?? "permission",

@@ -69,11 +69,11 @@ export async function createUser(
   actor: ActorContext,
   input: CreateUserInput,
 ): Promise<UserSummary> {
-  return db.transaction(async (tx) => {
-    await requirePermission(tx, actor, PERMISSIONS.USER_MANAGE, {
-      entityType: "user",
-    });
+  await requirePermission(db, actor, PERMISSIONS.USER_MANAGE, {
+    entityType: "user",
+  });
 
+  return db.transaction(async (tx) => {
     const email = input.email.trim().toLowerCase();
 
     const [existing] = await tx
@@ -141,12 +141,12 @@ export async function setUserActive(
   actor: ActorContext,
   input: SetUserActiveInput,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    await requirePermission(tx, actor, PERMISSIONS.USER_MANAGE, {
-      entityType: "user",
-      entityId: input.userId,
-    });
+  await requirePermission(db, actor, PERMISSIONS.USER_MANAGE, {
+    entityType: "user",
+    entityId: input.userId,
+  });
 
+  await db.transaction(async (tx) => {
     const [before] = await tx
       .select({ id: users.id, isActive: users.isActive })
       .from(users)
@@ -171,18 +171,11 @@ export async function setUserActive(
   });
 }
 
-/**
- * listUsers is a read that still needs to audit denials but doesn't
- * otherwise mutate anything, so it opens its own short transaction just for
- * the permission check plumbing that requirePermission expects.
- */
+/** Permission guard for user-admin reads; denials are audited by requirePermission. */
 async function requirePermissionStandalone(
   db: Database,
   actor: ActorContext,
   code: Parameters<typeof requirePermission>[2],
 ): Promise<void> {
-  if (actor.permissions.has(code)) return;
-  await db.transaction(async (tx) => {
-    await requirePermission(tx, actor, code, { entityType: "user" });
-  });
+  await requirePermission(db, actor, code, { entityType: "user" });
 }

@@ -82,32 +82,34 @@ export async function login(
 ): Promise<LoginResult> {
   const email = input.email.trim().toLowerCase();
 
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${email}`)
+    .limit(1);
+
+  const passwordOk = user
+    ? await verifyPassword(user.passwordHash, input.password)
+    : await failClosedHash(input.password); // constant-time-ish decoy
+
+  if (!user || !user.isActive || !passwordOk) {
+    // Written outside any transaction: the throw below must not roll back
+    // the record of the failed attempt.
+    await writeAudit(db, {
+      actorUserId: user?.id ?? null,
+      action: "auth.login_failed",
+      entityType: "user",
+      entityId: user?.id ?? email,
+      metadata: {
+        ip: meta.ip ?? null,
+        userAgent: meta.userAgent ?? null,
+        emailAttempted: email,
+      },
+    });
+    throw new AuthenticationError();
+  }
+
   return db.transaction(async (tx) => {
-    const [user] = await tx
-      .select()
-      .from(users)
-      .where(sql`lower(${users.email}) = ${email}`)
-      .limit(1);
-
-    const passwordOk = user
-      ? await verifyPassword(user.passwordHash, input.password)
-      : await failClosedHash(input.password); // constant-time-ish decoy
-
-    if (!user || !user.isActive || !passwordOk) {
-      await writeAudit(tx, {
-        actorUserId: user?.id ?? null,
-        action: "auth.login_failed",
-        entityType: "user",
-        entityId: user?.id ?? email,
-        metadata: {
-          ip: meta.ip ?? null,
-          userAgent: meta.userAgent ?? null,
-          emailAttempted: email,
-        },
-      });
-      throw new AuthenticationError();
-    }
-
     const token = generateSessionToken();
     const tokenHash = hashSessionToken(token);
     const ttlHours = getEnv().SESSION_TTL_HOURS;

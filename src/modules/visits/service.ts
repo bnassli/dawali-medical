@@ -29,12 +29,12 @@ export async function createVisit(
   actor: ActorContext,
   input: CreateVisitInput,
 ): Promise<VisitRecord> {
-  return db.transaction(async (tx) => {
-    await requirePermission(tx, actor, PERMISSIONS.VISIT_CREATE, {
-      entityType: "visit",
-      patientId: input.patientId,
-    });
+  await requirePermission(db, actor, PERMISSIONS.VISIT_CREATE, {
+    entityType: "visit",
+    patientId: input.patientId,
+  });
 
+  return db.transaction(async (tx) => {
     // Visits must reference an existing patient (CLAUDE.md rule #6: Patient
     // and Visit remain separate entities, but a visit is never orphaned).
     const [patient] = await tx
@@ -105,11 +105,8 @@ async function requireVisitRead(
   actor: ActorContext,
   patientId?: string,
 ): Promise<void> {
-  if (actor.permissions.has(PERMISSIONS.VISIT_READ)) return;
-  await db.transaction(async (tx) => {
-    await requirePermission(tx, actor, PERMISSIONS.VISIT_READ, {
-      entityType: "visit",
-      patientId: patientId ?? null,
-    });
+  await requirePermission(db, actor, PERMISSIONS.VISIT_READ, {
+    entityType: "visit",
+    patientId: patientId ?? null,
   });
 }

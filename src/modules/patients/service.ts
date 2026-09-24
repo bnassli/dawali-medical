@@ -50,11 +50,11 @@ export async function createPatient(
   actor: ActorContext,
   input: CreatePatientInput,
 ): Promise<PatientRecord> {
-  return db.transaction(async (tx) => {
-    await requirePermission(tx, actor, PERMISSIONS.PATIENT_CREATE, {
-      entityType: "patient",
-    });
+  await requirePermission(db, actor, PERMISSIONS.PATIENT_CREATE, {
+    entityType: "patient",
+  });
 
+  return db.transaction(async (tx) => {
     if (input.icareFileNo) {
       const [dup] = await tx
         .select({ id: patientExternalIds.id })
@@ -124,13 +124,13 @@ export async function updatePatient(
   actor: ActorContext,
   input: UpdatePatientInput,
 ): Promise<PatientRecord> {
-  return db.transaction(async (tx) => {
-    await requirePermission(tx, actor, PERMISSIONS.PATIENT_UPDATE, {
-      entityType: "patient",
-      entityId: input.id,
-      patientId: input.id,
-    });
+  await requirePermission(db, actor, PERMISSIONS.PATIENT_UPDATE, {
+    entityType: "patient",
+    entityId: input.id,
+    patientId: input.id,
+  });
 
+  return db.transaction(async (tx) => {
     const [before] = await tx
       .select()
       .from(patients)
@@ -246,12 +246,9 @@ async function requirePermissionRead(
   actor: ActorContext,
   patientId?: string,
 ): Promise<void> {
-  if (actor.permissions.has(PERMISSIONS.PATIENT_READ)) return;
-  await db.transaction(async (tx) => {
-    await requirePermission(tx, actor, PERMISSIONS.PATIENT_READ, {
-      entityType: "patient",
-      entityId: patientId,
-      patientId: patientId ?? null,
-    });
+  await requirePermission(db, actor, PERMISSIONS.PATIENT_READ, {
+    entityType: "patient",
+    entityId: patientId,
+    patientId: patientId ?? null,
   });
 }
