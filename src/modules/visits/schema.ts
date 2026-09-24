@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const createVisitSchema = z.object({
   patientId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
   reason: z
     .string()
     .trim()

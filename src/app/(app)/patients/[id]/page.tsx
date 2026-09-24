@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
@@ -45,6 +46,7 @@ export default async function PatientPage({
         <h2>Demographics</h2>
         <form action={updatePatientAction}>
           <input type="hidden" name="id" value={patient.id} />
+          <input type="hidden" name="expectedVersion" value={patient.version} />
           <div className="field">
             <label htmlFor="firstName">First name</label>
             <input
@@ -150,6 +152,7 @@ export default async function PatientPage({
         {canCreateVisit ? (
           <form action={createVisitAction} style={{ marginTop: "1rem" }}>
             <input type="hidden" name="patientId" value={patient.id} />
+            <input type="hidden" name="idempotencyKey" value={randomUUID()} />
             <div className="field">
               <label htmlFor="reason">Reason for new visit</label>
               <input id="reason" name="reason" />

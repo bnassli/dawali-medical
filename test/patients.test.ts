@@ -4,8 +4,10 @@ import type { Database } from "@/db/client";
 import { auditLogs, patients } from "@/db/schema";
 import { ForbiddenError } from "@/modules/permissions/service";
 import {
+  ConcurrentPatientUpdateError,
   createPatient,
   DuplicateExternalIdError,
+  getPatientById,
   searchPatients,
   updatePatient,
 } from "@/modules/patients/service";
@@ -88,6 +90,7 @@ describe("patients", () => {
 
     const updated = await updatePatient(db, actor, {
       id: patient.id,
+      expectedVersion: patient.version,
       firstName: `Bob-${suffix}`,
       lastName: `Baker-${suffix}`,
       middleName: undefined,
@@ -97,6 +100,7 @@ describe("patients", () => {
       email: undefined,
     });
     expect(updated.phone).toBe(`999-${suffix}`);
+    expect(updated.version).toBe(patient.version + 1);
 
     const [auditRow] = await db
       .select()
@@ -108,6 +112,40 @@ describe("patients", () => {
     const after = auditRow?.after as Record<string, unknown> | null;
     expect(before?.phone ?? null).toBeNull();
     expect(after?.phone).toBe(`999-${suffix}`);
+  });
+
+  it("rejects a stale patient update instead of silently overwriting a newer save", async () => {
+    const { actor } = await createTestUser(db, { roleCode: "RECEPTION" });
+    const suffix = uniqueSuffix();
+    const patient = await createPatient(db, actor, {
+      firstName: `Concurrent-${suffix}`,
+      lastName: `Patient-${suffix}`,
+      middleName: undefined,
+      dateOfBirth: undefined,
+      sex: undefined,
+      phone: undefined,
+      email: undefined,
+      icareFileNo: undefined,
+    });
+
+    const base = {
+      id: patient.id,
+      expectedVersion: patient.version,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
+      middleName: undefined,
+      dateOfBirth: undefined,
+      sex: undefined,
+      email: undefined,
+    };
+
+    await updatePatient(db, actor, { ...base, phone: "first-save" });
+    await expect(
+      updatePatient(db, actor, { ...base, phone: "stale-save" }),
+    ).rejects.toBeInstanceOf(ConcurrentPatientUpdateError);
+
+    const current = await getPatientById(db, actor, patient.id);
+    expect(current?.phone).toBe("first-save");
   });
 
   it("searches patients by partial, case-insensitive name", async () => {
@@ -319,6 +357,7 @@ describe("patients", () => {
     await expect(
       updatePatient(db, nurse, {
         id: patient.id,
+        expectedVersion: patient.version,
         firstName: `Hank-${suffix}`,
         lastName: `Hill-${suffix}`,
         middleName: undefined,

@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { patients, visits } from "@/db/schema";
 import { writeAudit } from "@/modules/audit/service";
@@ -14,8 +14,16 @@ export class PatientNotFoundError extends Error {
   }
 }
 
+export class IdempotencyKeyConflictError extends Error {
+  constructor() {
+    super("The idempotency key was already used for a different visit request.");
+    this.name = "IdempotencyKeyConflictError";
+  }
+}
+
 export interface VisitRecord {
   id: string;
+  idempotencyKey: string;
   patientId: string;
   visitDate: Date;
   reason: string | null;
@@ -49,12 +57,28 @@ export async function createVisit(
     const [created] = await tx
       .insert(visits)
       .values({
+        idempotencyKey: input.idempotencyKey,
         patientId: input.patientId,
         reason: input.reason ?? null,
         createdBy: actor.userId,
       })
+      .onConflictDoNothing({ target: visits.idempotencyKey })
       .returning();
-    if (!created) throw new Error("Failed to create visit");
+    if (!created) {
+      const [existing] = await tx
+        .select()
+        .from(visits)
+        .where(eq(visits.idempotencyKey, input.idempotencyKey))
+        .limit(1);
+      if (!existing) throw new Error("Failed to create or recover visit");
+      if (
+        existing.patientId !== input.patientId ||
+        existing.reason !== (input.reason ?? null)
+      ) {
+        throw new IdempotencyKeyConflictError();
+      }
+      return existing;
+    }
 
     await writeAudit(tx, {
       actorUserId: actor.userId,
@@ -88,14 +112,15 @@ export async function listVisitsForPatient(
 export async function getVisitById(
   db: Database,
   actor: ActorContext,
+  patientId: string,
   visitId: string,
 ): Promise<VisitRecord | null> {
-  await requireVisitRead(db, actor);
+  await requireVisitRead(db, actor, patientId);
 
   const [visit] = await db
     .select()
     .from(visits)
-    .where(eq(visits.id, visitId))
+    .where(and(eq(visits.id, visitId), eq(visits.patientId, patientId)))
     .limit(1);
   return visit ?? null;
 }

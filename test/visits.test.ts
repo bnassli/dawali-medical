@@ -1,11 +1,14 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "@/db/client";
-import { auditLogs } from "@/db/schema";
+import { auditLogs, visits } from "@/db/schema";
 import { createPatient } from "@/modules/patients/service";
 import { ForbiddenError } from "@/modules/permissions/service";
 import {
   createVisit,
+  getVisitById,
+  IdempotencyKeyConflictError,
   listVisitsForPatient,
   PatientNotFoundError,
 } from "@/modules/visits/service";
@@ -42,6 +45,7 @@ describe("visits", () => {
 
     const visit = await createVisit(db, actor, {
       patientId: patient.id,
+      idempotencyKey: randomUUID(),
       reason: "Initial consultation",
     });
 
@@ -62,6 +66,7 @@ describe("visits", () => {
     await expect(
       createVisit(db, actor, {
         patientId: "00000000-0000-0000-0000-000000000000",
+        idempotencyKey: randomUUID(),
         reason: undefined,
       }),
     ).rejects.toBeInstanceOf(PatientNotFoundError);
@@ -92,9 +97,9 @@ describe("visits", () => {
       icareFileNo: undefined,
     });
 
-    const visitA1 = await createVisit(db, actor, { patientId: patientA.id, reason: "A1" });
-    const visitA2 = await createVisit(db, actor, { patientId: patientA.id, reason: "A2" });
-    const visitB1 = await createVisit(db, actor, { patientId: patientB.id, reason: "B1" });
+    const visitA1 = await createVisit(db, actor, { patientId: patientA.id, idempotencyKey: randomUUID(), reason: "A1" });
+    const visitA2 = await createVisit(db, actor, { patientId: patientA.id, idempotencyKey: randomUUID(), reason: "A2" });
+    const visitB1 = await createVisit(db, actor, { patientId: patientB.id, idempotencyKey: randomUUID(), reason: "B1" });
 
     const visitsForA = await listVisitsForPatient(db, actor, patientA.id);
     const idsForA = visitsForA.map((v) => v.id);
@@ -105,6 +110,115 @@ describe("visits", () => {
 
     const visitsForB = await listVisitsForPatient(db, actor, patientB.id);
     expect(visitsForB.map((v) => v.id)).toEqual([visitB1.id]);
+  });
+
+  it("returns the original visit for a retried idempotent create without a second audit row", async () => {
+    const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
+    const suffix = uniqueSuffix();
+    const patient = await createPatient(db, actor, {
+      firstName: `Retry-${suffix}`,
+      lastName: `Visit-${suffix}`,
+      middleName: undefined,
+      dateOfBirth: undefined,
+      sex: undefined,
+      phone: undefined,
+      email: undefined,
+      icareFileNo: undefined,
+    });
+    const input = {
+      patientId: patient.id,
+      idempotencyKey: randomUUID(),
+      reason: "Idempotent visit",
+    };
+
+    const [first, retry] = await Promise.all([
+      createVisit(db, actor, input),
+      createVisit(db, actor, input),
+    ]);
+    expect(retry.id).toBe(first.id);
+
+    const audits = await db
+      .select()
+      .from(auditLogs)
+      .where(and(eq(auditLogs.action, "visit.create"), eq(auditLogs.visitId, first.id)));
+    expect(audits).toHaveLength(1);
+  });
+
+  it("rejects an invalid visit status at the database boundary", async () => {
+    const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
+    const suffix = uniqueSuffix();
+    const patient = await createPatient(db, actor, {
+      firstName: `Status-${suffix}`,
+      lastName: `Check-${suffix}`,
+      middleName: undefined,
+      dateOfBirth: undefined,
+      sex: undefined,
+      phone: undefined,
+      email: undefined,
+      icareFileNo: undefined,
+    });
+
+    await expect(
+      db.insert(visits).values({
+        patientId: patient.id,
+        idempotencyKey: randomUUID(),
+        status: "not-a-valid-status",
+        createdBy: actor.userId,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects reusing an idempotency key for a different visit request", async () => {
+    const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
+    const suffix = uniqueSuffix();
+    const patient = await createPatient(db, actor, {
+      firstName: `Key-${suffix}`,
+      lastName: `Conflict-${suffix}`,
+      middleName: undefined,
+      dateOfBirth: undefined,
+      sex: undefined,
+      phone: undefined,
+      email: undefined,
+      icareFileNo: undefined,
+    });
+    const idempotencyKey = randomUUID();
+    await createVisit(db, actor, { patientId: patient.id, idempotencyKey, reason: "First" });
+    await expect(
+      createVisit(db, actor, { patientId: patient.id, idempotencyKey, reason: "Different" }),
+    ).rejects.toBeInstanceOf(IdempotencyKeyConflictError);
+  });
+
+  it("binds a visit lookup to its owning patient", async () => {
+    const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
+    const suffix = uniqueSuffix();
+    const patientA = await createPatient(db, actor, {
+      firstName: `Owner-${suffix}`,
+      lastName: `A-${suffix}`,
+      middleName: undefined,
+      dateOfBirth: undefined,
+      sex: undefined,
+      phone: undefined,
+      email: undefined,
+      icareFileNo: undefined,
+    });
+    const patientB = await createPatient(db, actor, {
+      firstName: `Owner-${suffix}`,
+      lastName: `B-${suffix}`,
+      middleName: undefined,
+      dateOfBirth: undefined,
+      sex: undefined,
+      phone: undefined,
+      email: undefined,
+      icareFileNo: undefined,
+    });
+    const visit = await createVisit(db, actor, {
+      patientId: patientA.id,
+      idempotencyKey: randomUUID(),
+      reason: "Scoped lookup",
+    });
+
+    expect(await getVisitById(db, actor, patientA.id, visit.id)).not.toBeNull();
+    expect(await getVisitById(db, actor, patientB.id, visit.id)).toBeNull();
   });
 
   it("denies visit creation for a role without visit.create and audits access.denied", async () => {
@@ -124,7 +238,7 @@ describe("visits", () => {
     });
 
     await expect(
-      createVisit(db, inventory, { patientId: patient.id, reason: undefined }),
+      createVisit(db, inventory, { patientId: patient.id, idempotencyKey: randomUUID(), reason: undefined }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     const rows = await db

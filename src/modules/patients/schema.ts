@@ -30,6 +30,7 @@ export type CreatePatientInput = z.infer<typeof createPatientSchema>;
 
 export const updatePatientSchema = z.object({
   id: z.string().uuid(),
+  expectedVersion: z.coerce.number().int().positive(),
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
   middleName: optionalTrimmed(),

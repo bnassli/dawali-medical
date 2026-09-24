@@ -21,6 +21,13 @@ export class DuplicateExternalIdError extends Error {
   }
 }
 
+export class ConcurrentPatientUpdateError extends Error {
+  constructor() {
+    super("This patient was changed by another user. Reload the record before saving again.");
+    this.name = "ConcurrentPatientUpdateError";
+  }
+}
+
 export interface PatientRecord {
   id: string;
   firstName: string;
@@ -32,6 +39,7 @@ export interface PatientRecord {
   email: string | null;
   createdAt: Date;
   updatedAt: Date;
+  version: number;
   externalIds: { system: string; value: string }[];
 }
 
@@ -137,6 +145,9 @@ export async function updatePatient(
       .where(eq(patients.id, input.id))
       .limit(1);
     if (!before) throw new Error("Patient not found");
+    if (before.version !== input.expectedVersion) {
+      throw new ConcurrentPatientUpdateError();
+    }
 
     const [after] = await tx
       .update(patients)
@@ -150,10 +161,16 @@ export async function updatePatient(
         email: input.email ?? null,
         updatedBy: actor.userId,
         updatedAt: new Date(),
+        version: input.expectedVersion + 1,
       })
-      .where(eq(patients.id, input.id))
+      .where(
+        and(
+          eq(patients.id, input.id),
+          eq(patients.version, input.expectedVersion),
+        ),
+      )
       .returning();
-    if (!after) throw new Error("Failed to update patient");
+    if (!after) throw new ConcurrentPatientUpdateError();
 
     await writeAudit(tx, {
       actorUserId: actor.userId,

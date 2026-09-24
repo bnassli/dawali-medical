@@ -16,8 +16,8 @@ export default async function VisitChartPage({
   const patient = await getPatientById(getDb(), actor, id);
   if (!patient) notFound();
 
-  const visit = await getVisitById(getDb(), actor, visitId);
-  if (!visit || visit.patientId !== patient.id) notFound();
+  const visit = await getVisitById(getDb(), actor, patient.id, visitId);
+  if (!visit) notFound();
 
   return (
     <div>

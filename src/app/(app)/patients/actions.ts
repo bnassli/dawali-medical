@@ -7,12 +7,17 @@ import { requireActor } from "@/modules/auth/current-actor";
 import { ForbiddenError } from "@/modules/permissions/service";
 import { createPatientSchema, updatePatientSchema } from "@/modules/patients/schema";
 import {
+  ConcurrentPatientUpdateError,
   createPatient,
   DuplicateExternalIdError,
   updatePatient,
 } from "@/modules/patients/service";
 import { createVisitSchema } from "@/modules/visits/schema";
-import { createVisit, PatientNotFoundError } from "@/modules/visits/service";
+import {
+  createVisit,
+  IdempotencyKeyConflictError,
+  PatientNotFoundError,
+} from "@/modules/visits/service";
 
 function formValue(formData: FormData, key: string): string {
   const v = formData.get(key);
@@ -60,6 +65,7 @@ export async function updatePatientAction(formData: FormData): Promise<void> {
   const id = formValue(formData, "id");
   const parsed = updatePatientSchema.safeParse({
     id,
+    expectedVersion: formValue(formData, "expectedVersion"),
     firstName: formValue(formData, "firstName"),
     lastName: formValue(formData, "lastName"),
     middleName: formValue(formData, "middleName"),
@@ -78,7 +84,7 @@ export async function updatePatientAction(formData: FormData): Promise<void> {
   try {
     await updatePatient(getDb(), actor, parsed.data);
   } catch (err) {
-    if (err instanceof ForbiddenError) {
+    if (err instanceof ForbiddenError || err instanceof ConcurrentPatientUpdateError) {
       redirect(`/patients/${id}?error=${encodeURIComponent(err.message)}`);
     }
     throw err;
@@ -95,6 +101,7 @@ export async function createVisitAction(formData: FormData): Promise<void> {
   const patientId = formValue(formData, "patientId");
   const parsed = createVisitSchema.safeParse({
     patientId,
+    idempotencyKey: formValue(formData, "idempotencyKey"),
     reason: formValue(formData, "reason"),
   });
 
@@ -108,7 +115,11 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     const visit = await createVisit(getDb(), actor, parsed.data);
     redirect(`/patients/${patientId}/visits/${visit.id}`);
   } catch (err) {
-    if (err instanceof ForbiddenError || err instanceof PatientNotFoundError) {
+    if (
+      err instanceof ForbiddenError ||
+      err instanceof PatientNotFoundError ||
+      err instanceof IdempotencyKeyConflictError
+    ) {
       redirect(`/patients/${patientId}?error=${encodeURIComponent(err.message)}`);
     }
     throw err;

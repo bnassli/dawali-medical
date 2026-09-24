@@ -81,3 +81,12 @@ user. See README.md "Known limitations" for details and workarounds.
 Sprint 1 local validation (`npm test`, `npm run db:validate`) was run
 against an in-memory PGlite server via `TEST_DATABASE_URL` for this reason;
 the CI job against a real `postgres:16` container is the authoritative gate.
+
+ADR-018: Medical V1 is a single-clinic deployment. A role with
+`patient.read`/`visit.read` may read all patients in that clinic; there is no
+invented branch, care-team, or physician-assignment rule in Sprint 1. Object
+lookups still bind nested resources to their owning patient (for example a
+visit is fetched by both `patient_id` and `visit_id`) so changing a URL cannot
+cross the requested patient boundary. Multi-clinic or assigned-patient access
+requires an explicit scope model, migration, negative authorization tests, and
+an ADR before deployment.

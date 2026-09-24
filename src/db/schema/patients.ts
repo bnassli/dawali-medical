@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   date,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -33,6 +34,7 @@ export const patients = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    version: integer("version").notNull().default(1),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),

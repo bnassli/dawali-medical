@@ -1,4 +1,5 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./core";
 import { patients } from "./patients";
 
@@ -10,6 +11,7 @@ export const visits = pgTable(
   "visits",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    idempotencyKey: uuid("idempotency_key").notNull().defaultRandom(),
     patientId: uuid("patient_id")
       .notNull()
       .references(() => patients.id, { onDelete: "restrict" }),
@@ -29,6 +31,11 @@ export const visits = pgTable(
       .defaultNow(),
   },
   (table) => [
+    uniqueIndex("visits_idempotency_key_idx").on(table.idempotencyKey),
+    check(
+      "visits_status_check",
+      sql`${table.status} in ('open', 'closed', 'cancelled')`,
+    ),
     index("visits_patient_id_visit_date_idx").on(
       table.patientId,
       table.visitDate,
