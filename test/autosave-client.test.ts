@@ -22,6 +22,7 @@ interface Call {
     expectedVersion: number;
     clientMutationId: string;
     freeText: string;
+    checked?: boolean;
   };
 }
 
@@ -259,6 +260,47 @@ describe("FieldSaver (client autosave engine)", () => {
     expect(group.getUnsavedCount()).toBe(0);
     expect(seen).toContain(2);
     expect(seen.at(-1)).toBe(0);
+  });
+
+  it("checkbox fields send `checked` (only they do) and adopt the stored checked value", async () => {
+    const { calls, fetchImpl } = makeFetch([
+      ok(1, { optionIds: [], freeText: "", checked: true }),
+      ok(1, text("plain")),
+    ]);
+    const box = makeSaver(fetchImpl);
+    box.edit({ optionIds: [], freeText: "", checked: true }, CHOICE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(CHOICE_DEBOUNCE_MS);
+    expect(calls[0]?.body).toMatchObject({ checked: true, freeText: "" });
+    expect(box.getSnapshot()).toMatchObject({
+      status: "saved",
+      baseVersion: 1,
+      value: { checked: true },
+    });
+
+    const plain = makeSaver(fetchImpl);
+    plain.edit(text("plain"), CHOICE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(CHOICE_DEBOUNCE_MS);
+    expect(calls[1]?.body).not.toHaveProperty("checked");
+  });
+
+  it("a 409 exclusive_value is a rejection, not a version conflict: text stays, Retry is offered", async () => {
+    const refusal = () =>
+      new Response(
+        JSON.stringify({ ok: false, error: "exclusive_value", message: "Clear Past Medical Hx first." }),
+        { status: 409 },
+      );
+    const { fetchImpl } = makeFetch([refusal]);
+    const saver = makeSaver(fetchImpl);
+    saver.edit({ optionIds: [], freeText: "", checked: true }, CHOICE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(CHOICE_DEBOUNCE_MS);
+    expect(saver.getSnapshot()).toMatchObject({
+      status: "error",
+      failure: "error",
+      conflict: null,
+      message: "Clear Past Medical Hx first.",
+      value: { checked: true },
+      unsaved: true,
+    });
   });
 
   it("newMutationId falls back to getRandomValues when randomUUID is unavailable (non-secure origins)", () => {
