@@ -91,3 +91,12 @@ required.
   explicitly out of scope for Sprint 1 (see `PROMPT_SPRINT_1.md`). The
   Patient Chart page renders a neutral "Clinical tabs arrive in later
   sprints" placeholder only.
+
+## Engineering quality gates
+
+All work must also follow the project quality gates:
+
+- [`docs/quality/ENGINEERING_STANDARDS.md`](docs/quality/ENGINEERING_STANDARDS.md)
+- [`docs/quality/SYSTEM_INVARIANTS.md`](docs/quality/SYSTEM_INVARIANTS.md)
+- [`docs/quality/VERIFICATION_STRATEGY.md`](docs/quality/VERIFICATION_STRATEGY.md)
+- [`docs/quality/RELEASE_CHECKLIST.md`](docs/quality/RELEASE_CHECKLIST.md)
