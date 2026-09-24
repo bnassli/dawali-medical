@@ -5,6 +5,8 @@ Global rule: preserve SonoSoft-style order and familiarity. Applicable fields su
 ## Subj Complaints Habits
 Reason for visit; Problem List; Chief Complaints; characteristics; duration; progression; daily-activity impact; chest comments; comments; aggravating factors; relieving factors; previous conservative therapy + duration; family history; alcohol/exercise/tobacco; pain meds; current meds; allergies.
 
+Reconciled in R1b (ADR-029), shown in visual groups: **Reason for visit / Problem List** (Reason for Visit, Problem List) · **Chief Complaints** (Chief Complaints, Associated condition, How long?, Symptoms getting worse over time? [checkbox, replaces the retired `progression` select], Daily Activity Impact, Additional Comments, Comments) · **Aggravating / Relieving Factors** · **Previous conservative therapy** (+ duration) · **Family history** ("Family history of VV?", the shared `family_history`) · **Habits** (Alcohol, Exercise, Tobacco) · **Medications / Allergies** (Pain Meds for CC, Current Meds, Allergies).
+
 ## Past Medical Hx
 Past Medical Hx; Family Medical Hx; Unknown; Prior Test Results; Additional Comments; Surgical Hx; female-specific option/field from reference screen.
 
@@ -15,13 +17,18 @@ Implemented (Sprint 3A, ADR-027), in this order:
 4. Prior Test Results — textarea (`prior_test_results`).
 5. Additional Comments — textarea (`past_medical_additional_comments`, distinct from the Assessment one).
 6. Surgical Hx — multiselect, dynamic options + free text (`surgical_history`).
-7. Female-specific field — **deferred** until a SonoSoft reference screen is supplied (no field, no conditional visibility). It is last in this tab, so adding it later is a seed-only addition that does not disturb the order above.
+7. Female-specific statement (`female_specific_statement`, R1b / ADR-029) — "If FEMALE select the appropriate statement; otherwise disregard": dynamic dropdown + "+ Add New" + visit-only free text. Shown only when the patient's sex is Female (hidden for Male/blank; an existing value stays visible read-only if the sex changes later). Enforced by the server.
 
 ## Assessment Plan+
 Order: Impression → Recommendations → Stockings detail → Additional Comments.
 Stockings structured: type, compression, gender, color, measurements.
 
-Implemented (Sprint 3A, ADR-027), in this order: Impression (`impression`, multiselect + free text) -> Recommendations (`recommendations`, multiselect + free text) -> Stockings Type / Compression / Gender / Color (`stockings_type`, `stockings_compression`, `stockings_gender`, `stockings_color`; each a single-select with its own dynamic option list) -> Stockings Measurements (`stockings_measurements`, textarea) -> Additional Comments (`assessment_additional_comments`). Each stocking field is independent per visit (own version stream and audit trail); there is no top-level yes/no and nothing is derived from patient demographics. "Gender" is the stocking cut, not the patient's sex.
+Implemented (R1b, ADR-029; replaces the Sprint 3A version), in visual groups:
+- **Impression**: `impression_rows` — 8 visible ordered rows (reusable option and/or free text per row) with Bullets / Numbers stored per visit; `impression_init_venous_interp` — "Impr for Init Venous Interp" (dynamic option + free text).
+- **Recommendations**: `recommendation_rows` — 8 visible ordered rows (option and/or free text), order preserved.
+- **Stockings**: Type / Compression / Gender / Color (`stockings_type`, `stockings_compression`, `stockings_gender`, `stockings_color`; single-selects with their own lists; "Gender" is the stocking cut, not the patient's sex), then Mid Thigh, Mid Calf, Mid Ankle, Floor to GF, Floor to Knee (`stockings_mid_thigh`, `stockings_mid_calf`, `stockings_mid_ankle`, `stockings_floor_to_gf`, `stockings_floor_to_knee`; numeric, cm, one decimal, one set per visit, no Right/Left split).
+- Additional Comments (`assessment_additional_comments`).
+Retired (history stays readable on old visits, read-only, next to its replacement): `impression`, `recommendations`, `stockings_measurements`.
 
 ## Treatment Plan
 Scheduled | Completed | Recommended Treatment/Procedures in order | Approval/Status/Comments.

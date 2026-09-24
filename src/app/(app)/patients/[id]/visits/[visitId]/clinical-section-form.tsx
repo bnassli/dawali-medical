@@ -11,6 +11,7 @@ import {
   type EntryValue,
   type FieldSnapshot,
   type OptionView,
+  type OrderedRow,
 } from "@/modules/clinical/autosave-client";
 import { FIELD_EXCLUSION_RULES } from "@/modules/clinical/definitions";
 import { isGuardedLinkClick } from "@/modules/clinical/navigation-guard";
@@ -43,9 +44,24 @@ function statusText(snap: FieldSnapshot): string {
   }
 }
 
+function optionLabel(id: string, options: OptionView[]): string {
+  return options.find((o) => o.id === id)?.label ?? "(unknown option)";
+}
+
 function describe(value: EntryValue, options: OptionView[]): string {
   if (value.checked !== undefined) return value.checked ? "Checked" : "Unchecked";
-  const labels = value.optionIds.map((id) => options.find((o) => o.id === id)?.label ?? "(unknown option)");
+  if (value.numberValue !== undefined && value.numberValue !== null) return String(value.numberValue);
+  if (value.rows) {
+    const rows = value.rows
+      .map((r, i) => {
+        const parts = [r.optionId ? optionLabel(r.optionId, options) : "", r.freeText].filter((p) => p !== "");
+        return parts.length > 0 ? `${i + 1}. ${parts.join(" — ")}` : "";
+      })
+      .filter((r) => r !== "");
+    const mode = value.display === "numbers" ? " (Numbers)" : "";
+    return rows.length > 0 ? `${rows.join("; ")}${mode}` : `(empty)${mode}`;
+  }
+  const labels = value.optionIds.map((id) => optionLabel(id, options));
   const parts = [...labels, value.freeText].filter((p) => p !== "");
   return parts.length > 0 ? parts.join("; ") : "(empty)";
 }
@@ -63,7 +79,182 @@ interface Exclusion {
 }
 
 function hasValue(v: EntryValue): boolean {
-  return v.optionIds.length > 0 || v.freeText.trim() !== "" || v.checked === true;
+  return (
+    v.optionIds.length > 0 ||
+    v.freeText.trim() !== "" ||
+    v.checked === true ||
+    (v.rows ?? []).some((r) => r.optionId !== null || r.freeText.trim() !== "") ||
+    (v.numberValue !== undefined && v.numberValue !== null)
+  );
+}
+
+const EMPTY_ROW: OrderedRow = { optionId: null, freeText: "" };
+
+/**
+ * Ordered rows 1..N (ADR-029): each row is a reusable option and/or free text.
+ * Rows are positional — what the doctor puts in row 3 stays row 3. Impression
+ * also has a Bullets / Numbers display mode, stored per visit.
+ */
+function OrderedListEditor({
+  field,
+  value,
+  options,
+  disabled,
+  onChange,
+  onFlush,
+}: {
+  field: ClinicalFieldView;
+  value: EntryValue;
+  options: OptionView[];
+  disabled: boolean;
+  onChange: (next: EntryValue, delayMs: number) => void;
+  onFlush: () => void;
+}) {
+  const config = field.orderedList;
+  if (!config) return null;
+  const rows = Array.from({ length: config.rows }, (_, i) => value.rows?.[i] ?? EMPTY_ROW);
+  const display = config.displayMode ? (value.display ?? "bullets") : undefined;
+  const numbered = !config.displayMode || display === "numbers";
+
+  const emit = (nextRows: OrderedRow[], nextDisplay: typeof display, delayMs: number) =>
+    onChange(
+      {
+        optionIds: [],
+        freeText: "",
+        rows: nextRows,
+        ...(nextDisplay ? { display: nextDisplay } : {}),
+      },
+      delayMs,
+    );
+  const setRow = (index: number, row: OrderedRow, delayMs: number) =>
+    emit(
+      rows.map((r, i) => (i === index ? row : r)),
+      display,
+      delayMs,
+    );
+
+  return (
+    <div className="ordered-list" id={`field-${field.code}`}>
+      {config.displayMode ? (
+        <div className="display-mode" role="radiogroup" aria-label={`${field.label} display`}>
+          {(["bullets", "numbers"] as const).map((mode) => (
+            <label key={mode} className="check">
+              <input
+                type="radio"
+                name={`${field.code}-display`}
+                checked={display === mode}
+                disabled={disabled}
+                onChange={() => emit(rows, mode, CHOICE_DEBOUNCE_MS)}
+              />{" "}
+              {mode === "bullets" ? "Bullets" : "Numbers"}
+            </label>
+          ))}
+        </div>
+      ) : null}
+      <ol className="ordered-rows">
+        {rows.map((row, i) => {
+          const selectable = options.filter((o) => o.isActive || o.id === row.optionId);
+          return (
+            <li key={i} className="ordered-row">
+              <span className="row-marker" aria-hidden="true">
+                {numbered ? `${i + 1}.` : "•"}
+              </span>
+              <select
+                aria-label={`${field.label} row ${i + 1}`}
+                value={row.optionId ?? ""}
+                disabled={disabled}
+                onChange={(e) =>
+                  setRow(i, { ...row, optionId: e.target.value || null }, CHOICE_DEBOUNCE_MS)
+                }
+              >
+                <option value="">—</option>
+                {selectable.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                    {o.isActive ? "" : " (retired)"}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                aria-label={`${field.label} row ${i + 1} — free text`}
+                placeholder="Free text for this visit only"
+                value={row.freeText}
+                maxLength={1000}
+                disabled={disabled}
+                onChange={(e) => setRow(i, { ...row, freeText: e.target.value }, TYPING_DEBOUNCE_MS)}
+                onBlur={onFlush}
+              />
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/** A structured number in the field's unit (ADR-029). Invalid input is never sent. */
+function NumberEditor({
+  field,
+  value,
+  disabled,
+  onChange,
+  onFlush,
+}: {
+  field: ClinicalFieldView;
+  value: EntryValue;
+  disabled: boolean;
+  onChange: (next: EntryValue, delayMs: number) => void;
+  onFlush: () => void;
+}) {
+  const config = field.number;
+  const [draft, setDraft] = useState<string | null>(null);
+  const [invalid, setInvalid] = useState(false);
+  if (!config) return null;
+  const stored = value.numberValue === undefined || value.numberValue === null ? "" : String(value.numberValue);
+  const step = config.decimals > 0 ? String(10 ** -config.decimals) : "1";
+
+  function change(text: string) {
+    setDraft(text);
+    if (text.trim() === "") {
+      setInvalid(false);
+      onChange({ optionIds: [], freeText: "", numberValue: null }, TYPING_DEBOUNCE_MS);
+      return;
+    }
+    const n = Number(text);
+    const ok = config !== null && Number.isFinite(n) && n >= config.min && n <= config.max;
+    setInvalid(!ok);
+    if (ok) onChange({ optionIds: [], freeText: "", numberValue: n }, TYPING_DEBOUNCE_MS);
+  }
+
+  return (
+    <div className="inline-controls number-field">
+      <input
+        id={`field-${field.code}`}
+        type="number"
+        inputMode="decimal"
+        min={config.min}
+        max={config.max}
+        step={step}
+        value={draft ?? stored}
+        disabled={disabled}
+        aria-invalid={invalid}
+        onFocus={() => setDraft(stored)}
+        onChange={(e) => change(e.target.value)}
+        onBlur={() => {
+          setDraft(null);
+          setInvalid(false);
+          onFlush();
+        }}
+      />
+      <span className="unit">{config.unit}</span>
+      {invalid ? (
+        <span className="inline-error">
+          Enter a number from {config.min} to {config.max} {config.unit}.
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function useExclusionBlock(exclusion: Exclusion | null, selfActive: boolean): boolean {
@@ -107,11 +298,13 @@ function FieldEditor({
   const isMulti = field.fieldType === "multiselect";
   const isChoice = isSelect || isMulti;
   const isCheckbox = field.fieldType === "checkbox";
+  const isOrdered = field.fieldType === "ordered_list";
+  const isNumber = field.fieldType === "number";
   const inputId = `field-${field.code}`;
   const { optionIds, freeText } = snap.value;
   const options = snap.options;
   const retired = !field.isActive;
-  const fieldReadOnly = readOnly || retired;
+  const fieldReadOnly = readOnly || retired || field.readOnlyReason !== null;
 
   const [newLabel, setNewLabel] = useState("");
   const [addMessage, setAddMessage] = useState<{ ok: boolean; text: string; expired?: boolean } | null>(
@@ -153,7 +346,8 @@ function FieldEditor({
     }
     saver.addOptionToList(result.option);
     setNewLabel("");
-    if (canWrite && !fieldReadOnly && !snap.conflict && !blocked) {
+    // Ordered rows: the new option is offered in every row; the doctor picks the row.
+    if (canWrite && !fieldReadOnly && !snap.conflict && !blocked && !isOrdered) {
       changeOptions(isMulti ? [...optionIds, result.option.id] : [result.option.id]);
     }
     setAddMessage({ ok: true, text: `Added "${result.option.label}" to the list.` });
@@ -168,6 +362,7 @@ function FieldEditor({
       <div className="field-head">
         <label htmlFor={inputId}>
           {field.label}
+          {isNumber && field.number ? ` (${field.number.unit})` : null}
           {retired ? <span className="muted"> (retired field, read-only)</span> : null}
         </label>
         <span className={`save-status ${snap.status}`} role="status" aria-live="polite">
@@ -186,6 +381,28 @@ function FieldEditor({
       ) : null}
 
       {blockedText ? <span className="muted">{blockedText}</span> : null}
+      {field.readOnlyReason ? <span className="muted">{field.readOnlyReason}</span> : null}
+
+      {isOrdered ? (
+        <OrderedListEditor
+          field={field}
+          value={snap.value}
+          options={options}
+          disabled={disabled}
+          onChange={(next, delay) => saver.edit(next, delay)}
+          onFlush={() => void saver.flush()}
+        />
+      ) : null}
+
+      {isNumber ? (
+        <NumberEditor
+          field={field}
+          value={snap.value}
+          disabled={disabled}
+          onChange={(next, delay) => saver.edit(next, delay)}
+          onFlush={() => void saver.flush()}
+        />
+      ) : null}
 
       {isSelect ? (
         <select
@@ -296,7 +513,7 @@ function FieldEditor({
         </button>
       ) : null}
 
-      {isChoice && canAddOption && !retired && !blocked ? (
+      {(isChoice || isOrdered) && canAddOption && !retired && field.readOnlyReason === null && !blocked ? (
         <div className="add-new">
           <input
             type="text"
@@ -336,6 +553,20 @@ function FieldEditor({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Consecutive fields with the same group label form one visual block (ADR-029);
+ * fields without a group are rendered as they were.
+ */
+function groupFields(fields: ClinicalFieldView[]) {
+  const blocks: { key: string; label: string | null; fields: ClinicalFieldView[] }[] = [];
+  for (const f of fields) {
+    const last = blocks[blocks.length - 1];
+    if (last && last.label === f.groupLabel) last.fields.push(f);
+    else blocks.push({ key: `${blocks.length}:${f.groupLabel ?? ""}`, label: f.groupLabel, fields: [f] });
+  }
+  return blocks;
 }
 
 interface DiscardPrompt {
@@ -651,20 +882,32 @@ function ClinicalSectionFormInner({
           : ""}
       </div>
       <div className="clinical-form">
-        {fields.map((field) => {
-          const saver = group.get(field.id);
-          return saver ? (
-            <FieldEditor
-              key={field.id}
-              field={field}
-              saver={saver}
-              actorId={actorId}
-              readOnly={readOnly}
-              canWrite={canWrite}
-              canAddOption={canAddOption}
-              exclusion={exclusions.get(field.id) ?? null}
-            />
-          ) : null;
+        {groupFields(fields).map((block) => {
+          const editors = block.fields.map((field) => {
+            const saver = group.get(field.id);
+            return saver ? (
+              <FieldEditor
+                key={field.id}
+                field={field}
+                saver={saver}
+                actorId={actorId}
+                readOnly={readOnly}
+                canWrite={canWrite}
+                canAddOption={canAddOption}
+                exclusion={exclusions.get(field.id) ?? null}
+              />
+            ) : null;
+          });
+          return block.label ? (
+            <fieldset key={block.key} className="clinical-group">
+              <legend>{block.label}</legend>
+              {editors}
+            </fieldset>
+          ) : (
+            <div key={block.key} className="clinical-ungrouped">
+              {editors}
+            </div>
+          );
         })}
       </div>
       {prompt ? <DiscardDialog items={prompt.items} onStay={stay} onDiscard={discardAndLeave} /> : null}

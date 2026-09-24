@@ -15,29 +15,31 @@ import {
 // Order from docs/CLINICAL_TABS.md.
 const TABS = ["Subj Complaints Habits", "Past Medical Hx", "Assessment Plan+"];
 
+// Subj Complaints Habits as reconciled in R1b (ADR-029).
 const SUBJ_ORDER = [
   "Reason for Visit",
   "Problem List",
   "Chief Complaints",
-  "Characteristics",
-  "Duration",
-  "Progression",
+  "Associated condition",
+  "How long?",
+  "Symptoms getting worse over time?",
   "Daily Activity Impact",
-  "Chest Comments",
+  "Additional Comments",
   "Comments",
   "Aggravating Factors",
   "Relieving Factors",
   "Previous Conservative Therapy",
   "Previous Conservative Therapy Duration",
-  "Family History",
+  "Family history of VV?",
   "Alcohol",
   "Exercise",
   "Tobacco",
-  "Pain Meds",
+  "Pain Meds for CC",
   "Current Meds",
   "Allergies",
 ];
-// The female-specific field is deferred (ADR-027) and must not appear.
+// The fixture patient has no recorded sex, so the Female-specific statement
+// (ADR-029) is hidden; it is covered for Female patients in clinical-r1b.spec.ts.
 const PMH_ORDER = [
   "Past Medical Hx",
   "Family Medical Hx",
@@ -48,12 +50,17 @@ const PMH_ORDER = [
 ];
 const ASSESSMENT_ORDER = [
   "Impression",
+  "Impr for Init Venous Interp",
   "Recommendations",
   "Stockings Type",
   "Stockings Compression",
   "Stockings Gender",
   "Stockings Color",
-  "Stockings Measurements",
+  "Mid Thigh (cm)",
+  "Mid Calf (cm)",
+  "Mid Ankle (cm)",
+  "Floor to GF (cm)",
+  "Floor to Knee (cm)",
   "Additional Comments",
 ];
 
@@ -96,7 +103,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
 
     await expectDocumentedTabs(page);
     await expect(tabsNav(page).locator(".tab.active")).toHaveText("Subj Complaints Habits");
-    await expect(fieldLabels(page)).toHaveText(SUBJ_ORDER); // Subj unchanged
+    await expect(fieldLabels(page)).toHaveText(SUBJ_ORDER);
     await expect(page.locator(".clinical-form")).toHaveCount(1);
 
     await tabsNav(page).getByRole("link", { name: "Past Medical Hx" }).click();
@@ -155,7 +162,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     );
   });
 
-  test("Assessment Plan+ persists: Impression/Recommendations options + free text; the two Additional Comments stay separate", async ({
+  test("Assessment Plan+ persists: Impression/Recommendations rows (option + free text); the two Additional Comments stay separate", async ({
     page,
   }) => {
     const visit = await createVisitFixture();
@@ -163,18 +170,32 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await loginAs(page, "doctor");
     await page.goto(tabUrl(visit, ASSESSMENT_TAB));
 
-    await addOption(page, "impression", `Great saphenous reflux ${s}`, "Impression");
-    await field(page, "impression").getByLabel("Impression — visit-only free text").fill(`right leg ${s}`);
-    await expect(statusOf(page, "impression")).toHaveText("Saved");
-    await addOption(page, "recommendations", `Ablation ${s}`, "Recommendations");
+    const imp = field(page, "impression_rows");
+    await imp.getByLabel("New Impression option").fill(`Great saphenous reflux ${s}`);
+    await imp.getByRole("button", { name: "+ Add New" }).click();
+    await imp.getByLabel("Impression row 1", { exact: true }).selectOption({ label: `Great saphenous reflux ${s}` });
+    await imp.getByLabel("Impression row 1 — free text").fill(`right leg ${s}`);
+    await expect(statusOf(page, "impression_rows")).toHaveText("Saved");
+    const rec = field(page, "recommendation_rows");
+    await rec.getByLabel("New Recommendations option").fill(`Ablation ${s}`);
+    await rec.getByRole("button", { name: "+ Add New" }).click();
+    await rec.getByLabel("Recommendations row 1", { exact: true }).selectOption({ label: `Ablation ${s}` });
+    await expect(statusOf(page, "recommendation_rows")).toHaveText("Saved");
     await field(page, "assessment_additional_comments").locator("textarea").fill(`assessment note ${s}`);
     await expect(statusOf(page, "assessment_additional_comments")).toHaveText("Saved");
 
     await page.reload();
-    await expect(field(page, "impression").getByRole("checkbox", { name: `Great saphenous reflux ${s}` })).toBeChecked();
+    await expect(imp.getByLabel("Impression row 1", { exact: true }).locator("option:checked")).toHaveText(
+      `Great saphenous reflux ${s}`,
+    );
+    await expect(imp.getByLabel("Impression row 1 — free text")).toHaveValue(`right leg ${s}`);
     // lists are independent: Recommendations does not offer Impression's option
-    await expect(field(page, "recommendations").getByRole("checkbox", { name: `Great saphenous reflux ${s}` })).toHaveCount(0);
-    await expect(field(page, "recommendations").getByRole("checkbox", { name: `Ablation ${s}` })).toBeChecked();
+    await expect(
+      rec.getByLabel("Recommendations row 1", { exact: true }).locator("option", { hasText: `Great saphenous reflux ${s}` }),
+    ).toHaveCount(0);
+    await expect(rec.getByLabel("Recommendations row 1", { exact: true }).locator("option:checked")).toHaveText(
+      `Ablation ${s}`,
+    );
     await expect(field(page, "assessment_additional_comments").locator("textarea")).toHaveValue(
       `assessment note ${s}`,
     );
@@ -192,7 +213,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await loginAs(page, "doctor");
     await page.goto(visitUrl(visit));
 
-    await addOption(page, "family_history", `Mother DVT ${s}`, "Family History");
+    await addOption(page, "family_history", `Mother DVT ${s}`, "Family history of VV?");
     await tabsNav(page).getByRole("link", { name: "Past Medical Hx" }).click();
     const inPmh = field(page, "family_history");
     await expect(inPmh.locator("label").first()).toHaveText("Family Medical Hx");
@@ -203,8 +224,8 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
 
     await tabsNav(page).getByRole("link", { name: "Subj Complaints Habits" }).click();
     const inSubj = field(page, "family_history");
-    await expect(inSubj.locator("label").first()).toHaveText("Family History");
-    await expect(inSubj.getByLabel("Family History — visit-only free text")).toHaveValue(`sister too ${s}`);
+    await expect(inSubj.locator("label").first()).toHaveText("Family history of VV?");
+    await expect(inSubj.getByLabel("Family history of VV? — visit-only free text")).toHaveValue(`sister too ${s}`);
 
     const history = await entryHistory(visit.visitId, "family_history");
     expect(history.map((r) => r.version)).toEqual([1, 2]); // one stream, no duplicate source
@@ -219,8 +240,8 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await page.goto(tabUrl(visit, ASSESSMENT_TAB));
 
     await addOption(page, "stockings_type", `Thigh-high ${s}`, "Stockings Type");
-    await field(page, "stockings_measurements").locator("textarea").fill(`ankle 22 / calf 36 ${s}`);
-    await expect(statusOf(page, "stockings_measurements")).toHaveText("Saved");
+    await field(page, "stockings_mid_calf").getByRole("spinbutton").fill("36");
+    await expect(statusOf(page, "stockings_mid_calf")).toHaveText("Saved");
 
     for (const code of ["stockings_compression", "stockings_gender", "stockings_color"]) {
       await expect(field(page, code).getByRole("combobox")).toHaveValue("");
@@ -233,7 +254,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await expect(field(page, "stockings_gender").getByRole("combobox")).toHaveValue("");
 
     expect(await entryHistory(visit.visitId, "stockings_type")).toHaveLength(1);
-    expect(await entryHistory(visit.visitId, "stockings_measurements")).toHaveLength(1);
+    expect((await entryHistory(visit.visitId, "stockings_mid_calf")).map((r) => r.numberValue)).toEqual([36]);
     for (const code of ["stockings_compression", "stockings_gender", "stockings_color"]) {
       expect(await entryHistory(visit.visitId, code), code).toHaveLength(0);
     }
@@ -357,11 +378,11 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await page.goto(tabUrl(visit, ASSESSMENT_TAB));
 
     // Pending (not failed): flushed by the navigation, no prompt.
-    await field(page, "stockings_measurements").locator("textarea").pressSequentially("thigh 50 cm");
+    await field(page, "assessment_additional_comments").locator("textarea").pressSequentially("thigh 50 cm");
     await tabsNav(page).getByRole("link", { name: "Past Medical Hx" }).click();
     await expect(page).toHaveURL(tabUrl(visit, PMH_TAB));
     await expect(discardDialog(page)).toHaveCount(0);
-    expect((await entryHistory(visit.visitId, "stockings_measurements")).map((r) => r.freeText)).toEqual([
+    expect((await entryHistory(visit.visitId, "assessment_additional_comments")).map((r) => r.freeText)).toEqual([
       "thigh 50 cm",
     ]);
 
@@ -393,8 +414,8 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await expect(statusOf(page, "past_medical_unknown")).toHaveText("Saved");
     await page.goto(tabUrl(visit, ASSESSMENT_TAB));
     await expect(page.getByRole("button", { name: "+ Add New" })).toHaveCount(0);
-    await field(page, "impression").getByLabel("Impression — visit-only free text").fill("nurse wording");
-    await expect(statusOf(page, "impression")).toHaveText("Saved");
+    await field(page, "impression_rows").getByLabel("Impression row 1 — free text").fill("nurse wording");
+    await expect(statusOf(page, "impression_rows")).toHaveText("Saved");
 
     const adminCtx = await browser.newContext();
     const receptionCtx = await browser.newContext();

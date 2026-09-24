@@ -7,14 +7,27 @@ import {
   clinicalOptions,
   clinicalSectionFields,
   clinicalSections,
+  patients,
   visits,
   type ClinicalEntryValue,
+  type ClinicalOrderedRow,
 } from "@/db/schema";
 import { writeAudit } from "@/modules/audit/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { requirePermission } from "@/modules/permissions/service";
 import type { ActorContext } from "@/modules/permissions/types";
-import { FIELD_EXCLUSION_RULES, FIELD_TYPES, isSelectType } from "./definitions";
+import {
+  FIELD_EXCLUSION_RULES,
+  FIELD_TYPES,
+  hasOptionList,
+  isSelectType,
+  MAX_ROW_TEXT_LENGTH,
+  NUMBER_FIELD_CONFIG,
+  ORDERED_LIST_CONFIG,
+  PATIENT_CONDITION_RULES,
+  type NumberFieldConfig,
+  type OrderedListConfig,
+} from "./definitions";
 import {
   characterCount,
   MAX_FREE_TEXT_LENGTH,
@@ -108,6 +121,17 @@ export class ClinicalExclusionError extends Error {
   }
 }
 
+/**
+ * The field does not apply to this patient (ADR-029), e.g. the Female-specific
+ * statement for a patient not recorded as Female. Nothing is written.
+ */
+export class ClinicalConditionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClinicalConditionError";
+  }
+}
+
 export class DuplicateOptionError extends Error {
   constructor(label: string) {
     super(
@@ -155,6 +179,17 @@ export interface ClinicalFieldView {
   options: ClinicalOptionView[];
   version: number;
   value: ClinicalEntryValue;
+  /** Visual group heading of this placement (ADR-029), or null. */
+  groupLabel: string | null;
+  /**
+   * Set when an ACTIVE field must be shown read-only for this visit (ADR-029),
+   * e.g. a Female-specific value kept after the patient's sex changed.
+   */
+  readOnlyReason: string | null;
+  /** Ordered-list fields only: rows and display mode. */
+  orderedList: OrderedListConfig | null;
+  /** Number fields only: unit and bounds. */
+  number: NumberFieldConfig | null;
 }
 
 export interface ClinicalSectionView {
@@ -174,8 +209,22 @@ export interface ClinicalEntryRecord {
 
 const EMPTY_VALUE: ClinicalEntryValue = { optionIds: [], freeText: "" };
 
+/** True when the value holds no clinical content (a display mode alone is not content). */
 function isEmptyValue(v: ClinicalEntryValue): boolean {
-  return v.optionIds.length === 0 && v.freeText === "" && v.checked !== true;
+  return (
+    v.optionIds.length === 0 &&
+    v.freeText === "" &&
+    v.checked !== true &&
+    (v.rows ?? []).length === 0 &&
+    v.numberValue === undefined
+  );
+}
+
+function rowsEqual(a: ClinicalOrderedRow[] = [], b: ClinicalOrderedRow[] = []): boolean {
+  return (
+    a.length === b.length &&
+    a.every((r, i) => r.optionId === b[i]?.optionId && r.freeText === b[i]?.freeText)
+  );
 }
 
 function valuesEqual(a: ClinicalEntryValue, b: ClinicalEntryValue): boolean {
@@ -183,8 +232,51 @@ function valuesEqual(a: ClinicalEntryValue, b: ClinicalEntryValue): boolean {
     a.freeText === b.freeText &&
     (a.checked ?? false) === (b.checked ?? false) &&
     a.optionIds.length === b.optionIds.length &&
-    a.optionIds.every((id, i) => id === b.optionIds[i])
+    a.optionIds.every((id, i) => id === b.optionIds[i]) &&
+    rowsEqual(a.rows, b.rows) &&
+    (a.display ?? "bullets") === (b.display ?? "bullets") &&
+    a.numberValue === b.numberValue
   );
+}
+
+/** Every option id a value references (plain options and ordered rows). */
+function selectedOptionIds(v: ClinicalEntryValue): Set<string> {
+  const ids = new Set(v.optionIds);
+  for (const r of v.rows ?? []) if (r.optionId) ids.add(r.optionId);
+  return ids;
+}
+
+/**
+ * The canonical form of a submitted value, independent of the field (pure):
+ * options de-duplicated and sorted, text trimmed, ordered rows trimmed with
+ * trailing empty rows dropped, display stored only when "numbers", a cleared
+ * number omitted. Used for the stored value and for replay comparison.
+ */
+function canonicalInput(input: SaveClinicalEntryInput): ClinicalEntryValue {
+  const value: ClinicalEntryValue = {
+    optionIds: [...new Set(input.optionIds)].sort(),
+    freeText: input.freeText.trim(),
+  };
+  if (input.checked !== undefined) value.checked = input.checked;
+  if (input.rows !== undefined) {
+    const rows = input.rows.map((r) => ({ optionId: r.optionId || null, freeText: r.freeText.trim() }));
+    while (rows.length > 0) {
+      const last = rows[rows.length - 1];
+      if (!last || last.optionId !== null || last.freeText !== "") break;
+      rows.pop();
+    }
+    if (rows.length > 0) value.rows = rows;
+  }
+  if (input.display === "numbers") value.display = "numbers";
+  if (input.numberValue !== undefined && input.numberValue !== null) {
+    value.numberValue = input.numberValue;
+  }
+  return value;
+}
+
+/** The patient-condition rule of a field, if any (ADR-029). */
+function conditionFor(code: string) {
+  return PATIENT_CONDITION_RULES.find((r) => r.field === code) ?? null;
 }
 
 /**
@@ -221,7 +313,11 @@ export async function getClinicalSectionForVisit(
 
   // Global fields placed in this section, in placement order.
   const placements = await db
-    .select({ field: clinicalFieldDefinitions, labelOverride: clinicalSectionFields.labelOverride })
+    .select({
+      field: clinicalFieldDefinitions,
+      labelOverride: clinicalSectionFields.labelOverride,
+      groupLabel: clinicalSectionFields.groupLabel,
+    })
     .from(clinicalSectionFields)
     .innerJoin(
       clinicalFieldDefinitions,
@@ -246,12 +342,30 @@ export async function getClinicalSectionForVisit(
           .orderBy(clinicalEntries.fieldDefinitionId, desc(clinicalEntries.version));
   const entryByField = new Map(currentEntries.map((e) => [e.fieldDefinitionId, e]));
 
+  // Patient-conditioned fields (ADR-029): while the patient does not match, an
+  // empty field is hidden and a field with a value is shown read-only.
+  const [patient] = await db
+    .select({ sex: patients.sex })
+    .from(patients)
+    .where(eq(patients.id, visit.patientId))
+    .limit(1);
+  const readOnlyReasonById = new Map<string, string>();
+  const hiddenIds = new Set<string>();
+  for (const p of placements) {
+    const rule = conditionFor(p.field.code);
+    if (!rule || patient?.sex === rule.patientSex) continue;
+    const entry = entryByField.get(p.field.id);
+    if (entry && !isEmptyValue(entry.value)) readOnlyReasonById.set(p.field.id, rule.readOnlyReason);
+    else hiddenIds.add(p.field.id);
+  }
+
   // Active fields, plus retired fields that still have history on this visit
   // (shown read-only so history never disappears).
   const labelOverrideById = new Map(placements.map((p) => [p.field.id, p.labelOverride]));
+  const groupLabelById = new Map(placements.map((p) => [p.field.id, p.groupLabel]));
   const fields = placements
     .map((p) => p.field)
-    .filter((f) => f.isActive || entryByField.has(f.id));
+    .filter((f) => (f.isActive || entryByField.has(f.id)) && !hiddenIds.has(f.id));
 
   const listIds = fields.map((f) => f.optionListId).filter((v): v is string => v !== null);
   const optionRows =
@@ -266,7 +380,7 @@ export async function getClinicalSectionForVisit(
   const views: ClinicalFieldView[] = fields.map((field) => {
     const entry = entryByField.get(field.id);
     const value = entry?.value ?? EMPTY_VALUE;
-    const selected = new Set(value.optionIds);
+    const selected = selectedOptionIds(value);
     const options = optionRows
       .filter((o) => o.listId === field.optionListId && (o.isActive || selected.has(o.id)))
       .map((o) => ({ id: o.id, label: o.label, isActive: o.isActive }));
@@ -281,6 +395,11 @@ export async function getClinicalSectionForVisit(
       options,
       version: entry?.version ?? 0,
       value,
+      groupLabel: groupLabelById.get(field.id) ?? null,
+      readOnlyReason: readOnlyReasonById.get(field.id) ?? null,
+      orderedList:
+        field.fieldType === FIELD_TYPES.ORDERED_LIST ? (ORDERED_LIST_CONFIG[field.code] ?? null) : null,
+      number: field.fieldType === FIELD_TYPES.NUMBER ? (NUMBER_FIELD_CONFIG[field.code] ?? null) : null,
     };
   });
 
@@ -392,11 +511,7 @@ async function saveInTransaction(
     .where(eq(clinicalEntries.clientMutationId, input.clientMutationId))
     .limit(1);
   if (applied) {
-    const canonical: ClinicalEntryValue = {
-      optionIds: [...new Set(input.optionIds)].sort(),
-      freeText: input.freeText.trim(),
-      ...(input.checked === undefined ? {} : { checked: input.checked }),
-    };
+    const canonical = canonicalInput(input);
     if (
       applied.visitId !== visit.id ||
       applied.fieldDefinitionId !== input.fieldId ||
@@ -465,6 +580,7 @@ async function saveInTransaction(
   }
 
   await assertNoExclusion(tx, visit.id, field, next);
+  await assertPatientCondition(tx, visit.patientId, field, next);
 
   const version = currentVersion + 1;
   const [created] = await tx
@@ -521,7 +637,7 @@ async function loadFieldOptions(
     .from(clinicalOptions)
     .where(eq(clinicalOptions.listId, field.optionListId))
     .orderBy(asc(clinicalOptions.sortOrder), asc(clinicalOptions.label));
-  const selected = new Set(value.optionIds);
+  const selected = selectedOptionIds(value);
   return rows
     .filter((o) => o.isActive || selected.has(o.id))
     .map((o) => ({ id: o.id, label: o.label, isActive: o.isActive }));
@@ -690,19 +806,87 @@ async function assertNoExclusion(
   }
 }
 
+/**
+ * Enforces PATIENT_CONDITION_RULES (ADR-029) inside the save transaction. The
+ * patient row is read FOR SHARE, so a concurrent sex change (FOR UPDATE) cannot
+ * commit between this check and the insert. Only a non-empty value is checked:
+ * clearing is always allowed, and existing history is never touched.
+ */
+async function assertPatientCondition(
+  tx: Database,
+  patientId: string,
+  field: typeof clinicalFieldDefinitions.$inferSelect,
+  next: ClinicalEntryValue,
+): Promise<void> {
+  const rule = conditionFor(field.code);
+  if (!rule || isEmptyValue(next)) return;
+  const [patient] = await tx
+    .select({ sex: patients.sex })
+    .from(patients)
+    .where(eq(patients.id, patientId))
+    .limit(1)
+    .for("share");
+  if (patient?.sex !== rule.patientSex) {
+    const sexLabel = rule.patientSex === "F" ? "Female" : "Male";
+    throw new ClinicalConditionError(
+      `"${field.label}" only applies to patients recorded as ${sexLabel}.`,
+    );
+  }
+}
+
+/** Throws unless every given option belongs to the field's list and may be (re)selected. */
+async function assertOptionsSelectable(
+  tx: Database,
+  field: typeof clinicalFieldDefinitions.$inferSelect,
+  optionIds: string[],
+  previous: ClinicalEntryValue,
+): Promise<void> {
+  if (optionIds.length === 0 || !field.optionListId) return;
+  const rows = await tx
+    .select({ id: clinicalOptions.id, isActive: clinicalOptions.isActive })
+    .from(clinicalOptions)
+    .where(
+      and(eq(clinicalOptions.listId, field.optionListId), inArray(clinicalOptions.id, optionIds)),
+    );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const previouslySelected = selectedOptionIds(previous);
+  for (const id of optionIds) {
+    const row = byId.get(id);
+    if (!row) {
+      throw new InvalidClinicalValueError(`Option ${id} does not belong to field "${field.label}".`);
+    }
+    // A retired option can stay selected if it already was, but cannot be newly chosen.
+    if (!row.isActive && !previouslySelected.has(id)) {
+      throw new InvalidClinicalValueError(`Option ${id} is retired and cannot be selected.`);
+    }
+  }
+}
+
 async function normalizeValue(
   tx: Database,
   field: typeof clinicalFieldDefinitions.$inferSelect,
   input: SaveClinicalEntryInput,
   previous: ClinicalEntryValue,
 ): Promise<ClinicalEntryValue> {
-  const freeText = input.freeText.trim();
+  const value = canonicalInput(input);
+  const { optionIds, freeText } = value;
   if (characterCount(freeText) > MAX_FREE_TEXT_LENGTH) {
     throw new InvalidClinicalValueError(`Text must be at most ${MAX_FREE_TEXT_LENGTH} characters.`);
   }
-  const optionIds = [...new Set(input.optionIds)].sort();
+  const type = field.fieldType;
 
-  if (field.fieldType === FIELD_TYPES.CHECKBOX) {
+  // Type-specific parts are rejected on every other type.
+  if (input.checked !== undefined && type !== FIELD_TYPES.CHECKBOX) {
+    throw new InvalidClinicalValueError(`Field "${field.label}" is not a checkbox.`);
+  }
+  if ((input.rows !== undefined || input.display !== undefined) && type !== FIELD_TYPES.ORDERED_LIST) {
+    throw new InvalidClinicalValueError(`Field "${field.label}" does not take ordered rows.`);
+  }
+  if (input.numberValue !== undefined && type !== FIELD_TYPES.NUMBER) {
+    throw new InvalidClinicalValueError(`Field "${field.label}" is not a number field.`);
+  }
+
+  if (type === FIELD_TYPES.CHECKBOX) {
     if (optionIds.length > 0 || freeText !== "") {
       throw new InvalidClinicalValueError(`Field "${field.label}" is a checkbox.`);
     }
@@ -711,53 +895,83 @@ async function normalizeValue(
     }
     return { optionIds: [], freeText: "", checked: input.checked };
   }
-  if (input.checked !== undefined) {
-    throw new InvalidClinicalValueError(`Field "${field.label}" is not a checkbox.`);
+
+  if (type === FIELD_TYPES.ORDERED_LIST) {
+    const config = ORDERED_LIST_CONFIG[field.code];
+    if (!config || !field.optionListId) {
+      throw new InvalidClinicalValueError(`Field "${field.label}" is misconfigured.`);
+    }
+    if (optionIds.length > 0 || freeText !== "") {
+      throw new InvalidClinicalValueError(`Field "${field.label}" takes its values as ordered rows.`);
+    }
+    const rows = value.rows ?? [];
+    if (rows.length > config.rows) {
+      throw new InvalidClinicalValueError(`Field "${field.label}" has at most ${config.rows} rows.`);
+    }
+    for (const r of rows) {
+      if (characterCount(r.freeText) > MAX_ROW_TEXT_LENGTH) {
+        throw new InvalidClinicalValueError(`Each row must be at most ${MAX_ROW_TEXT_LENGTH} characters.`);
+      }
+      if (r.freeText !== "" && !field.allowsFreeText) {
+        throw new InvalidClinicalValueError(`Field "${field.label}" does not accept free text.`);
+      }
+    }
+    if (value.display !== undefined && !config.displayMode) {
+      throw new InvalidClinicalValueError(`Field "${field.label}" has no Bullets / Numbers display mode.`);
+    }
+    await assertOptionsSelectable(
+      tx,
+      field,
+      rows.flatMap((r) => (r.optionId ? [r.optionId] : [])),
+      previous,
+    );
+    return {
+      optionIds: [],
+      freeText: "",
+      ...(rows.length > 0 ? { rows } : {}),
+      ...(value.display ? { display: value.display } : {}),
+    };
   }
 
-  if (field.fieldType === FIELD_TYPES.TEXT || field.fieldType === FIELD_TYPES.TEXTAREA) {
+  if (type === FIELD_TYPES.NUMBER) {
+    const config = NUMBER_FIELD_CONFIG[field.code];
+    if (!config) throw new InvalidClinicalValueError(`Field "${field.label}" is misconfigured.`);
+    if (optionIds.length > 0 || freeText !== "") {
+      throw new InvalidClinicalValueError(`Field "${field.label}" takes a number only.`);
+    }
+    const n = value.numberValue;
+    if (n === undefined) return { optionIds: [], freeText: "" };
+    if (n < config.min || n > config.max) {
+      throw new InvalidClinicalValueError(
+        `"${field.label}" must be between ${config.min} and ${config.max} ${config.unit}.`,
+      );
+    }
+    const scaled = n * 10 ** config.decimals;
+    if (Math.abs(Math.round(scaled) - scaled) > 1e-6) {
+      throw new InvalidClinicalValueError(
+        `"${field.label}" accepts at most ${config.decimals} decimal place(s).`,
+      );
+    }
+    return { optionIds: [], freeText: "", numberValue: n };
+  }
+
+  if (type === FIELD_TYPES.TEXT || type === FIELD_TYPES.TEXTAREA) {
     if (optionIds.length > 0) {
       throw new InvalidClinicalValueError(`Field "${field.label}" does not take options.`);
     }
     return { optionIds: [], freeText };
   }
 
-  if (!isSelectType(field.fieldType) || !field.optionListId) {
+  if (!isSelectType(type) || !field.optionListId) {
     throw new InvalidClinicalValueError(`Field "${field.label}" is misconfigured.`);
   }
-  if (field.fieldType === FIELD_TYPES.SELECT && optionIds.length > 1) {
+  if (type === FIELD_TYPES.SELECT && optionIds.length > 1) {
     throw new InvalidClinicalValueError(`Field "${field.label}" accepts a single option.`);
   }
   if (freeText !== "" && !field.allowsFreeText) {
     throw new InvalidClinicalValueError(`Field "${field.label}" does not accept free text.`);
   }
-
-  if (optionIds.length > 0) {
-    const rows = await tx
-      .select({ id: clinicalOptions.id, isActive: clinicalOptions.isActive })
-      .from(clinicalOptions)
-      .where(
-        and(
-          eq(clinicalOptions.listId, field.optionListId),
-          inArray(clinicalOptions.id, optionIds),
-        ),
-      );
-    const byId = new Map(rows.map((r) => [r.id, r]));
-    const previouslySelected = new Set(previous.optionIds);
-    for (const id of optionIds) {
-      const row = byId.get(id);
-      if (!row) {
-        throw new InvalidClinicalValueError(
-          `Option ${id} does not belong to field "${field.label}".`,
-        );
-      }
-      // A retired option can stay selected if it already was, but cannot be newly chosen.
-      if (!row.isActive && !previouslySelected.has(id)) {
-        throw new InvalidClinicalValueError(`Option ${id} is retired and cannot be selected.`);
-      }
-    }
-  }
-
+  await assertOptionsSelectable(tx, field, optionIds, previous);
   return { optionIds, freeText };
 }
 
@@ -789,7 +1003,7 @@ export async function addClinicalOption(
           ),
         )
         .limit(1);
-      if (!field || !field.optionListId || !isSelectType(field.fieldType)) {
+      if (!field || !field.optionListId || !hasOptionList(field.fieldType)) {
         throw new ClinicalFieldNotFoundError(input.fieldId);
       }
 

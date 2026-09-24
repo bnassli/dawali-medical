@@ -23,6 +23,9 @@ interface Call {
     clientMutationId: string;
     freeText: string;
     checked?: boolean;
+    rows?: { optionId: string | null; freeText: string }[];
+    display?: string;
+    numberValue?: number | null;
   };
 }
 
@@ -301,6 +304,37 @@ describe("FieldSaver (client autosave engine)", () => {
       value: { checked: true },
       unsaved: true,
     });
+  });
+
+  it("ordered-list and number fields send their own part only and adopt the stored value (ADR-029)", async () => {
+    const rows = [
+      { optionId: "o1", freeText: "" },
+      { optionId: null, freeText: "second" },
+    ];
+    const { calls, fetchImpl } = makeFetch([
+      ok(1, { optionIds: [], freeText: "", rows, display: "numbers" }),
+      ok(1, { optionIds: [], freeText: "", numberValue: 36.5 }),
+      ok(2, EMPTY),
+    ]);
+    const list = makeSaver(fetchImpl);
+    list.edit({ optionIds: [], freeText: "", rows, display: "numbers" }, CHOICE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(CHOICE_DEBOUNCE_MS);
+    expect(calls[0]?.body).toMatchObject({ rows, display: "numbers" });
+    expect(calls[0]?.body).not.toHaveProperty("numberValue");
+    expect(calls[0]?.body).not.toHaveProperty("checked");
+    expect(list.getSnapshot().value).toEqual({ optionIds: [], freeText: "", rows, display: "numbers" });
+
+    const num = makeSaver(fetchImpl);
+    num.edit({ optionIds: [], freeText: "", numberValue: 36.5 }, TYPING_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(TYPING_DEBOUNCE_MS);
+    expect(calls[1]?.body).toMatchObject({ numberValue: 36.5 });
+    expect(calls[1]?.body).not.toHaveProperty("rows");
+    expect(num.getSnapshot().value.numberValue).toBe(36.5);
+
+    // Clearing a number sends null (not "absent"), so the server stores an empty value.
+    num.edit({ optionIds: [], freeText: "", numberValue: null }, TYPING_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(TYPING_DEBOUNCE_MS);
+    expect(calls[2]?.body.numberValue).toBeNull();
   });
 
   it("newMutationId falls back to getRandomValues when randomUUID is unavailable (non-secure origins)", () => {

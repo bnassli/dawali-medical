@@ -137,3 +137,11 @@ first. Normalised sex values are not reverted automatically; the raw values are 
 
 Audit actions added: `patient.deactivate`, `patient.reactivate`, `patient.sex_normalized`,
 `demographic_option.create`, `demographic_option.update`.
+
+## R1b additions (ADR-029)
+
+- Migration `0007_clinical_section_field_group.sql`: `clinical_section_fields.group_label` (text, nullable) — presentation-only visual group of a placement, set by the seed. Rollback: `ALTER TABLE clinical_section_fields DROP COLUMN group_label;` (drops only headings; no clinical data touched).
+- New field types (no DDL; `field_type` is text): `ordered_list` — value `{ "optionIds": [], "freeText": "", "rows": [{ "optionId": uuid|null, "freeText": "..." }], "display": "numbers"? }`; `number` — value `{ "optionIds": [], "freeText": "", "numberValue": 36.5 }`. Both additive/optional in `ClinicalEntryValue`; every existing row and code path is unchanged.
+- New global fields (seed): `symptoms_worse_over_time`, `female_specific_statement`, `impression_rows` (list `impression`), `impression_init_venous_interp`, `recommendation_rows` (list `recommendations`), `stockings_mid_thigh`, `stockings_mid_calf`, `stockings_mid_ankle`, `stockings_floor_to_gf`, `stockings_floor_to_knee`.
+- Retired by the seed (`is_active = false`, one-way): `progression`, `impression`, `recommendations`, `stockings_measurements`. Their entries are untouched and stay readable (read-only) on the visits that have them.
+- Deploy: `npm run db:migrate`, then `npm run db:seed`.

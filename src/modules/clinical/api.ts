@@ -10,6 +10,7 @@ import {
 } from "./schema";
 import {
   addClinicalOption,
+  ClinicalConditionError,
   ClinicalConflictError,
   ClinicalExclusionError,
   ClinicalSectionNotFoundError,
@@ -33,10 +34,13 @@ import {
  * 403 permission denied, cross-origin request or a session that now belongs
  * to a different user than the page was rendered for, 404 unknown
  * visit/field, 409 optimistic-concurrency conflict (or duplicate option, or a
- * value that contradicts another field, `exclusive_value`),
+ * value that contradicts another field, `exclusive_value`, or a field that does
+ * not apply to this patient, `condition_not_met`),
  * 413 body too large, 415 non-JSON body, 423 visit not open (locked).
  */
-export const MAX_SAVE_BODY_BYTES = 32 * 1024;
+// Fits the largest legal value: 8 ordered rows of 1000 characters each in
+// multi-byte scripts (ADR-029), or 5000 characters of free text.
+export const MAX_SAVE_BODY_BYTES = 64 * 1024;
 export const MAX_OPTION_BODY_BYTES = 2 * 1024;
 
 export interface ApiDeps {
@@ -156,6 +160,8 @@ function mapError(err: unknown): Response {
   if (err instanceof DuplicateOptionError) return fail(409, "duplicate_option", err.message);
   // Not a version conflict (no `current`): the value would contradict another field (ADR-027).
   if (err instanceof ClinicalExclusionError) return fail(409, "exclusive_value", err.message);
+  // Not a version conflict: the field does not apply to this patient (ADR-029).
+  if (err instanceof ClinicalConditionError) return fail(409, "condition_not_met", err.message);
   if (err instanceof InvalidClinicalValueError || err instanceof MutationIdReuseError) {
     return fail(400, "invalid_value", err.message);
   }

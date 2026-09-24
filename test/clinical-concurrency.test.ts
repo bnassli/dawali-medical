@@ -114,7 +114,7 @@ describe("clinical entries: optimistic concurrency and idempotency", () => {
   it("a conflict on a select field returns the current options so 'Use theirs' can render them", async () => {
     const { actor: alice } = await createTestUser(db, { roleCode: "DOCTOR" });
     const { visit } = await newVisit(alice);
-    const fid = await fieldId("progression");
+    const fid = await fieldId("daily_activity_impact");
     const option = await addClinicalOption(db, alice, {
       fieldId: fid,
       label: `Worsening ${uniqueSuffix()}`,

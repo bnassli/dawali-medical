@@ -106,6 +106,9 @@ export interface EntryRow {
   freeText: string;
   optionIds: string[];
   checked: boolean | undefined;
+  rows: { optionId: string | null; freeText: string }[] | undefined;
+  display: string | undefined;
+  numberValue: number | undefined;
   createdBy: string | null;
 }
 
@@ -129,6 +132,9 @@ export async function entryHistory(visitId: string, fieldCode: string): Promise<
       freeText: r.value.freeText,
       optionIds: r.value.optionIds,
       checked: r.value.checked,
+      rows: r.value.rows,
+      display: r.value.display,
+      numberValue: r.value.numberValue,
       createdBy: r.createdBy,
     }));
   });

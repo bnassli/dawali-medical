@@ -222,7 +222,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
     const { visit } = await newVisit(actor);
     const durationId = await fieldId("duration");
-    const progressionId = await fieldId("progression");
+    const otherSelectId = await fieldId("daily_activity_impact");
     const suffix = uniqueSuffix();
     const a = await addClinicalOption(db, actor, { fieldId: durationId, label: `A ${suffix}` });
     const b = await addClinicalOption(db, actor, { fieldId: durationId, label: `B ${suffix}` });
@@ -240,7 +240,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     await expect(
       saveCurrent(db, actor, {
         visitId: visit.id,
-        fieldId: progressionId,
+        fieldId: otherSelectId,
         optionIds: [a.id],
         freeText: "",
       }),

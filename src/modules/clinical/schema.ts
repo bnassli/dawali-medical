@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_ORDERED_ROWS, MAX_ROW_TEXT_LENGTH } from "./definitions";
 
 /**
  * Maximum length of any free text (clinical free text and the intake Reason for
@@ -16,6 +17,7 @@ export function characterCount(value: string): number {
 
 export const freeTextTooLongMessage = `Text must be at most ${MAX_FREE_TEXT_LENGTH} characters.`;
 export const MAX_OPTION_LABEL_LENGTH = 200;
+export const rowTextTooLongMessage = `Each row must be at most ${MAX_ROW_TEXT_LENGTH} characters.`;
 
 /**
  * Fields the client supplies in the request body. patientId is never accepted:
@@ -31,6 +33,24 @@ export const saveClinicalEntryBodySchema = z
     optionIds: z.array(z.string().uuid()).max(200),
     // Only for checkbox fields (ADR-027); the service rejects it elsewhere.
     checked: z.boolean().optional(),
+    // Only for ordered_list fields (ADR-029); the service rejects them elsewhere
+    // and applies the field's own row count.
+    rows: z
+      .array(
+        z
+          .object({
+            optionId: z.string().uuid().nullable(),
+            freeText: z
+              .string()
+              .refine((v) => characterCount(v) <= MAX_ROW_TEXT_LENGTH, rowTextTooLongMessage),
+          })
+          .strict(),
+      )
+      .max(MAX_ORDERED_ROWS)
+      .optional(),
+    display: z.enum(["bullets", "numbers"]).optional(),
+    // Only for number fields (ADR-029); null clears the value.
+    numberValue: z.number().finite().nullable().optional(),
     freeText: z
       .string()
       .refine((v) => characterCount(v) <= MAX_FREE_TEXT_LENGTH, freeTextTooLongMessage),

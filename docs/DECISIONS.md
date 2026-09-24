@@ -500,3 +500,73 @@ change a patient revalidate the patient layout so the header never shows stale d
 
 *Not changed:* clinical model, autosave, navigation guard, clinical permissions, audit and
 append-only triggers.
+
+ADR-029: R1b — clinical UI reconciliation (Past Medical Hx, Assessment Plan+, Subj
+Complaints Habits). Source: `docs/FINAL_V1_REQUIREMENTS_RECONCILIATION.md` §6.1–6.3 and the
+Product Owner decisions of 2026-09-24. Supersedes the ADR-027 decisions it contradicts
+(female field deferred; stocking measurements as free text; Impression/Recommendations as
+multiselects). Everything else in ADR-026/027 stands.
+
+*Retire, never delete or re-type.* Field codes are durable, and the seed refuses structural
+changes (ADR-026). Replaced fields are therefore RETIRED (`retired: true` in
+`definitions.ts`; the seed sets `is_active = false`, one-way, never reactivating) and new
+codes are added: `impression` → `impression_rows`, `recommendations` → `recommendation_rows`,
+`stockings_measurements` → five number fields, `progression` (select) →
+`symptoms_worse_over_time` (checkbox). Retired fields stay PLACED next to their replacement
+(same group), so an old visit shows its old value read-only in the familiar position; on
+visits without history they are hidden. No entry is rewritten, converted or copied: the
+doctor re-enters structured values when wanted, and history is untouched.
+
+*Two additive field types* (`field_type` is text, `value` is jsonb: no DDL). Both reuse the
+Sprint 2 save path unchanged — append-only versions, audit before/after, `expectedVersion`,
+`clientMutationId` replay, visit lock, actor/origin binding, autosave and navigation guard.
+- `ordered_list`: value `{ optionIds: [], freeText: "", rows: [{ optionId|null, freeText }],
+  display?: "numbers" }`. Rows are POSITIONAL (row 3 stays row 3; gaps kept; trailing empty
+  rows not stored; never sorted). Each row: one option of the field's list and/or free text
+  (≤ 1000 characters). Row count and display mode are code config (`ORDERED_LIST_CONFIG`):
+  Impression and Recommendations have 8 rows; only Impression has Bullets / Numbers, stored
+  per visit inside its value ("numbers" stored, "bullets" = absent/default), so changing only
+  the mode is an ordinary audited revision. One version stream per list, so a reorder or
+  multi-row change is one atomic save. The ordered fields REUSE the retired fields' option
+  lists (`impression`, `recommendations`): every option already added stays available.
+  Retired options follow the usual rule (may stay where selected, cannot be newly chosen).
+- `number`: value `{ optionIds: [], freeText: "", numberValue?: number }`; bounds, unit and
+  decimals are code config (`NUMBER_FIELD_CONFIG`): stockings 0–300 cm, one decimal. One
+  measurement set per visit, no Right/Left split (PO decision). A cleared value is absent.
+The save body limit is raised from 32 KB to 64 KB so 8 full rows in multi-byte scripts fit.
+
+*New fields:* `impression_init_venous_interp` (select + free text, own dynamic list),
+`female_specific_statement` (select + free text, own dynamic list, 7th in Past Medical Hx,
+label "If FEMALE select the appropriate statement; otherwise disregard"), the five stocking
+numbers (`stockings_mid_thigh`, `stockings_mid_calf`, `stockings_mid_ankle`,
+`stockings_floor_to_gf`, `stockings_floor_to_knee`), `impression_rows`,
+`recommendation_rows`, `symptoms_worse_over_time`. No option values are seeded.
+
+*Patient-conditioned field* (`PATIENT_CONDITION_RULES`): `female_specific_statement` applies
+only when `patients.sex = 'F'` (ADR-028 code). Not Female (Male or blank): hidden when empty;
+when it already holds a value (sex changed later) it is shown READ-ONLY with an explanation,
+so history never disappears. The server enforces it inside the save transaction, reading the
+patient row `FOR SHARE` (a concurrent sex change cannot slip between check and insert): a
+non-empty value for a non-matching patient is refused, HTTP 409 `condition_not_met`, nothing
+written, no audit row. Clearing is always allowed (it is a new version; history keeps the old
+one). The client treats it like `exclusive_value`: "Not saved", text kept.
+
+*Subj Complaints Habits:* labels `characteristics` → "Associated condition", `chest_comments`
+→ "Additional Comments", `pain_meds` → "Pain Meds for CC" (global labels; codes unchanged);
+`duration` → "How long?" and `family_history` → "Family history of VV?" as Subj placement
+labels (`family_history` stays "Family Medical Hx" in Past Medical Hx — still one field).
+Visual groups: Reason for visit / Problem List; Chief Complaints; Aggravating / Relieving
+Factors; Previous conservative therapy; Family history; Habits; Medications / Allergies.
+Assessment Plan+ groups: Impression; Recommendations; Stockings.
+
+*Groups are presentation data:* `clinical_section_fields.group_label` (nullable, migration
+0007, additive), set by the seed from `groups` in `definitions.ts`; consecutive fields with
+the same group render as one `<fieldset>`/`<legend>` block.
+
+*Unchanged:* permissions (no new codes; "+ Add New" on ordered rows uses
+`clinical_option.add`), exclusion rule (Unknown ↔ Past Medical Hx), tables and triggers.
+
+*Not done here (out of R1b scope, noted for review):* the reviewed §6.1 also words "Affects
+daily living activities?", "Comment" and a second "How long?" (previous conservative therapy
+duration); only the six relabels requested for R1b were applied. Row
+re-ordering controls (move up/down) are not provided — rows are positional as typed.

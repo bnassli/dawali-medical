@@ -17,26 +17,26 @@ import {
   visitUrl,
 } from "./support";
 
-// Order from docs/CLINICAL_TABS.md, "Subj Complaints Habits".
+// Order from docs/CLINICAL_TABS.md, "Subj Complaints Habits" (labels reconciled in R1b, ADR-029).
 const SUBJ_COMPLAINTS_HABITS_ORDER = [
   "Reason for Visit",
   "Problem List",
   "Chief Complaints",
-  "Characteristics",
-  "Duration",
-  "Progression",
+  "Associated condition",
+  "How long?",
+  "Symptoms getting worse over time?",
   "Daily Activity Impact",
-  "Chest Comments",
+  "Additional Comments",
   "Comments",
   "Aggravating Factors",
   "Relieving Factors",
   "Previous Conservative Therapy",
   "Previous Conservative Therapy Duration",
-  "Family History",
+  "Family history of VV?",
   "Alcohol",
   "Exercise",
   "Tobacco",
-  "Pain Meds",
+  "Pain Meds for CC",
   "Current Meds",
   "Allergies",
 ];
@@ -64,7 +64,7 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await page.goto(visitUrl(visit));
 
     const duration = field(page, "duration");
-    await duration.getByLabel("New Duration option").fill(`Under a week ${s}`);
+    await duration.getByLabel("New How long? option").fill(`Under a week ${s}`);
     await duration.getByRole("button", { name: "+ Add New" }).click();
     await expect(statusOf(page, "duration")).toHaveText("Saved");
 
@@ -78,7 +78,7 @@ test.describe("Subj Complaints Habits (browser)", () => {
 
     await field(page, "comments").locator("textarea").fill(`note ${s}`);
     await expect(statusOf(page, "comments")).toHaveText("Saved");
-    await duration.getByLabel("Duration — visit-only free text").fill(`about 5 days ${s}`);
+    await duration.getByLabel("How long? — visit-only free text").fill(`about 5 days ${s}`);
     await expect(statusOf(page, "duration")).toHaveText("Saved");
 
     await page.reload();
@@ -87,7 +87,7 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await expect(duration.getByRole("combobox").locator("option:checked")).toHaveText(
       `Under a week ${s}`,
     );
-    await expect(duration.getByLabel("Duration — visit-only free text")).toHaveValue(
+    await expect(duration.getByLabel("How long? — visit-only free text")).toHaveValue(
       `about 5 days ${s}`,
     );
     await expect(aggravating.getByRole("checkbox", { name: `Standing ${s}` })).toBeChecked();
@@ -142,25 +142,25 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await expect(page.getByLabel("New Reason for Visit option")).toBeFocused();
 
     // Add two options with Enter in the new-option input.
-    const progression = field(page, "progression");
-    const newOption = page.getByLabel("New Progression option");
+    const progression = field(page, "daily_activity_impact");
+    const newOption = page.getByLabel("New Daily Activity Impact option");
     for (const label of [`Stable ${s}`, `Improving ${s}`]) {
       await newOption.focus();
       await page.keyboard.type(label);
       await page.keyboard.press("Enter");
       await expect(progression.getByRole("combobox").locator("option:checked")).toHaveText(label);
     }
-    await expect(statusOf(page, "progression")).toHaveText("Saved");
+    await expect(statusOf(page, "daily_activity_impact")).toHaveText("Saved");
 
     // Change the select with the arrow keys only.
     await progression.getByRole("combobox").focus();
     await page.keyboard.press("ArrowUp");
     await expect(progression.getByRole("combobox").locator("option:checked")).toHaveText(`Stable ${s}`);
-    await expect(statusOf(page, "progression")).toHaveText("Saved");
+    await expect(statusOf(page, "daily_activity_impact")).toHaveText("Saved");
 
     // Toggle a checkbox with Space.
     const family = field(page, "family_history");
-    await family.getByLabel("New Family History option").focus();
+    await family.getByLabel("New Family history of VV? option").focus();
     await page.keyboard.type(`Father ${s}`);
     await page.keyboard.press("Enter");
     const checkbox = family.getByRole("checkbox", { name: `Father ${s}` });
@@ -173,7 +173,7 @@ test.describe("Subj Complaints Habits (browser)", () => {
 
     await page.reload();
     await expect(
-      field(page, "progression").getByRole("combobox").locator("option:checked"),
+      field(page, "daily_activity_impact").getByRole("combobox").locator("option:checked"),
     ).toHaveText(`Stable ${s}`);
     await expect(
       field(page, "family_history").getByRole("checkbox", { name: `Father ${s}` }),

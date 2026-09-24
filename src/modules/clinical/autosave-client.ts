@@ -23,6 +23,17 @@ export interface EntryValue {
   freeText: string;
   /** Checkbox fields only (ADR-027). */
   checked?: boolean;
+  /** Ordered-list fields only (ADR-029): the visible rows, in order. */
+  rows?: OrderedRow[];
+  /** Ordered-list fields with a display mode only (ADR-029). */
+  display?: "bullets" | "numbers";
+  /** Number fields only (ADR-029). null = cleared. */
+  numberValue?: number | null;
+}
+
+export interface OrderedRow {
+  optionId: string | null;
+  freeText: string;
 }
 
 export interface OptionView {
@@ -105,12 +116,25 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
+function parseRows(v: unknown): OrderedRow[] | null {
+  if (!Array.isArray(v)) return null;
+  return v.flatMap((r) =>
+    isObject(r) && typeof r.freeText === "string" && (r.optionId === null || typeof r.optionId === "string")
+      ? [{ optionId: r.optionId, freeText: r.freeText }]
+      : [],
+  );
+}
+
 function parseValue(v: unknown): EntryValue | null {
   if (!isObject(v) || !Array.isArray(v.optionIds) || typeof v.freeText !== "string") return null;
+  const rows = parseRows(v.rows);
   return {
     optionIds: v.optionIds.filter((x): x is string => typeof x === "string"),
     freeText: v.freeText,
     ...(typeof v.checked === "boolean" ? { checked: v.checked } : {}),
+    ...(rows ? { rows } : {}),
+    ...(v.display === "numbers" || v.display === "bullets" ? { display: v.display } : {}),
+    ...(typeof v.numberValue === "number" ? { numberValue: v.numberValue } : {}),
   };
 }
 
@@ -411,8 +435,12 @@ export class FieldSaver {
             clientMutationId: m.id,
             optionIds: m.value.optionIds,
             freeText: m.value.freeText,
-            // undefined is dropped by JSON.stringify: only checkbox fields send it.
+            // undefined is dropped by JSON.stringify: each field type sends only
+            // its own part (checked / rows + display / numberValue).
             checked: m.value.checked,
+            rows: m.value.rows,
+            display: m.value.display,
+            numberValue: m.value.numberValue,
           }),
         },
       );

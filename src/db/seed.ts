@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/env";
 import { hashPassword } from "@/lib/password";
 import {
   assertDefinitionsConsistent,
+  assertFieldConfigConsistent,
   DEFAULT_CLINICAL_DEFINITIONS,
   optionListCodeFor,
   type ClinicalDefinitions,
@@ -109,7 +110,8 @@ export class StructuralDefinitionChangeError extends Error {
 /**
  * Idempotent, non-destructive seed of sections, GLOBAL fields, option lists
  * and section placements (ADR-026). Existing rows are only ever updated in
- * cosmetic ways (labels, names, placement order); structural differences abort
+ * cosmetic ways (labels, names, placement order, groups) or retired (one-way,
+ * ADR-029); structural differences abort
  * the seed before anything is changed. Nothing is deleted; option rows are
  * never touched.
  */
@@ -118,6 +120,7 @@ export async function seedClinicalDefinitions(
   definitions: ClinicalDefinitions = DEFAULT_CLINICAL_DEFINITIONS,
 ): Promise<void> {
   assertDefinitionsConsistent(definitions);
+  assertFieldConfigConsistent(definitions, { complete: false });
 
   await db.transaction(async (tx) => {
     // 1. Option lists (reusable: several fields may share one).
@@ -180,11 +183,14 @@ export async function seedClinicalDefinitions(
           fieldType: field.type,
           optionListId: listCode ? (listIdByCode.get(listCode) ?? null) : null,
           allowsFreeText: true,
+          isActive: !field.retired,
         })
         .onConflictDoUpdate({
           target: clinicalFieldDefinitions.code,
-          // Cosmetic only; structure was verified identical above.
-          set: { label: field.label },
+          // Cosmetic only; structure was verified identical above. Retirement is
+          // one-way (ADR-029): a retired field is deactivated, never reactivated,
+          // and its entries stay untouched (read-only history).
+          set: field.retired ? { label: field.label, isActive: false } : { label: field.label },
         })
         .returning();
       if (!row) throw new Error(`Failed to seed clinical field ${field.code}`);
@@ -207,6 +213,7 @@ export async function seedClinicalDefinitions(
         const fieldId = fieldIdByCode.get(code);
         if (!fieldId) throw new Error(`Unknown field ${code} in section ${section.code}`);
         const labelOverride = section.labelOverrides?.[code] ?? null;
+        const groupLabel = section.groups?.[code] ?? null;
         await tx
           .insert(clinicalSectionFields)
           .values({
@@ -214,10 +221,11 @@ export async function seedClinicalDefinitions(
             fieldDefinitionId: fieldId,
             sortOrder: index + 1,
             labelOverride,
+            groupLabel,
           })
           .onConflictDoUpdate({
             target: [clinicalSectionFields.sectionId, clinicalSectionFields.fieldDefinitionId],
-            set: { sortOrder: index + 1, labelOverride },
+            set: { sortOrder: index + 1, labelOverride, groupLabel },
           });
       }
     }

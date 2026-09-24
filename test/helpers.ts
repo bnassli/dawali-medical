@@ -22,6 +22,9 @@ export async function saveCurrent(
     optionIds: string[];
     freeText: string;
     checked?: boolean;
+    rows?: readonly { readonly optionId: string | null; readonly freeText: string }[];
+    display?: "bullets" | "numbers";
+    numberValue?: number | null;
   },
 ): Promise<SaveClinicalEntryResult> {
   const [latest] = await db
@@ -37,6 +40,7 @@ export async function saveCurrent(
     .limit(1);
   return saveClinicalEntry(db, actor, {
     ...input,
+    rows: input.rows ? input.rows.map((r) => ({ ...r })) : undefined,
     expectedVersion: latest?.version ?? 0,
     clientMutationId: randomUUID(),
   });

@@ -5,12 +5,24 @@ export const FIELD_TYPES = {
   TEXTAREA: "textarea",
   /** Boolean flag stored as `checked` in the entry value (ADR-027). */
   CHECKBOX: "checkbox",
+  /**
+   * Visible ordered rows, each a reusable option and/or free text, stored as
+   * `rows` in the entry value (ADR-029). Uses an option list like a select.
+   */
+  ORDERED_LIST: "ordered_list",
+  /** A structured numeric value (e.g. centimetres), stored as `numberValue` (ADR-029). */
+  NUMBER: "number",
 } as const;
 
 export type FieldType = (typeof FIELD_TYPES)[keyof typeof FIELD_TYPES];
 
 export function isSelectType(type: string): boolean {
   return type === FIELD_TYPES.SELECT || type === FIELD_TYPES.MULTISELECT;
+}
+
+/** Field types that draw on an option list (and so support "+ Add New"). */
+export function hasOptionList(type: string): boolean {
+  return isSelectType(type) || type === FIELD_TYPES.ORDERED_LIST;
 }
 
 /**
@@ -23,6 +35,12 @@ export interface FieldDefinitionSeed {
   label: string;
   type: FieldType;
   optionList?: string;
+  /**
+   * Retired (ADR-026/029): kept, never deleted, so existing history stays
+   * readable on the visits that have it; hidden elsewhere and not editable.
+   * One-way: the seed sets is_active = false and never reactivates.
+   */
+  retired?: boolean;
 }
 
 /** Placement of global fields in a section (tab), in display order. */
@@ -37,6 +55,12 @@ export interface SectionDefinitionSeed {
    * for the shared `family_history`). Never creates a second field (ADR-027).
    */
   labelOverrides?: Record<string, string>;
+  /**
+   * Presentation-only visual group of a placement (field code -> group
+   * heading), stored as clinical_section_fields.group_label (ADR-029).
+   * Consecutive fields with the same group are rendered in one block.
+   */
+  groups?: Record<string, string>;
 }
 
 export interface ClinicalDefinitions {
@@ -45,7 +69,7 @@ export interface ClinicalDefinitions {
 }
 
 export function optionListCodeFor(field: FieldDefinitionSeed): string | null {
-  return isSelectType(field.type) ? (field.optionList ?? field.code) : null;
+  return hasOptionList(field.type) ? (field.optionList ?? field.code) : null;
 }
 
 /**
@@ -58,7 +82,7 @@ export function assertDefinitionsConsistent(defs: ClinicalDefinitions): void {
   for (const f of defs.fields) {
     if (fieldCodes.has(f.code)) throw new Error(`Duplicate global field code "${f.code}".`);
     fieldCodes.add(f.code);
-    if (!isSelectType(f.type) && f.optionList) {
+    if (!hasOptionList(f.type) && f.optionList) {
       throw new Error(`Field "${f.code}" is a ${f.type} field and cannot have an option list.`);
     }
   }
@@ -79,6 +103,12 @@ export function assertDefinitionsConsistent(defs: ClinicalDefinitions): void {
         throw new Error(`Section "${s.code}" relabels field "${code}", which it does not place.`);
       }
       if (label.trim() === "") throw new Error(`Section "${s.code}" gives "${code}" an empty label.`);
+    }
+    for (const [code, group] of Object.entries(s.groups ?? {})) {
+      if (!placed.has(code)) {
+        throw new Error(`Section "${s.code}" groups field "${code}", which it does not place.`);
+      }
+      if (group.trim() === "") throw new Error(`Section "${s.code}" gives "${code}" an empty group.`);
     }
   }
 }
@@ -121,27 +151,36 @@ export function assertExclusionRulesConsistent(
  * order). No clinical option VALUES are defined here — dropdown options are
  * data (CLAUDE.md rule #10), created through "+ Add New".
  *
- * Section and field order follow docs/CLINICAL_TABS.md. Field types are a best
- * guess (no SonoSoft reference screens in the repo). Field CODES are durable
- * (reports and later tabs bind to them; see ADR-027 and PROMPT_SPRINT_3A.md).
- * Because clinical entries may already exist, the seed NEVER changes an
- * existing field's type, option list or free-text flag: such a change needs a
- * migration (ADR-026). Labels and placement order may be updated here.
+ * Section and field order follow docs/CLINICAL_TABS.md and, since R1b,
+ * docs/FINAL_V1_REQUIREMENTS_RECONCILIATION.md §6.1–6.3 (ADR-029). Field CODES
+ * are durable (reports and later tabs bind to them): a code is never renamed or
+ * re-typed; it is retired (`retired: true`) and replaced by a new code, and its
+ * history stays readable on the visits that have it. Because clinical entries
+ * may already exist, the seed NEVER changes an existing field's type, option
+ * list or free-text flag (ADR-026). Labels, groups and placement order may be
+ * updated here.
  */
 export const SUBJ_COMPLAINTS_HABITS_SECTION_CODE = "subj_complaints_habits";
 export const PAST_MEDICAL_HX_SECTION_CODE = "past_medical_hx";
 export const ASSESSMENT_PLAN_SECTION_CODE = "assessment_plan";
 
 export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
-  // --- Subj Complaints Habits (Sprint 2) ---
+  // --- Subj Complaints Habits (Sprint 2; labels/checkbox reconciled in R1b) ---
   { code: "reason_for_visit", label: "Reason for Visit", type: FIELD_TYPES.SELECT },
   { code: "problem_list", label: "Problem List", type: FIELD_TYPES.MULTISELECT },
   { code: "chief_complaints", label: "Chief Complaints", type: FIELD_TYPES.MULTISELECT },
-  { code: "characteristics", label: "Characteristics", type: FIELD_TYPES.MULTISELECT },
+  { code: "characteristics", label: "Associated condition", type: FIELD_TYPES.MULTISELECT },
   { code: "duration", label: "Duration", type: FIELD_TYPES.SELECT },
-  { code: "progression", label: "Progression", type: FIELD_TYPES.SELECT },
+  // Retired in R1b: the SonoSoft screen has a checkbox here (symptoms_worse_over_time).
+  { code: "progression", label: "Progression", type: FIELD_TYPES.SELECT, retired: true },
+  {
+    code: "symptoms_worse_over_time",
+    label: "Symptoms getting worse over time?",
+    type: FIELD_TYPES.CHECKBOX,
+  },
   { code: "daily_activity_impact", label: "Daily Activity Impact", type: FIELD_TYPES.SELECT },
-  { code: "chest_comments", label: "Chest Comments", type: FIELD_TYPES.TEXTAREA },
+  // Code kept from Sprint 2 (codes are durable); the SonoSoft label is "Additional Comments".
+  { code: "chest_comments", label: "Additional Comments", type: FIELD_TYPES.TEXTAREA },
   { code: "comments", label: "Comments", type: FIELD_TYPES.TEXTAREA },
   { code: "aggravating_factors", label: "Aggravating Factors", type: FIELD_TYPES.MULTISELECT },
   { code: "relieving_factors", label: "Relieving Factors", type: FIELD_TYPES.MULTISELECT },
@@ -159,12 +198,12 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
   { code: "alcohol", label: "Alcohol", type: FIELD_TYPES.SELECT },
   { code: "exercise", label: "Exercise", type: FIELD_TYPES.SELECT },
   { code: "tobacco", label: "Tobacco", type: FIELD_TYPES.SELECT },
-  { code: "pain_meds", label: "Pain Meds", type: FIELD_TYPES.MULTISELECT },
+  { code: "pain_meds", label: "Pain Meds for CC", type: FIELD_TYPES.MULTISELECT },
   { code: "current_meds", label: "Current Meds", type: FIELD_TYPES.MULTISELECT },
   { code: "allergies", label: "Allergies", type: FIELD_TYPES.MULTISELECT },
 
-  // --- Past Medical Hx (Sprint 3A). "Family Medical Hx" is NOT defined here: it
-  // is the existing global `family_history`, placed in this tab (one source). ---
+  // --- Past Medical Hx (Sprint 3A; female-specific statement added in R1b). "Family
+  // Medical Hx" is NOT defined here: it is the existing global `family_history`. ---
   { code: "past_medical_history", label: "Past Medical Hx", type: FIELD_TYPES.MULTISELECT },
   { code: "past_medical_unknown", label: "Unknown", type: FIELD_TYPES.CHECKBOX },
   { code: "prior_test_results", label: "Prior Test Results", type: FIELD_TYPES.TEXTAREA },
@@ -174,15 +213,55 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
     type: FIELD_TYPES.TEXTAREA,
   },
   { code: "surgical_history", label: "Surgical Hx", type: FIELD_TYPES.MULTISELECT },
+  {
+    code: "female_specific_statement",
+    label: "If FEMALE select the appropriate statement; otherwise disregard",
+    type: FIELD_TYPES.SELECT,
+  },
 
-  // --- Assessment Plan+ (Sprint 3A) ---
-  { code: "impression", label: "Impression", type: FIELD_TYPES.MULTISELECT },
-  { code: "recommendations", label: "Recommendations", type: FIELD_TYPES.MULTISELECT },
+  // --- Assessment Plan+ (Sprint 3A; reconciled in R1b) ---
+  // Retired in R1b (replaced by ordered rows / structured measurements; ADR-029).
+  { code: "impression", label: "Impression", type: FIELD_TYPES.MULTISELECT, retired: true },
+  {
+    code: "recommendations",
+    label: "Recommendations",
+    type: FIELD_TYPES.MULTISELECT,
+    retired: true,
+  },
+  {
+    code: "stockings_measurements",
+    label: "Stockings Measurements",
+    type: FIELD_TYPES.TEXTAREA,
+    retired: true,
+  },
+  // The ordered rows REUSE the retired fields' option lists, so every option already
+  // added under Impression / Recommendations stays available.
+  {
+    code: "impression_rows",
+    label: "Impression",
+    type: FIELD_TYPES.ORDERED_LIST,
+    optionList: "impression",
+  },
+  {
+    code: "impression_init_venous_interp",
+    label: "Impr for Init Venous Interp",
+    type: FIELD_TYPES.SELECT,
+  },
+  {
+    code: "recommendation_rows",
+    label: "Recommendations",
+    type: FIELD_TYPES.ORDERED_LIST,
+    optionList: "recommendations",
+  },
   { code: "stockings_type", label: "Stockings Type", type: FIELD_TYPES.SELECT },
   { code: "stockings_compression", label: "Stockings Compression", type: FIELD_TYPES.SELECT },
   { code: "stockings_gender", label: "Stockings Gender", type: FIELD_TYPES.SELECT },
   { code: "stockings_color", label: "Stockings Color", type: FIELD_TYPES.SELECT },
-  { code: "stockings_measurements", label: "Stockings Measurements", type: FIELD_TYPES.TEXTAREA },
+  { code: "stockings_mid_thigh", label: "Mid Thigh", type: FIELD_TYPES.NUMBER },
+  { code: "stockings_mid_calf", label: "Mid Calf", type: FIELD_TYPES.NUMBER },
+  { code: "stockings_mid_ankle", label: "Mid Ankle", type: FIELD_TYPES.NUMBER },
+  { code: "stockings_floor_to_gf", label: "Floor to GF", type: FIELD_TYPES.NUMBER },
+  { code: "stockings_floor_to_knee", label: "Floor to Knee", type: FIELD_TYPES.NUMBER },
   {
     code: "assessment_additional_comments",
     label: "Additional Comments",
@@ -193,7 +272,8 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
 /**
  * EXPLICIT placement per section. Never derive a section's fields from the
  * whole field list: the seed never removes placements, so a field placed by
- * mistake would stay in that tab in every database it reached.
+ * mistake would stay in that tab in every database it reached. Retired fields
+ * stay placed where they were, so their history renders in its old position.
  */
 export const SUBJ_COMPLAINTS_HABITS_FIELD_CODES = [
   "reason_for_visit",
@@ -202,6 +282,7 @@ export const SUBJ_COMPLAINTS_HABITS_FIELD_CODES = [
   "characteristics",
   "duration",
   "progression",
+  "symptoms_worse_over_time",
   "daily_activity_impact",
   "chest_comments",
   "comments",
@@ -218,7 +299,30 @@ export const SUBJ_COMPLAINTS_HABITS_FIELD_CODES = [
   "allergies",
 ];
 
-/** docs/CLINICAL_TABS.md order; the female-specific field is deferred (ADR-027). */
+/** Visual blocks of Subj Complaints Habits (FINAL_V1 §6.1: never one flat list). */
+const SUBJ_GROUPS: Record<string, string[]> = {
+  "Reason for visit / Problem List": ["reason_for_visit", "problem_list"],
+  "Chief Complaints": [
+    "chief_complaints",
+    "characteristics",
+    "duration",
+    "progression",
+    "symptoms_worse_over_time",
+    "daily_activity_impact",
+    "chest_comments",
+    "comments",
+  ],
+  "Aggravating / Relieving Factors": ["aggravating_factors", "relieving_factors"],
+  "Previous conservative therapy": [
+    "previous_conservative_therapy",
+    "previous_conservative_therapy_duration",
+  ],
+  "Family history": ["family_history"],
+  Habits: ["alcohol", "exercise", "tobacco"],
+  "Medications / Allergies": ["pain_meds", "current_meds", "allergies"],
+};
+
+/** FINAL_V1 §6.2 order; the female-specific statement is 7th. */
 export const PAST_MEDICAL_HX_FIELD_CODES = [
   "past_medical_history",
   "family_history",
@@ -226,19 +330,54 @@ export const PAST_MEDICAL_HX_FIELD_CODES = [
   "prior_test_results",
   "past_medical_additional_comments",
   "surgical_history",
+  "female_specific_statement",
 ];
 
-/** Impression -> Recommendations -> Stockings detail -> Additional Comments. */
+/** Impression -> Recommendations -> Stockings detail -> Additional Comments (FINAL_V1 §6.3). */
 export const ASSESSMENT_PLAN_FIELD_CODES = [
   "impression",
+  "impression_rows",
+  "impression_init_venous_interp",
   "recommendations",
+  "recommendation_rows",
   "stockings_type",
   "stockings_compression",
   "stockings_gender",
   "stockings_color",
+  "stockings_mid_thigh",
+  "stockings_mid_calf",
+  "stockings_mid_ankle",
+  "stockings_floor_to_gf",
+  "stockings_floor_to_knee",
   "stockings_measurements",
   "assessment_additional_comments",
 ];
+
+const ASSESSMENT_GROUPS: Record<string, string[]> = {
+  Impression: ["impression", "impression_rows", "impression_init_venous_interp"],
+  Recommendations: ["recommendations", "recommendation_rows"],
+  Stockings: [
+    "stockings_type",
+    "stockings_compression",
+    "stockings_gender",
+    "stockings_color",
+    "stockings_mid_thigh",
+    "stockings_mid_calf",
+    "stockings_mid_ankle",
+    "stockings_floor_to_gf",
+    "stockings_floor_to_knee",
+    "stockings_measurements",
+  ],
+};
+
+/** { group: [codes] } -> { code: group } */
+function groupsByField(groups: Record<string, string[]>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [group, codes] of Object.entries(groups)) {
+    for (const code of codes) result[code] = group;
+  }
+  return result;
+}
 
 export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
   {
@@ -246,6 +385,8 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     name: "Subj Complaints Habits",
     sortOrder: 1,
     fieldCodes: SUBJ_COMPLAINTS_HABITS_FIELD_CODES,
+    labelOverrides: { duration: "How long?", family_history: "Family history of VV?" },
+    groups: groupsByField(SUBJ_GROUPS),
   },
   {
     code: PAST_MEDICAL_HX_SECTION_CODE,
@@ -259,6 +400,7 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     name: "Assessment Plan+",
     sortOrder: 3,
     fieldCodes: ASSESSMENT_PLAN_FIELD_CODES,
+    groups: groupsByField(ASSESSMENT_GROUPS),
   },
 ];
 
@@ -267,6 +409,114 @@ export const FIELD_EXCLUSION_RULES: ExclusionRule[] = [
   { flag: "past_medical_unknown", excludes: ["past_medical_history"] },
 ];
 
+// --- Per-field behaviour (code-level, like the exclusion rules; ADR-029) ---
+
+/** Hard upper bound on rows of any ordered-list field (also bounds the request body). */
+export const MAX_ORDERED_ROWS = 20;
+
+/** Max characters of the free text of ONE ordered-list row. */
+export const MAX_ROW_TEXT_LENGTH = 1000;
+
+export interface OrderedListConfig {
+  /** Number of visible rows (the maximum a value may hold). */
+  rows: number;
+  /** Whether the value carries a Bullets / Numbers display mode. */
+  displayMode: boolean;
+}
+
+export const ORDERED_LIST_CONFIG: Record<string, OrderedListConfig> = {
+  impression_rows: { rows: 8, displayMode: true },
+  recommendation_rows: { rows: 8, displayMode: false },
+};
+
+export interface NumberFieldConfig {
+  unit: string;
+  min: number;
+  max: number;
+  /** Maximum decimal places accepted. */
+  decimals: number;
+}
+
+const STOCKING_CM: NumberFieldConfig = { unit: "cm", min: 0, max: 300, decimals: 1 };
+
+export const NUMBER_FIELD_CONFIG: Record<string, NumberFieldConfig> = {
+  stockings_mid_thigh: STOCKING_CM,
+  stockings_mid_calf: STOCKING_CM,
+  stockings_mid_ankle: STOCKING_CM,
+  stockings_floor_to_gf: STOCKING_CM,
+  stockings_floor_to_knee: STOCKING_CM,
+};
+
+/**
+ * A field that only applies to some patients (ADR-029). While the patient does
+ * not match, the field is hidden when empty (shown read-only when it already
+ * holds a value, so history never disappears) and the server refuses any new
+ * non-empty value. Clearing is always allowed.
+ */
+export interface PatientConditionRule {
+  field: string;
+  /** Required patients.sex code. */
+  patientSex: "F" | "M";
+  /** Shown when an existing value is kept read-only because the patient no longer matches. */
+  readOnlyReason: string;
+}
+
+export const PATIENT_CONDITION_RULES: PatientConditionRule[] = [
+  {
+    field: "female_specific_statement",
+    patientSex: "F",
+    readOnlyReason:
+      "Recorded while the patient's sex was Female; read-only because the patient is not currently recorded as Female.",
+  },
+];
+
+/**
+ * Throws if a per-field config is inconsistent with the definitions: every
+ * ordered-list / number field needs its config, and a config must name a field
+ * of the right type. `complete` (the default set) also requires every config
+ * and condition to name a defined field; partial sets (e.g. in tests) skip that.
+ */
+export function assertFieldConfigConsistent(
+  defs: ClinicalDefinitions,
+  options: { complete?: boolean } = {},
+): void {
+  const complete = options.complete ?? true;
+  const byCode = new Map(defs.fields.map((f) => [f.code, f]));
+  const check = (code: string, type: FieldType, what: string) => {
+    const f = byCode.get(code);
+    if (!f) {
+      if (complete) throw new Error(`${what} names unknown field "${code}".`);
+      return;
+    }
+    if (f.type !== type) throw new Error(`${what} field "${code}" must be of type ${type}.`);
+  };
+  for (const [code, cfg] of Object.entries(ORDERED_LIST_CONFIG)) {
+    check(code, FIELD_TYPES.ORDERED_LIST, "Ordered-list config");
+    if (!Number.isInteger(cfg.rows) || cfg.rows < 1 || cfg.rows > MAX_ORDERED_ROWS) {
+      throw new Error(`Ordered-list field "${code}" must have 1..${MAX_ORDERED_ROWS} rows.`);
+    }
+  }
+  for (const [code, cfg] of Object.entries(NUMBER_FIELD_CONFIG)) {
+    check(code, FIELD_TYPES.NUMBER, "Number config");
+    if (!(cfg.min < cfg.max) || !Number.isInteger(cfg.decimals) || cfg.decimals < 0) {
+      throw new Error(`Number field "${code}" has invalid bounds.`);
+    }
+  }
+  for (const f of defs.fields) {
+    if (f.type === FIELD_TYPES.ORDERED_LIST && !ORDERED_LIST_CONFIG[f.code]) {
+      throw new Error(`Ordered-list field "${f.code}" has no ORDERED_LIST_CONFIG entry.`);
+    }
+    if (f.type === FIELD_TYPES.NUMBER && !NUMBER_FIELD_CONFIG[f.code]) {
+      throw new Error(`Number field "${f.code}" has no NUMBER_FIELD_CONFIG entry.`);
+    }
+  }
+  for (const rule of PATIENT_CONDITION_RULES) {
+    if (complete && !byCode.has(rule.field)) {
+      throw new Error(`Patient condition names unknown field "${rule.field}".`);
+    }
+  }
+}
+
 export const DEFAULT_CLINICAL_DEFINITIONS: ClinicalDefinitions = {
   fields: CLINICAL_FIELD_DEFINITIONS,
   sections: CLINICAL_SECTIONS,
@@ -274,3 +524,4 @@ export const DEFAULT_CLINICAL_DEFINITIONS: ClinicalDefinitions = {
 
 assertDefinitionsConsistent(DEFAULT_CLINICAL_DEFINITIONS);
 assertExclusionRulesConsistent(DEFAULT_CLINICAL_DEFINITIONS, FIELD_EXCLUSION_RULES);
+assertFieldConfigConsistent(DEFAULT_CLINICAL_DEFINITIONS);

@@ -26,6 +26,24 @@ export interface ClinicalEntryValue {
    * their rows, never present on any other field's rows. Absent = unchecked.
    */
   checked?: boolean;
+  /**
+   * Only for `ordered_list` fields (ADR-029): the visible rows in order, each an
+   * option of the field's list and/or free text. Trailing empty rows are not
+   * stored; absent = no rows. `optionIds`/`freeText` are always empty on them.
+   */
+  rows?: ClinicalOrderedRow[];
+  /**
+   * Only for `ordered_list` fields with a display mode (Impression, ADR-029).
+   * Stored only when "numbers"; absent = "bullets" (the default).
+   */
+  display?: "numbers";
+  /** Only for `number` fields (ADR-029): the value in the field's unit. Absent = empty. */
+  numberValue?: number;
+}
+
+export interface ClinicalOrderedRow {
+  optionId: string | null;
+  freeText: string;
 }
 
 export const clinicalSections = pgTable("clinical_sections", {
@@ -86,7 +104,7 @@ export const clinicalFieldDefinitions = pgTable("clinical_field_definitions", {
   id: uuid("id").primaryKey().defaultRandom(),
   code: text("code").notNull().unique(),
   label: text("label").notNull(),
-  // 'select' | 'multiselect' | 'text' | 'textarea'
+  // 'select' | 'multiselect' | 'text' | 'textarea' | 'checkbox' | 'ordered_list' | 'number'
   fieldType: text("field_type").notNull(),
   optionListId: uuid("option_list_id").references(
     () => clinicalOptionLists.id,
@@ -114,6 +132,9 @@ export const clinicalSectionFields = pgTable(
     // Presentation only: the tab's own label for this field (ADR-027), e.g.
     // "Family Medical Hx" for the shared family_history. NULL = the field's label.
     labelOverride: text("label_override"),
+    // Presentation only: visual group heading of this placement (ADR-029), e.g.
+    // "Habits". Consecutive fields with the same group render as one block.
+    groupLabel: text("group_label"),
   },
   (table) => [
     primaryKey({ columns: [table.sectionId, table.fieldDefinitionId] }),

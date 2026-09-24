@@ -454,3 +454,52 @@ output.derived {
   align-items: center;
   margin-bottom: 0.75rem;
 }
+
+/* --- R1b: clinical groups, ordered rows, numeric fields (ADR-029) --- */
+
+.clinical-group {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem 0.25rem;
+  margin: 0 0 1rem;
+}
+
+.clinical-group > legend {
+  font-weight: 700;
+  padding: 0 0.35rem;
+}
+
+.ordered-rows {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.ordered-row {
+  display: grid;
+  grid-template-columns: 1.75rem minmax(8rem, 1fr) minmax(8rem, 2fr);
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.row-marker {
+  text-align: right;
+  font-weight: 600;
+}
+
+.display-mode {
+  display: flex;
+  gap: 1rem;
+}
+
+.number-field input {
+  max-width: 8rem;
+  flex: 0 1 8rem;
+}
+
+.number-field .unit {
+  opacity: 0.8;
+}
