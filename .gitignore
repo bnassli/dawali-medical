@@ -12,6 +12,7 @@ dist/
 coverage/
 *.tsbuildinfo
 next-env.d.ts
+.swc/
 
 # Secrets / environment
 .env
@@ -36,6 +37,7 @@ pnpm-debug.log*
 
 # Database dumps and backups
 *.sql
+!drizzle/**/*.sql
 *.dump
 *.bak
 *.backup
@@ -45,6 +47,12 @@ pnpm-debug.log*
 backups/
 db-backups/
 pgdata/
+
+# Embedded PostgreSQL (used by tests / db:validate) data + downloaded binaries
+.embedded-postgres/
+.embedded-pg-data/
+embedded-postgres-data/
+*.embedded-postgres.tmp/
 
 # Patient data, medical files, reports, scans, images
 patient-files/
