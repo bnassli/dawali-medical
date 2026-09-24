@@ -115,7 +115,20 @@ test.describe("R1b clinical reconciliation", () => {
       "Habits",
       "Medications / Allergies",
     ]);
-    const habits = page.locator(".clinical-group", { has: page.locator("legend", { hasText: "Habits" }) });
+    const group = (name: string) =>
+      page.locator(".clinical-group", { has: page.locator("legend", { hasText: name }) });
+    const labelsIn = (name: string) => group(name).locator(".clinical-field .field-head label");
+    await expect(labelsIn("Chief Complaints")).toContainText([
+      "How long?",
+      "Affects daily living activities?",
+      "Additional Comments",
+      "Comment",
+    ]);
+    await expect(labelsIn("Previous conservative therapy")).toHaveText([
+      "Previous Conservative Therapy",
+      "How long?",
+    ]);
+    const habits = group("Habits");
     await expect(habits.locator("[data-field]")).toHaveCount(3);
 
     const worse = field(page, "symptoms_worse_over_time");

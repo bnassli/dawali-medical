@@ -381,7 +381,7 @@ describe("clinical definitions: global fields, section placement, reusable lists
         .select()
         .from(clinicalFieldDefinitions)
         .where(eq(clinicalFieldDefinitions.code, "comments"));
-      expect(restored?.label).toBe("Comments");
+      expect(restored?.label).toBe(original?.label);
     });
 
     it("refuses a section that places an unknown field, before touching the database", async () => {

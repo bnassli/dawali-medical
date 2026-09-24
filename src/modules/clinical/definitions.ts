@@ -178,10 +178,15 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
     label: "Symptoms getting worse over time?",
     type: FIELD_TYPES.CHECKBOX,
   },
-  { code: "daily_activity_impact", label: "Daily Activity Impact", type: FIELD_TYPES.SELECT },
+  {
+    code: "daily_activity_impact",
+    label: "Affects daily living activities?",
+    type: FIELD_TYPES.SELECT,
+  },
   // Code kept from Sprint 2 (codes are durable); the SonoSoft label is "Additional Comments".
   { code: "chest_comments", label: "Additional Comments", type: FIELD_TYPES.TEXTAREA },
-  { code: "comments", label: "Comments", type: FIELD_TYPES.TEXTAREA },
+  // SonoSoft "Comment": a separate field from "Additional Comments" (chest_comments).
+  { code: "comments", label: "Comment", type: FIELD_TYPES.TEXTAREA },
   { code: "aggravating_factors", label: "Aggravating Factors", type: FIELD_TYPES.MULTISELECT },
   { code: "relieving_factors", label: "Relieving Factors", type: FIELD_TYPES.MULTISELECT },
   {
@@ -385,7 +390,12 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     name: "Subj Complaints Habits",
     sortOrder: 1,
     fieldCodes: SUBJ_COMPLAINTS_HABITS_FIELD_CODES,
-    labelOverrides: { duration: "How long?", family_history: "Family history of VV?" },
+    // Two SonoSoft "How long?" fields: the complaint's and the previous therapy's.
+    labelOverrides: {
+      duration: "How long?",
+      previous_conservative_therapy_duration: "How long?",
+      family_history: "Family history of VV?",
+    },
     groups: groupsByField(SUBJ_GROUPS),
   },
   {

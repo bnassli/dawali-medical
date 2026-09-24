@@ -553,8 +553,12 @@ one). The client treats it like `exclusive_value`: "Not saved", text kept.
 
 *Subj Complaints Habits:* labels `characteristics` → "Associated condition", `chest_comments`
 → "Additional Comments", `pain_meds` → "Pain Meds for CC" (global labels; codes unchanged);
-`duration` → "How long?" and `family_history` → "Family history of VV?" as Subj placement
-labels (`family_history` stays "Family Medical Hx" in Past Medical Hx — still one field).
+`daily_activity_impact` → "Affects daily living activities?", `comments` → "Comment" (a
+separate field from "Additional Comments"); `duration` and
+`previous_conservative_therapy_duration` → "How long?" (both SonoSoft "How long?" fields) and
+`family_history` → "Family history of VV?" as Subj placement labels (`family_history` stays
+"Family Medical Hx" in Past Medical Hx — still one field). Every one of these concepts already
+existed as a field, so they are relabels only: same code, same history, no new field.
 Visual groups: Reason for visit / Problem List; Chief Complaints; Aggravating / Relieving
 Factors; Previous conservative therapy; Family history; Habits; Medications / Allergies.
 Assessment Plan+ groups: Impression; Recommendations; Stockings.
@@ -566,7 +570,5 @@ the same group render as one `<fieldset>`/`<legend>` block.
 *Unchanged:* permissions (no new codes; "+ Add New" on ordered rows uses
 `clinical_option.add`), exclusion rule (Unknown ↔ Past Medical Hx), tables and triggers.
 
-*Not done here (out of R1b scope, noted for review):* the reviewed §6.1 also words "Affects
-daily living activities?", "Comment" and a second "How long?" (previous conservative therapy
-duration); only the six relabels requested for R1b were applied. Row
-re-ordering controls (move up/down) are not provided — rows are positional as typed.
+*Not done here (accepted for V1):* row re-ordering controls (move up/down) — rows are
+positional as typed.

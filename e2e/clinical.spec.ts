@@ -25,13 +25,13 @@ const SUBJ_COMPLAINTS_HABITS_ORDER = [
   "Associated condition",
   "How long?",
   "Symptoms getting worse over time?",
-  "Daily Activity Impact",
+  "Affects daily living activities?",
   "Additional Comments",
-  "Comments",
+  "Comment",
   "Aggravating Factors",
   "Relieving Factors",
   "Previous Conservative Therapy",
-  "Previous Conservative Therapy Duration",
+  "How long?",
   "Family history of VV?",
   "Alcohol",
   "Exercise",
@@ -143,7 +143,7 @@ test.describe("Subj Complaints Habits (browser)", () => {
 
     // Add two options with Enter in the new-option input.
     const progression = field(page, "daily_activity_impact");
-    const newOption = page.getByLabel("New Daily Activity Impact option");
+    const newOption = page.getByLabel("New Affects daily living activities? option");
     for (const label of [`Stable ${s}`, `Improving ${s}`]) {
       await newOption.focus();
       await page.keyboard.type(label);

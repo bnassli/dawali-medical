@@ -476,6 +476,15 @@ describe("R1b clinical reconciliation (ADR-029)", () => {
       expect(by("chest_comments")?.label).toBe("Additional Comments");
       expect(by("family_history")?.label).toBe("Family history of VV?");
       expect(by("pain_meds")?.label).toBe("Pain Meds for CC");
+      // The remaining §6.1 wording reuses the EXISTING fields (same concept, same history).
+      expect(by("daily_activity_impact")?.label).toBe("Affects daily living activities?");
+      expect(by("comments")?.label).toBe("Comment");
+      expect(by("comments")?.id).not.toBe(by("chest_comments")?.id);
+      expect(by("previous_conservative_therapy_duration")).toMatchObject({
+        label: "How long?",
+        groupLabel: "Previous conservative therapy",
+      });
+      expect(by("duration")?.groupLabel).toBe("Chief Complaints");
       expect(by("symptoms_worse_over_time")).toMatchObject({
         fieldType: "checkbox",
         label: "Symptoms getting worse over time?",

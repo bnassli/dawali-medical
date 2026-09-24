@@ -48,7 +48,7 @@ test.describe("no silent loss on in-app navigation or Logout", () => {
     await back.click();
     const dialog = discardDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("Comments");
+    await expect(dialog).toContainText("Comment");
     await expect(dialog).toContainText("Session expired");
     await expect(page).toHaveURL(visitUrl(visit));
 
