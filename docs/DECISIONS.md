@@ -81,3 +81,46 @@ user. See README.md "Known limitations" for details and workarounds.
 Sprint 1 local validation (`npm test`, `npm run db:validate`) was run
 against an in-memory PGlite server via `TEST_DATABASE_URL` for this reason;
 the CI job against a real `postgres:16` container is the authoritative gate.
+
+## Sprint 2 clinical-entry decisions
+
+ADR-018: Clinical entries are append-only version rows. `clinical_entries`
+holds one row per (visit, field, version); every change inserts version + 1
+and the current value is the highest version. A `BEFORE UPDATE OR DELETE`
+trigger (`drizzle/0003_clinical_entries_append_only.sql`) enforces this in
+the database, like `audit_logs` (ADR-013). Saves are serialised per visit by
+a `SELECT ... FOR UPDATE` on the visit row, which also makes the "visit must
+be open" check race-free. A save whose normalised value equals the current
+value writes nothing (no version, no audit row), so auto-save retries do not
+bloat history. Every insert writes `clinical_entry.create` (v1) or
+`clinical_entry.update` (v2+) with before/after in the same transaction.
+Rollback: drop the trigger/function only; never delete rows. Dropping the
+`clinical_*` tables (0002) is destructive and only acceptable on a database
+with no clinical data or after a verified backup.
+
+ADR-019: Option lists are data. `clinical_option_lists` / `clinical_options`
+hold dropdown values; the seed creates sections, field definitions (order and
+type from `src/modules/clinical/definitions.ts`, following
+`docs/CLINICAL_TABS.md`) and EMPTY option lists — no clinical option values
+are hard-coded (CLAUDE.md rule #10). "+ Add New" inserts a permanent option
+(`clinical_option.create`, requires `clinical_option.add`). Visit-only free
+text is stored inside the entry value (`{ optionIds, freeText }`) and never
+enters an option list. Options are never renamed or deleted: an administrator
+can retire/reactivate them (`clinical_option.update`); a retired option stays
+visible on entries that already selected it but cannot be newly selected.
+Duplicate labels within a list are rejected case-insensitively (retired ones
+included).
+
+ADR-020: Clinical permissions: `clinical.read`, `clinical.write`,
+`clinical_option.add`, `clinical_option.manage`. Doctor: read/write/add.
+Nurse/Assistant: read/write (visit-only free text, no permanent options).
+Admin: read/add/manage but deliberately NOT write — an admin who edits
+clinical data must also hold the Doctor role. Reception and Inventory have
+no clinical access.
+
+ADR-021: Auto-save is client-side, per field: edits are debounced (typing
+~700 ms, choices ~150 ms), flushed on blur/unmount, and sent through a server
+action that re-validates the input and re-checks permissions. At most one
+save per field is in flight; the newest pending value wins. Clinical writes
+are rejected unless `visits.status = 'open'` (no close/finalize action exists
+yet; it arrives with a later sprint).

@@ -10,6 +10,7 @@ export default async function AppLayout({
 }) {
   const actor = await requireActor();
   const canSeeAdmin = actor.permissions.has(PERMISSIONS.USER_READ);
+  const canManageOptions = actor.permissions.has(PERMISSIONS.CLINICAL_OPTION_MANAGE);
 
   return (
     <>
@@ -17,6 +18,7 @@ export default async function AppLayout({
         <div className="links">
           <Link href="/patients">Patients</Link>
           {canSeeAdmin ? <Link href="/admin/users">Admin: Users</Link> : null}
+          {canManageOptions ? <Link href="/admin/options">Admin: Options</Link> : null}
         </div>
         <div className="links">
           <span className="badge">{actor.displayName}</span>

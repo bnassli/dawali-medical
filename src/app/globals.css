@@ -159,3 +159,75 @@ button:disabled {
   gap: 0.75rem;
   margin-top: 1.5rem;
 }
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.25rem;
+}
+
+.tab {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  font-size: 0.9rem;
+}
+
+.tab.active {
+  background: var(--muted);
+  font-weight: 600;
+}
+
+.muted {
+  color: gray;
+  font-size: 0.85rem;
+}
+
+.inline-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.clinical-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.5rem;
+}
+
+@media (max-width: 720px) {
+  .clinical-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.clinical-field .checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+
+.clinical-field .check {
+  font-weight: 400;
+  font-size: 0.9rem;
+}
+
+.clinical-field .add-new {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.clinical-field .add-new input {
+  flex: 1;
+}
+
+.save-status {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: gray;
+}
+
+.save-status.error {
+  color: var(--danger);
+}

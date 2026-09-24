@@ -3,13 +3,27 @@ import { eq, sql } from "drizzle-orm";
 import { getEnv } from "@/lib/env";
 import { hashPassword } from "@/lib/password";
 import {
+  CLINICAL_SECTIONS,
+  isSelectType,
+  optionListCode,
+} from "@/modules/clinical/definitions";
+import {
   ALL_PERMISSION_CODES,
   PERMISSION_DESCRIPTIONS,
   ROLE_NAMES,
   ROLE_PERMISSIONS,
   ROLES,
 } from "@/modules/permissions/constants";
-import { permissions, rolePermissions, roles, userRoles, users } from "./schema";
+import {
+  clinicalFieldDefinitions,
+  clinicalOptionLists,
+  clinicalSections,
+  permissions,
+  rolePermissions,
+  roles,
+  userRoles,
+  users,
+} from "./schema";
 import { createDb, type Database } from "./client";
 
 /**
@@ -69,6 +83,57 @@ export async function bootstrapAdmin(
   });
 }
 
+export async function seedClinicalDefinitions(db: Database): Promise<void> {
+  for (const section of CLINICAL_SECTIONS) {
+    const [sectionRow] = await db
+      .insert(clinicalSections)
+      .values({ code: section.code, name: section.name, sortOrder: section.sortOrder })
+      .onConflictDoUpdate({
+        target: clinicalSections.code,
+        set: { name: section.name, sortOrder: section.sortOrder },
+      })
+      .returning();
+    if (!sectionRow) throw new Error(`Failed to seed clinical section ${section.code}`);
+
+    for (const [index, field] of section.fields.entries()) {
+      let optionListId: string | null = null;
+      if (isSelectType(field.type)) {
+        const [list] = await db
+          .insert(clinicalOptionLists)
+          .values({ code: optionListCode(section.code, field.code), name: field.label })
+          .onConflictDoUpdate({
+            target: clinicalOptionLists.code,
+            set: { name: field.label },
+          })
+          .returning();
+        if (!list) throw new Error(`Failed to seed option list for ${field.code}`);
+        optionListId = list.id;
+      }
+
+      await db
+        .insert(clinicalFieldDefinitions)
+        .values({
+          sectionId: sectionRow.id,
+          code: field.code,
+          label: field.label,
+          fieldType: field.type,
+          optionListId,
+          allowsFreeText: true,
+          sortOrder: index + 1,
+        })
+        .onConflictDoUpdate({
+          target: [clinicalFieldDefinitions.sectionId, clinicalFieldDefinitions.code],
+          set: {
+            label: field.label,
+            fieldType: field.type,
+            optionListId,
+            sortOrder: index + 1,
+          },
+        });
+    }
+  }
+}
+
 export async function seed(
   connectionString: string,
   options: { admin?: AdminBootstrap } = {},
@@ -122,6 +187,10 @@ export async function seed(
         );
       }
     }
+
+    // 3b. Clinical sections/fields/option lists (structure only, no option
+    // values). Never deletes; existing option rows are untouched.
+    await seedClinicalDefinitions(db);
 
     // 4. Initial admin user: explicit option, else both env vars.
     const env = getEnv();

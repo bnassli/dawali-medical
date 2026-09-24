@@ -61,7 +61,23 @@ them, against a `postgres` service container — see
 `embedded-postgres` instance automatically — no Docker or local `psql`
 required.
 
+### Sprint 2 — clinical entry
+The visit chart now has the "Subj Complaints Habits" tab with auto-save.
+After pulling Sprint 2, run `npm run db:migrate` **and** `npm run db:seed`
+(the seed creates the clinical sections/fields and the new role
+permissions). Option lists start empty: doctors add values with
+"+ Add New"; administrators retire/reactivate them under
+`/admin/options`. See ADR-018..021 in `docs/DECISIONS.md`.
+
 ### Known limitations
+- Sprint 2: field types for Subj Complaints Habits are a best guess (no
+  SonoSoft reference screens in the repo); adjust
+  `src/modules/clinical/definitions.ts` and re-seed. "Reason for Visit" is a
+  clinical field; `visits.reason` (free text at visit creation) is a
+  separate, unlinked value.
+- Sprint 2: the auto-save UI has been type-checked, linted, built and its
+  server side integration-tested, but was not exercised in a browser in the
+  development sandbox.
 - **Windows + Administrator account**: real PostgreSQL refuses to start
   under a Windows process token that holds the built-in Administrator
   group ("Execution of PostgreSQL by a user with administrative

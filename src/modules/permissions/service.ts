@@ -22,7 +22,12 @@ export async function requirePermission(
   db: Database,
   actor: ActorContext,
   code: PermissionCode,
-  context?: { entityType?: string; entityId?: string; patientId?: string | null },
+  context?: {
+    entityType?: string;
+    entityId?: string;
+    patientId?: string | null;
+    visitId?: string | null;
+  },
 ): Promise<void> {
   if (actor.permissions.has(code)) {
     return;
@@ -34,6 +39,7 @@ export async function requirePermission(
     entityType: context?.entityType ?? "permission",
     entityId: context?.entityId ?? code,
     patientId: context?.patientId ?? null,
+    visitId: context?.visitId ?? null,
     metadata: {
       ip: actor.ip ?? null,
       userAgent: actor.userAgent ?? null,

@@ -19,6 +19,11 @@ const EXPECTED_TABLES = [
   "patient_external_ids",
   "visits",
   "audit_logs",
+  "clinical_sections",
+  "clinical_option_lists",
+  "clinical_options",
+  "clinical_field_definitions",
+  "clinical_entries",
 ];
 
 async function checkTablesExist(connectionString: string): Promise<string[]> {
