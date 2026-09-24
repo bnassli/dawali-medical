@@ -228,6 +228,48 @@ button:disabled {
   color: gray;
 }
 
-.save-status.error {
+.save-status.error,
+.save-status.conflict,
+.save-status.session-expired,
+.save-status.locked {
   color: var(--danger);
+}
+
+.field-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.field-head label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.unsaved-banner {
+  min-height: 2.25rem;
+  margin-bottom: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.unsaved-banner.visible {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.conflict {
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.conflict-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }

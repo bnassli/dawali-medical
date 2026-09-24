@@ -29,6 +29,20 @@
       "when": 1790250041235,
       "tag": "0003_clinical_entries_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790250933487,
+      "tag": "0004_clinical_concurrency",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790250936517,
+      "tag": "0005_reason_for_visit_single_source",
+      "breakpoints": true
     }
   ]
 }

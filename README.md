@@ -67,17 +67,40 @@ After pulling Sprint 2, run `npm run db:migrate` **and** `npm run db:seed`
 (the seed creates the clinical sections/fields and the new role
 permissions). Option lists start empty: doctors add values with
 "+ Add New"; administrators retire/reactivate them under
-`/admin/options`. See ADR-018..021 in `docs/DECISIONS.md`.
+`/admin/options`. See ADR-018..025 in `docs/DECISIONS.md` and
+`PROMPT_SPRINT_2.md`.
+
+Reason for Visit is stored only in `clinical_entries` (ADR-024). Migration
+0005 backfills the legacy `visits.reason` values and makes that column
+read-only. After migrating an environment that has existing visits, confirm:
+```
+npm run db:verify-reason-backfill   # must report "missing clinical entry: 0"
+```
+The legacy column is dropped only in a later release, after this has been
+validated in production.
+
+Browser E2E (Playwright, production build, real PostgreSQL):
+```
+npm run build
+npx playwright install chromium          # once (or set PW_CHANNEL=chrome to use installed Chrome)
+E2E_DATABASE_URL=postgresql://... npm run test:e2e
+```
+It migrates/seeds the database and creates throwaway users itself; use a
+disposable database. CI runs it after the build.
 
 ### Known limitations
 - Sprint 2: field types for Subj Complaints Habits are a best guess (no
   SonoSoft reference screens in the repo); adjust
-  `src/modules/clinical/definitions.ts` and re-seed. "Reason for Visit" is a
-  clinical field; `visits.reason` (free text at visit creation) is a
-  separate, unlinked value.
-- Sprint 2: the auto-save UI has been type-checked, linted, built and its
-  server side integration-tested, but was not exercised in a browser in the
-  development sandbox.
+  `src/modules/clinical/definitions.ts` and re-seed.
+- Sprint 2: a Reception user can enter a Reason for Visit when creating a
+  visit (authorised by `visit.create`) but cannot read it back (no
+  `clinical.read`).
+- **PGlite and concurrency**: PGlite's multi-connection multiplexer is not
+  a real PostgreSQL. Under concurrent connections it was observed to return
+  a wrong (empty) result for a valid query, which makes the Playwright suite
+  (browser + server + test process all connected) flaky on plain PGlite.
+  Use a real PostgreSQL (CI does), or a transaction-serialising proxy in
+  front of a single-connection PGlite (`--max-connections=1`).
 - **Windows + Administrator account**: real PostgreSQL refuses to start
   under a Windows process token that holds the built-in Administrator
   group ("Execution of PostgreSQL by a user with administrative

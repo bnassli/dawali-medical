@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { createDb } from "./client";
 import { startEmbeddedPostgres } from "./embedded";
 import { runMigrations } from "./migrator";
+import { verifyLegacyReasonBackfill } from "./verify-reason-backfill";
 
 const EXPECTED_TABLES = [
   "users",
@@ -104,6 +105,18 @@ async function main() {
       console.error(`Missing expected tables: ${missing.join(", ")}`);
     } else {
       console.log(`All ${EXPECTED_TABLES.length} expected tables are present.`);
+    }
+
+    console.log("Verifying legacy visits.reason backfill (ADR-024)...");
+    const { db: verifyDb, pool: verifyPool } = createDb(connectionString);
+    try {
+      const report = await verifyLegacyReasonBackfill(verifyDb);
+      console.log(
+        `legacy non-empty reasons: ${report.legacyNonEmpty}, missing clinical entry: ${report.missing}`,
+      );
+      if (report.missing > 0) failed = true;
+    } finally {
+      await verifyPool.end();
     }
 
     console.log("Checking for schema drift (drizzle-kit generate)...");

@@ -1,135 +1,84 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClinicalFieldView, ClinicalOptionView } from "@/modules/clinical/service";
-import { addOptionAction, saveEntryAction } from "./clinical-actions";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  CHOICE_DEBOUNCE_MS,
+  FieldSaver,
+  postNewOption,
+  SaverGroup,
+  TYPING_DEBOUNCE_MS,
+  type EntryValue,
+  type FieldSnapshot,
+  type OptionView,
+} from "@/modules/clinical/autosave-client";
+import type { ClinicalFieldView } from "@/modules/clinical/service";
 
-type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
-
-interface EntryValue {
-  optionIds: string[];
-  freeText: string;
+function useSaver(saver: FieldSaver): FieldSnapshot {
+  return useSyncExternalStore(saver.subscribe, saver.getSnapshot, saver.getSnapshot);
 }
 
-const TYPING_DEBOUNCE_MS = 700;
-const CHOICE_DEBOUNCE_MS = 150;
-
-/**
- * Debounced auto-save for one field. Saves are strictly serialised (one in
- * flight at a time, newest pending value wins) so versions are written in the
- * order the doctor made the changes.
- */
-function useAutoSave(visitId: string, fieldId: string) {
-  const [state, setState] = useState<SaveState>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const pending = useRef<EntryValue | null>(null);
-  const inFlight = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flush = useCallback(async () => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-    if (inFlight.current) return;
-    inFlight.current = true;
-    try {
-      while (pending.current) {
-        const value = pending.current;
-        pending.current = null;
-        setState("saving");
-        const result = await saveEntryAction({ visitId, fieldId, ...value });
-        if (!result.ok) {
-          setError(result.error);
-          setState("error");
-          return;
-        }
-      }
-      setError(null);
-      setState("saved");
-    } catch {
-      setError("Could not reach the server.");
-      setState("error");
-    } finally {
-      inFlight.current = false;
-    }
-  }, [visitId, fieldId]);
-
-  const schedule = useCallback(
-    (value: EntryValue, delayMs: number) => {
-      pending.current = value;
-      setState("dirty");
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void flush(), delayMs);
-    },
-    [flush],
-  );
-
-  useEffect(
-    () => () => {
-      // Navigating away with a queued edit: send it rather than drop it.
-      if (pending.current) void flush();
-    },
-    [flush],
-  );
-
-  return { state, error, schedule, flush };
-}
-
-function statusText(state: SaveState, error: string | null): string {
-  switch (state) {
+function statusText(snap: FieldSnapshot): string {
+  switch (snap.status) {
     case "dirty":
       return "Unsaved…";
     case "saving":
       return "Saving…";
     case "saved":
       return "Saved";
+    case "conflict":
+      return "Conflict";
+    case "session-expired":
+      return "Session expired — not saved";
+    case "locked":
+      return "Locked — not saved";
     case "error":
-      return `Not saved: ${error ?? "error"}`;
+      return "Not saved";
     default:
       return "";
   }
 }
 
+function describe(value: EntryValue, options: OptionView[]): string {
+  const labels = value.optionIds.map((id) => options.find((o) => o.id === id)?.label ?? "(unknown option)");
+  const parts = [...labels, value.freeText].filter((p) => p !== "");
+  return parts.length > 0 ? parts.join("; ") : "(empty)";
+}
+
 function FieldEditor({
   field,
-  visitId,
+  saver,
   readOnly,
   canWrite,
   canAddOption,
 }: {
   field: ClinicalFieldView;
-  visitId: string;
+  saver: FieldSaver;
   readOnly: boolean;
   canWrite: boolean;
   canAddOption: boolean;
 }) {
+  const snap = useSaver(saver);
   const isSelect = field.fieldType === "select";
   const isMulti = field.fieldType === "multiselect";
   const isChoice = isSelect || isMulti;
-
-  const [options, setOptions] = useState<ClinicalOptionView[]>(field.options);
-  const [optionIds, setOptionIds] = useState<string[]>(field.value.optionIds);
-  const [freeText, setFreeText] = useState<string>(field.value.freeText);
-  const [newLabel, setNewLabel] = useState("");
-  const [addMessage, setAddMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const [adding, setAdding] = useState(false);
-  const { state, error, schedule, flush } = useAutoSave(visitId, field.id);
-
   const inputId = `field-${field.code}`;
+  const { optionIds, freeText } = snap.value;
+  const options = snap.options;
+
+  const [newLabel, setNewLabel] = useState("");
+  const [addMessage, setAddMessage] = useState<{ ok: boolean; text: string; expired?: boolean } | null>(
+    null,
+  );
+  const [adding, setAdding] = useState(false);
+
+  const disabled = readOnly || snap.conflict !== null;
 
   function changeOptions(next: string[]) {
-    setOptionIds(next);
-    schedule({ optionIds: next, freeText }, CHOICE_DEBOUNCE_MS);
+    saver.edit({ optionIds: next, freeText }, CHOICE_DEBOUNCE_MS);
   }
 
   function changeFreeText(next: string) {
-    setFreeText(next);
-    schedule({ optionIds, freeText: next }, TYPING_DEBOUNCE_MS);
-  }
-
-  function toggleOption(id: string, checked: boolean) {
-    changeOptions(checked ? [...optionIds, id] : optionIds.filter((v) => v !== id));
+    saver.edit({ optionIds, freeText: next }, TYPING_DEBOUNCE_MS);
   }
 
   async function addNew() {
@@ -137,39 +86,36 @@ function FieldEditor({
     if (!label) return;
     setAdding(true);
     setAddMessage(null);
-    try {
-      const result = await addOptionAction({ fieldId: field.id, label });
-      if (!result.ok) {
-        setAddMessage({ ok: false, text: result.error });
-        return;
-      }
-      setOptions((prev) => [...prev, result.option]);
-      setNewLabel("");
-      if (canWrite && !readOnly) {
-        changeOptions(isMulti ? [...optionIds, result.option.id] : [result.option.id]);
-      }
-      setAddMessage({ ok: true, text: `Added "${result.option.label}" to the list.` });
-    } catch {
-      setAddMessage({ ok: false, text: "Could not reach the server." });
-    } finally {
-      setAdding(false);
+    const result = await postNewOption(field.id, label);
+    setAdding(false);
+    if (!result.ok) {
+      setAddMessage({ ok: false, text: result.message, expired: result.sessionExpired });
+      return;
     }
+    saver.addOptionToList(result.option);
+    setNewLabel("");
+    if (canWrite && !readOnly && !snap.conflict) {
+      changeOptions(isMulti ? [...optionIds, result.option.id] : [result.option.id]);
+    }
+    setAddMessage({ ok: true, text: `Added "${result.option.label}" to the list.` });
   }
 
+  const canRetry = snap.status === "error" || snap.status === "session-expired" || snap.status === "locked";
+
   return (
-    <div className="field clinical-field">
-      <label htmlFor={inputId}>
-        {field.label}{" "}
-        <span className={`save-status ${state}`} role="status">
-          {statusText(state, error)}
+    <div className="field clinical-field" data-field={field.code}>
+      <div className="field-head">
+        <label htmlFor={inputId}>{field.label}</label>
+        <span className={`save-status ${snap.status}`} role="status" aria-live="polite">
+          {statusText(snap)}
         </span>
-      </label>
+      </div>
 
       {isSelect ? (
         <select
           id={inputId}
           value={optionIds[0] ?? ""}
-          disabled={readOnly}
+          disabled={disabled}
           onChange={(e) => changeOptions(e.target.value ? [e.target.value] : [])}
         >
           <option value="">—</option>
@@ -183,15 +129,22 @@ function FieldEditor({
       ) : null}
 
       {isMulti ? (
-        <div className="checks" id={inputId}>
+        <div className="checks" role="group" aria-labelledby={`${inputId}-legend`} id={inputId}>
+          <span id={`${inputId}-legend`} hidden>
+            {field.label}
+          </span>
           {options.length === 0 ? <span className="muted">No options yet.</span> : null}
           {options.map((o) => (
             <label key={o.id} className="check">
               <input
                 type="checkbox"
                 checked={optionIds.includes(o.id)}
-                disabled={readOnly || (!o.isActive && !optionIds.includes(o.id))}
-                onChange={(e) => toggleOption(o.id, e.target.checked)}
+                disabled={disabled || (!o.isActive && !optionIds.includes(o.id))}
+                onChange={(e) =>
+                  changeOptions(
+                    e.target.checked ? [...optionIds, o.id] : optionIds.filter((v) => v !== o.id),
+                  )
+                }
               />{" "}
               {o.label}
               {o.isActive ? "" : " (retired)"}
@@ -206,9 +159,9 @@ function FieldEditor({
           aria-label={`${field.label} — visit-only free text`}
           placeholder="Free text for this visit only"
           value={freeText}
-          disabled={readOnly}
+          disabled={disabled}
           onChange={(e) => changeFreeText(e.target.value)}
-          onBlur={() => void flush()}
+          onBlur={() => void saver.flush()}
         />
       ) : null}
 
@@ -217,9 +170,9 @@ function FieldEditor({
           id={inputId}
           type="text"
           value={freeText}
-          disabled={readOnly}
+          disabled={disabled}
           onChange={(e) => changeFreeText(e.target.value)}
-          onBlur={() => void flush()}
+          onBlur={() => void saver.flush()}
         />
       ) : null}
 
@@ -228,10 +181,43 @@ function FieldEditor({
           id={inputId}
           rows={3}
           value={freeText}
-          disabled={readOnly}
+          disabled={disabled}
           onChange={(e) => changeFreeText(e.target.value)}
-          onBlur={() => void flush()}
+          onBlur={() => void saver.flush()}
         />
+      ) : null}
+
+      {snap.conflict ? (
+        <div className="conflict" role="alert">
+          <strong>Conflict</strong> — someone else changed this field after you loaded it.
+          <div>
+            <span className="muted">Theirs:</span>{" "}
+            {describe(snap.conflict.theirs, snap.conflict.options)}
+          </div>
+          <div>
+            <span className="muted">Mine:</span> {describe(snap.value, [...snap.options, ...snap.conflict.options])}
+          </div>
+          <div className="conflict-actions">
+            <button type="button" onClick={() => void saver.keepMine()}>
+              Keep mine
+            </button>
+            <button type="button" className="secondary" onClick={() => saver.useTheirs()}>
+              Use theirs
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {snap.message && !snap.conflict ? <span className="inline-error">{snap.message}</span> : null}
+      {snap.status === "session-expired" ? (
+        <a href="/login" target="_blank" rel="noopener noreferrer">
+          Sign in again (opens in a new tab)
+        </a>
+      ) : null}
+      {canRetry ? (
+        <button type="button" className="secondary" onClick={() => void saver.retry()}>
+          Retry save
+        </button>
       ) : null}
 
       {isChoice && canAddOption ? (
@@ -260,7 +246,17 @@ function FieldEditor({
         </div>
       ) : null}
       {addMessage ? (
-        <span className={addMessage.ok ? "muted" : "inline-error"}>{addMessage.text}</span>
+        <span className={addMessage.ok ? "muted" : "inline-error"}>
+          {addMessage.text}
+          {addMessage.expired ? (
+            <>
+              {" "}
+              <a href="/login" target="_blank" rel="noopener noreferrer">
+                Sign in again (opens in a new tab)
+              </a>
+            </>
+          ) : null}
+        </span>
       ) : null}
     </div>
   );
@@ -279,18 +275,76 @@ export function ClinicalSectionForm({
   canWrite: boolean;
   canAddOption: boolean;
 }) {
+  const [group] = useState(() => {
+    const g = new SaverGroup();
+    for (const f of fields) {
+      g.add(
+        f.id,
+        new FieldSaver({
+          visitId,
+          fieldId: f.id,
+          initialVersion: f.version,
+          initialValue: f.value,
+          initialOptions: f.options,
+        }),
+      );
+    }
+    return g;
+  });
+  const unsaved = useSyncExternalStore(group.subscribe, group.getUnsavedCount, group.getUnsavedCount);
+
+  useEffect(() => {
+    // Send anything still pending when the page is hidden or unloading, via
+    // fetch keepalive so the request outlives the page. Nothing is stored
+    // in localStorage/sessionStorage.
+    const onHide = () => void group.flushAll({ keepalive: true });
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") onHide();
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      onHide();
+      if (group.getUnsavedCount() > 0) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("pagehide", onHide);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [group]);
+
   return (
-    <div className="clinical-form">
-      {fields.map((field) => (
-        <FieldEditor
-          key={field.id}
-          field={field}
-          visitId={visitId}
-          readOnly={readOnly}
-          canWrite={canWrite}
-          canAddOption={canAddOption}
-        />
-      ))}
+    <div className="clinical-form-wrap">
+      <div
+        className={`unsaved-banner${unsaved > 0 ? " visible" : ""}`}
+        role="alert"
+        aria-live="assertive"
+        data-testid="unsaved-banner"
+      >
+        {unsaved > 0
+          ? `${unsaved} field${unsaved === 1 ? "" : "s"} not saved yet — keep this page open until it says Saved.`
+          : ""}
+      </div>
+      <div className="clinical-form">
+        {fields.map((field) => {
+          const saver = group.get(field.id);
+          return saver ? (
+            <FieldEditor
+              key={field.id}
+              field={field}
+              saver={saver}
+              readOnly={readOnly}
+              canWrite={canWrite}
+              canAddOption={canAddOption}
+            />
+          ) : null;
+        })}
+      </div>
     </div>
   );
 }

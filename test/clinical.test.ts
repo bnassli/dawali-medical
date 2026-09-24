@@ -15,7 +15,6 @@ import {
   getClinicalSectionForVisit,
   InvalidClinicalValueError,
   listOptionListsForAdmin,
-  saveClinicalEntry,
   setClinicalOptionActive,
   VisitNotOpenError,
 } from "@/modules/clinical/service";
@@ -24,7 +23,7 @@ import { createPatient } from "@/modules/patients/service";
 import { ForbiddenError } from "@/modules/permissions/service";
 import type { ActorContext } from "@/modules/permissions/types";
 import { createVisit } from "@/modules/visits/service";
-import { createTestUser, openTestDb, uniqueSuffix } from "./helpers";
+import { createTestUser, openTestDb, saveCurrent, uniqueSuffix } from "./helpers";
 
 describe("clinical entries (Subj Complaints Habits)", () => {
   let db: Database;
@@ -92,7 +91,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     const { visit, patient } = await newVisit(actor);
     const chestId = await fieldId("chest_comments");
 
-    const first = await saveClinicalEntry(db, actor, {
+    const first = await saveCurrent(db, actor, {
       visitId: visit.id,
       fieldId: chestId,
       optionIds: [],
@@ -102,7 +101,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     expect(first.entry?.version).toBe(1);
     expect(first.entry?.value.freeText).toBe("mild tightness");
 
-    const unchanged = await saveClinicalEntry(db, actor, {
+    const unchanged = await saveCurrent(db, actor, {
       visitId: visit.id,
       fieldId: chestId,
       optionIds: [],
@@ -110,7 +109,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     });
     expect(unchanged.changed).toBe(false);
 
-    const second = await saveClinicalEntry(db, actor, {
+    const second = await saveCurrent(db, actor, {
       visitId: visit.id,
       fieldId: chestId,
       optionIds: [],
@@ -153,13 +152,18 @@ describe("clinical entries (Subj Complaints Habits)", () => {
   it("does not create a version for an empty first save", async () => {
     const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
     const { visit } = await newVisit(actor);
-    const result = await saveClinicalEntry(db, actor, {
+    const result = await saveCurrent(db, actor, {
       visitId: visit.id,
       fieldId: await fieldId("comments"),
       optionIds: [],
       freeText: "   ",
     });
-    expect(result).toEqual({ changed: false, entry: null });
+    expect(result).toMatchObject({ changed: false, replayed: false, version: 0, entry: null });
+    const rows = await db
+      .select()
+      .from(clinicalEntries)
+      .where(eq(clinicalEntries.visitId, visit.id));
+    expect(rows).toHaveLength(0);
   });
 
   it("+ Add New persists an option permanently; visit-only free text does not", async () => {
@@ -172,7 +176,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     const option = await addClinicalOption(db, doctor, { fieldId: fid, label });
     expect(option.isActive).toBe(true);
 
-    await saveClinicalEntry(db, doctor, {
+    await saveCurrent(db, doctor, {
       visitId: visitA.id,
       fieldId: fid,
       optionIds: [option.id],
@@ -224,7 +228,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     const b = await addClinicalOption(db, actor, { fieldId: durationId, label: `B ${suffix}` });
 
     await expect(
-      saveClinicalEntry(db, actor, {
+      saveCurrent(db, actor, {
         visitId: visit.id,
         fieldId: durationId,
         optionIds: [a.id, b.id],
@@ -234,7 +238,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
 
     // Option belongs to another field's list.
     await expect(
-      saveClinicalEntry(db, actor, {
+      saveCurrent(db, actor, {
         visitId: visit.id,
         fieldId: progressionId,
         optionIds: [a.id],
@@ -243,7 +247,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     ).rejects.toBeInstanceOf(InvalidClinicalValueError);
 
     await expect(
-      saveClinicalEntry(db, actor, {
+      saveCurrent(db, actor, {
         visitId: visit.id,
         fieldId: await fieldId("comments"),
         optionIds: [a.id],
@@ -261,7 +265,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     const kept = await addClinicalOption(db, doctor, { fieldId: fid, label: `Kept ${suffix}` });
     const other = await addClinicalOption(db, doctor, { fieldId: fid, label: `Other ${suffix}` });
 
-    await saveClinicalEntry(db, doctor, {
+    await saveCurrent(db, doctor, {
       visitId: visit.id,
       fieldId: fid,
       optionIds: [kept.id],
@@ -280,7 +284,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     const field = view.fields.find((f) => f.code === "current_meds");
     expect(field?.options.map((o) => o.id)).toEqual([kept.id]);
     await expect(
-      saveClinicalEntry(db, doctor, {
+      saveCurrent(db, doctor, {
         visitId: visit.id,
         fieldId: fid,
         optionIds: [kept.id],
@@ -289,7 +293,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     ).resolves.toMatchObject({ changed: true });
 
     await expect(
-      saveClinicalEntry(db, doctor, {
+      saveCurrent(db, doctor, {
         visitId: visit.id,
         fieldId: fid,
         optionIds: [kept.id, other.id],
@@ -309,7 +313,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
     const { visit } = await newVisit(actor);
     const cid = await fieldId("comments");
-    await saveClinicalEntry(db, actor, {
+    await saveCurrent(db, actor, {
       visitId: visit.id,
       fieldId: cid,
       optionIds: [],
@@ -319,7 +323,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     await db.update(visits).set({ status: "closed" }).where(eq(visits.id, visit.id));
 
     await expect(
-      saveClinicalEntry(db, actor, {
+      saveCurrent(db, actor, {
         visitId: visit.id,
         fieldId: cid,
         optionIds: [],
@@ -345,7 +349,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
 
     // Nurse: read + write (incl. visit-only free text) but no permanent options.
     await expect(
-      saveClinicalEntry(db, nurse, {
+      saveCurrent(db, nurse, {
         visitId: visit.id,
         fieldId: allergiesId,
         optionIds: [],
@@ -365,7 +369,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     ).resolves.toBeDefined();
     await expect(listOptionListsForAdmin(db, admin)).resolves.toBeDefined();
     await expect(
-      saveClinicalEntry(db, admin, {
+      saveCurrent(db, admin, {
         visitId: visit.id,
         fieldId: commentsId,
         optionIds: [],
@@ -379,7 +383,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
       getClinicalSectionForVisit(db, reception, visit.id, SUBJ_COMPLAINTS_HABITS_SECTION_CODE),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
-      saveClinicalEntry(db, reception, {
+      saveCurrent(db, reception, {
         visitId: visit.id,
         fieldId: commentsId,
         optionIds: [],
@@ -398,7 +402,7 @@ describe("clinical entries (Subj Complaints Habits)", () => {
   it("database rejects UPDATE and DELETE on clinical_entries", async () => {
     const { actor } = await createTestUser(db, { roleCode: "DOCTOR" });
     const { visit } = await newVisit(actor);
-    const result = await saveClinicalEntry(db, actor, {
+    const result = await saveCurrent(db, actor, {
       visitId: visit.id,
       fieldId: await fieldId("comments"),
       optionIds: [],

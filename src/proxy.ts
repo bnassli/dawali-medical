@@ -25,9 +25,11 @@ export const config = {
     /*
      * Match all routes except:
      * - /login (the login page itself)
+     * - /api/* (Route Handlers authenticate themselves and answer 401 JSON;
+     *   a login redirect would be useless to fetch() callers)
      * - Next.js internals (_next/static, _next/image)
      * - static files (favicon, images, etc.)
      */
-    "/((?!login|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!login|api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

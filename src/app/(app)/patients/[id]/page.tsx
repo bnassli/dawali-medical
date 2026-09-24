@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { requireActor } from "@/modules/auth/current-actor";
+import { getVisitReasons } from "@/modules/clinical/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { getPatientById } from "@/modules/patients/service";
 import { listVisitsForPatient } from "@/modules/visits/service";
@@ -24,6 +25,16 @@ export default async function PatientPage({
   const visits = await listVisitsForPatient(getDb(), actor, id);
   const canUpdate = actor.permissions.has(PERMISSIONS.PATIENT_UPDATE);
   const canCreateVisit = actor.permissions.has(PERMISSIONS.VISIT_CREATE);
+  // Reason for Visit lives only in clinical_entries (ADR-024); roles without
+  // clinical.read (e.g. Reception) do not see it.
+  const canReadClinical = actor.permissions.has(PERMISSIONS.CLINICAL_READ);
+  const reasons = canReadClinical
+    ? await getVisitReasons(
+        getDb(),
+        actor,
+        visits.map((v) => v.id),
+      )
+    : new Map<string, string>();
 
   return (
     <div>
@@ -127,7 +138,7 @@ export default async function PatientPage({
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Reason</th>
+                {canReadClinical ? <th>Reason</th> : null}
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -136,7 +147,7 @@ export default async function PatientPage({
               {visits.map((v) => (
                 <tr key={v.id}>
                   <td>{new Date(v.visitDate).toLocaleString()}</td>
-                  <td>{v.reason ?? "—"}</td>
+                  {canReadClinical ? <td>{reasons.get(v.id) ?? "—"}</td> : null}
                   <td>{v.status}</td>
                   <td>
                     <Link href={`/patients/${patient.id}/visits/${v.id}`}>Open</Link>

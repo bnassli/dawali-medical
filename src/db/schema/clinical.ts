@@ -110,6 +110,10 @@ export const clinicalEntries = pgTable(
       .references(() => clinicalFieldDefinitions.id, { onDelete: "restrict" }),
     version: integer("version").notNull(),
     value: jsonb("value").$type<ClinicalEntryValue>().notNull(),
+    // Client-generated idempotency key: a replayed mutation returns the
+    // original result instead of creating another version. NULL for rows
+    // that were not created by a client save (e.g. the legacy backfill).
+    clientMutationId: uuid("client_mutation_id"),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -123,6 +127,9 @@ export const clinicalEntries = pgTable(
       table.fieldDefinitionId,
       table.version,
     ),
+    uniqueIndex("clinical_entries_client_mutation_id_idx")
+      .on(table.clientMutationId)
+      .where(sql`${table.clientMutationId} IS NOT NULL`),
     index("clinical_entries_visit_id_idx").on(table.visitId),
   ],
 );

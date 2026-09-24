@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { requireActor } from "@/modules/auth/current-actor";
 import { SUBJ_COMPLAINTS_HABITS_SECTION_CODE } from "@/modules/clinical/definitions";
-import { getClinicalSectionForVisit } from "@/modules/clinical/service";
+import { getClinicalSectionForVisit, getVisitReasons } from "@/modules/clinical/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { getPatientById } from "@/modules/patients/service";
 import { getVisitById } from "@/modules/visits/service";
@@ -37,6 +37,10 @@ export default async function VisitChartPage({
       )
     : null;
 
+  const reason = canRead
+    ? ((await getVisitReasons(getDb(), actor, [visit.id])).get(visit.id) ?? null)
+    : null;
+
   return (
     <div>
       {/* Header / demographics area */}
@@ -52,7 +56,7 @@ export default async function VisitChartPage({
         <p style={{ margin: "0.35rem 0 0" }}>
           Visit date: {new Date(visit.visitDate).toLocaleString()} &nbsp;|&nbsp; Status:{" "}
           {visit.status}
-          {visit.reason ? ` | Reason: ${visit.reason}` : ""}
+          {reason ? ` | Reason: ${reason}` : ""}
         </p>
       </div>
 

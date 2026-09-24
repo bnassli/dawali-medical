@@ -82,3 +82,7 @@ desktop.ini
 # Vercel / misc
 .vercel
 .turbo/
+
+# Playwright
+playwright-report/
+test-results/

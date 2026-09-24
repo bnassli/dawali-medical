@@ -94,6 +94,7 @@ be open" check race-free. A save whose normalised value equals the current
 value writes nothing (no version, no audit row), so auto-save retries do not
 bloat history. Every insert writes `clinical_entry.create` (v1) or
 `clinical_entry.update` (v2+) with before/after in the same transaction.
+Versioning, conflicts and idempotency are specified in ADR-022.
 Rollback: drop the trigger/function only; never delete rows. Dropping the
 `clinical_*` tables (0002) is destructive and only acceptable on a database
 with no clinical data or after a verified backup.
@@ -118,9 +119,86 @@ Admin: read/add/manage but deliberately NOT write — an admin who edits
 clinical data must also hold the Doctor role. Reception and Inventory have
 no clinical access.
 
-ADR-021: Auto-save is client-side, per field: edits are debounced (typing
-~700 ms, choices ~150 ms), flushed on blur/unmount, and sent through a server
-action that re-validates the input and re-checks permissions. At most one
-save per field is in flight; the newest pending value wins. Clinical writes
-are rejected unless `visits.status = 'open'` (no close/finalize action exists
-yet; it arrives with a later sprint).
+ADR-021: Auto-save is client-side, per field (`src/modules/clinical/autosave-client.ts`,
+unit-tested with fake timers): edits are debounced (typing ~700 ms, choices
+~150 ms) and flushed on blur. On `pagehide`/`visibilitychange`(hidden)/`beforeunload`
+every pending field is flushed with `fetch(..., { keepalive: true })` so the
+request outlives the page; while anything is unsaved a banner says so and
+`beforeunload` shows the browser's leave-page prompt. Unsent text lives in
+memory only — no localStorage/sessionStorage/IndexedDB (enforced by a test).
+At most one request per field is in flight; edits made meanwhile are sent next.
+A request whose outcome is unknown (network failure) is retried with the SAME
+`clientMutationId` before anything newer is sent, so a save that did reach the
+server is never mistaken for someone else's edit. 401 keeps the text, shows
+"Session expired" with a Sign-in-again link and Retry; 423 marks the field
+locked; 409 opens the Conflict panel (ADR-022). Clinical writes are rejected
+unless `visits.status = 'open'` (no close/finalize action exists yet).
+Superseded: the first Sprint 2 cut used a Server Action and last-write-wins;
+both were removed.
+
+ADR-022: Optimistic concurrency and idempotency. Every save sends
+`expectedVersion` (version the client last saw; 0 = none) and a client-generated
+`clientMutationId` (UUID, stored in `clinical_entries.client_mutation_id`, unique
+where not null — migration 0004). Under the visit row lock the service (1) returns
+the original result if the mutation id was already applied (same visit, field and
+user; any other reuse is 400) — replays never create a revision or audit row;
+(2) rejects a version mismatch, stale OR ahead, with `ClinicalConflictError`
+carrying the current version, value and options — nothing is written, no audit
+row; (3) treats an equal normalised value as a no-op; (4) otherwise inserts
+version + 1 and audits it. A stale save with an identical value is still a
+conflict (predictable rule). The UI resolves conflicts explicitly: Keep mine
+re-sends my value with expectedVersion = their version (a new revision on top;
+theirs stays in history and in the audit `before`), Use theirs adopts their
+value without writing. Last-write-wins is not possible.
+
+ADR-023: Autosave transport is a Route Handler, not a Server Action, so status
+codes are real HTTP semantics and an expired session yields 401 JSON instead of
+a login redirect. `POST /api/visits/{visitId}/clinical-entries/{fieldId}` and
+`POST /api/clinical/fields/{fieldId}/options` delegate to
+`src/modules/clinical/api.ts` (Request -> Response, testable without Next).
+Checks in order: same-origin (Origin must match Host/X-Forwarded-Host, or
+Sec-Fetch-Site same-origin) -> 403; session -> 401; Content-Type JSON -> 415;
+body limit (32 KB save / 2 KB option, enforced while streaming, not just by
+Content-Length) -> 413; JSON -> 400; strict schema (unknown keys such as
+`patientId` rejected) -> 400; then the service: permission 403 (audited),
+unknown visit/field 404, conflict 409 (also duplicate option), invalid value 400,
+visit not open 423. `patientId` is always derived from the visit. `src/proxy.ts`
+no longer redirects `/api/*` (handlers authenticate themselves); the app-layout
+guard for pages is unchanged. `Cache-Control: no-store` on every response.
+
+ADR-024: Reason for Visit has exactly one authoritative writable source:
+`clinical_entries` field `reason_for_visit`. Before Sprint 2 `visits.reason`
+also held it. Migration 0005 (idempotent): ensures the section/list/field rows
+exist, backfills every non-empty `visits.reason` as version 1
+(`{ optionIds: [], freeText: trimmed text }`, created_by = the visit's creator)
+with a `clinical_entry.backfill` audit row holding the raw legacy value, records
+a `clinical_entry.backfill_skipped` audit row (raw value kept) when a visit
+already has a reason entry, then VERIFIES in SQL that no non-empty legacy value
+lacks an entry (the migration aborts otherwise), and installs a trigger that
+makes `visits.reason` read-only. `visits.reason` is kept as a deprecated legacy
+column for rollback safety only; no application path reads or writes it (visit
+queries select explicit columns; a test scans the source). Visit creation records
+the intake reason as a `reason_for_visit` v1 entry in the same transaction,
+authorised by `visit.create` (intake) — the one clinical write not gated by
+`clinical.write`; Reception can therefore record an intake reason but cannot read
+it back (`clinical.read`). Verification for production:
+`npm run db:verify-reason-backfill` (exit 1 if any legacy reason is missing;
+`db:validate` runs the same check). Later removal: after production validation
+shows `missing = 0` and a release cycle has passed, a new migration drops the
+trigger and the `visits.reason` column (destructive: take a backup first).
+Rollback of 0005: `DROP TRIGGER visits_reason_read_only ON visits;
+DROP FUNCTION visits_reason_read_only();` — no data needs restoring because
+`visits.reason` was never modified; backfilled entries/audit rows are history
+and stay.
+
+ADR-025: Browser E2E (Playwright, `npm run test:e2e`) runs against the
+production build (`next start`) and a real PostgreSQL. CI adds Chromium install
+and this step after the build. Specs live in `e2e/`; a global setup migrates,
+seeds and creates one user per role per run. No retries (a pass-on-retry would
+hide autosave/conflict races). Vitest is restricted to `test/**` so the two
+runners do not collide. Local runs: `PW_CHANNEL=chrome` reuses an installed
+browser. Known limitation: PGlite's multi-connection multiplexer can return
+wrong results under concurrent connections (observed: a valid session row
+missing from a filtered SELECT while the browser's keepalive POST and the reload
+GET overlap), so on PGlite the suite is only reliable behind a
+transaction-serialising proxy; a real PostgreSQL (CI) has no such issue.
