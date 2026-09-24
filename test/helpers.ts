@@ -83,7 +83,12 @@ export async function createTestUser(
 
   await db.insert(userRoles).values({ userId: user.id, roleId: role.id });
 
-  const actor = await loadActorContext(db, user.id);
+  // loadActorContext correctly refuses inactive users, so inactive test users
+  // get an empty-permission actor (they are only used to exercise login).
+  const actor =
+    user.isActive
+      ? await loadActorContext(db, user.id)
+      : { userId: user.id, displayName: user.displayName, permissions: new Set<never>() };
   if (!actor) throw new Error("Failed to load actor context for test user");
 
   return {
