@@ -29,6 +29,9 @@ const EXPECTED_TABLES = [
   "demographic_options",
   "treatment_plan_items",
   "treatment_plan_entries",
+  "patient_files",
+  "diagrams",
+  "diagram_versions",
 ];
 
 async function checkTablesExist(connectionString: string): Promise<string[]> {

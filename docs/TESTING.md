@@ -88,5 +88,11 @@ feels values, shared row lists); Playwright `e2e/r3.spec.ts` (Laser combos/text 
 reload, Patient feels, Assessment rows, Plan "Select"; R3b: Post EVLT vitals, Impression
 shared with Assessment Plan+, "Clear" keeps history).
 
+R4 additions (ADR-033): Vitest `test/diagrams.test.ts` (file naming, versions and files,
+conflict, replay/reuse, image/drawing validation, visit/type ownership, closed visit,
+permissions, append-only triggers, audit, Route Handlers, storage key safety and
+write-once); Playwright `e2e/diagrams.spec.ts` (create, draw, undo/redo, save v1, reopen,
+save v2, private file served, reception refused, Vein separate).
+
 Core target smoke flow:
 Login → Search/Create Patient → Open/Create Visit → Patient Chart → Save clinical data → Create Diagram → Generate Report → Logout.

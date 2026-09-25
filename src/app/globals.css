@@ -892,3 +892,12 @@ output.derived {
 .container:has(.sono-form) {
   max-width: 1400px;
 }
+
+/* ---- Diagrams (R4, ADR-033) ---- */
+.diagrams-panel { margin-top: 1rem; }
+.diagram-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.diagram-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-bottom: 0.5rem; }
+.diagram-toolbar [role="group"] { display: inline-flex; gap: 0.25rem; }
+.diagram-toolbar button[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.diagram-toolbar .swatch { width: 1.6rem; height: 1.6rem; padding: 0; border: 1px solid var(--border); }
+.diagram-canvas { display: block; width: 100%; max-width: 900px; height: auto; border: 1px solid var(--border); background: #fff; }

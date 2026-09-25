@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+<rect width="800" height="600" fill="#fff"/>
+<text x="400" y="24" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="14" fill="#b0202e">PLACEHOLDER template — replace with the clinic&#39;s Leg Diagram (ADR-033)</text>
+<g fill="none" stroke="#333" stroke-width="2">
+  <path d="M150 70 C140 180 145 300 160 380 C165 450 160 500 170 540 L205 540 C200 480 205 420 208 360 C212 250 215 150 218 90"/>
+  <path d="M290 70 C300 180 295 300 280 380 C275 450 280 500 270 540 L235 540 C240 480 235 420 232 360 C228 250 225 150 222 90"/>
+  <path d="M150 70 Q220 40 290 70"/>
+</g>
+<text x="220" y="585" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="18" fill="#333">Front</text>
+<g fill="none" stroke="#333" stroke-width="2">
+  <path d="M510 70 C500 180 505 300 520 380 C525 450 520 500 530 540 L565 540 C560 480 565 420 568 360 C572 250 575 150 578 90"/>
+  <path d="M650 70 C660 180 655 300 640 380 C635 450 640 500 630 540 L595 540 C600 480 595 420 592 360 C588 250 585 150 582 90"/>
+  <path d="M510 70 Q580 40 650 70"/>
+</g>
+<text x="580" y="585" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="18" fill="#333">Back</text>
+</svg>

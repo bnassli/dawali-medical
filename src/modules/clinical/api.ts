@@ -58,14 +58,14 @@ export interface ApiDeps {
   allowRequestOrigin: boolean;
 }
 
-function json(status: number, body: Record<string, unknown>): Response {
+export function json(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
 }
 
-function fail(status: number, error: string, message: string, extra: Record<string, unknown> = {}) {
+export function fail(status: number, error: string, message: string, extra: Record<string, unknown> = {}) {
   return json(status, { ok: false, error, message, ...extra });
 }
 
@@ -170,7 +170,7 @@ function mapError(err: unknown): Response {
   return fail(500, "internal_error", "Unexpected server error.");
 }
 
-async function prepare<T>(
+export async function prepare<T>(
   request: Request,
   deps: ApiDeps,
   maxBytes: number,
@@ -208,7 +208,7 @@ async function prepare<T>(
  * different user (someone signed in on the same browser), refuse: text typed
  * as user A must never be saved under user B. Audited; nothing is written.
  */
-async function actorMismatch(
+export async function actorMismatch(
   deps: ApiDeps,
   actor: ActorContext,
   expectedUserId: string,
@@ -226,7 +226,7 @@ async function actorMismatch(
   );
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** POST /api/visits/{visitId}/clinical-entries/{fieldId}. patientId is derived from the visit, never accepted. */
 export async function handleSaveClinicalEntry(

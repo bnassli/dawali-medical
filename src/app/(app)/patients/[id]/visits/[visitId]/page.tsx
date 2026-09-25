@@ -13,6 +13,8 @@ import { PERMISSIONS } from "@/modules/permissions/constants";
 import { getVisitById } from "@/modules/visits/service";
 import { loadPatient } from "../../../page-data";
 import { ClinicalSectionForm } from "./clinical-section-form";
+import { DiagramsPanel } from "./diagrams-panel";
+import { listDiagramsForVisit } from "@/modules/diagrams/service";
 
 export default async function VisitChartPage({
   params,
@@ -59,6 +61,8 @@ export default async function VisitChartPage({
           fields: v.fields,
           patientSex: v.visit.patientSex,
         }));
+
+  const diagrams = canRead ? await listDiagramsForVisit(getDb(), actor, visit.id) : [];
 
   const reason = canRead
     ? ((await getVisitReasons(getDb(), actor, [visit.id])).get(visit.id) ?? null)
@@ -124,6 +128,14 @@ export default async function VisitChartPage({
           <p className="muted">You do not have access to clinical entries.</p>
         )}
       </div>
+
+      {canRead ? (
+        <DiagramsPanel
+          base={`/patients/${patient.id}/visits/${visit.id}`}
+          diagrams={diagrams}
+          canCreate={canWrite && visitOpen}
+        />
+      ) : null}
 
       {/* Action area */}
       <div className="action-bar">

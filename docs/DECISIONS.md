@@ -669,3 +669,38 @@ the new "Clear" button empties a row by saving a new, audited version.
 screenshot — needs one more screenshot; the rest of the form is drawn that much higher),
 the green "Copy from Workup" (+!) buttons (copying from an earlier visit needs a rule for
 which visit — PO question), Add Charge.
+
+ADR-033: R4 — Diagram engine and private patient files. Source: FINAL_V1 §7–§8,
+`docs/DIAGRAMS.md`, CLAUDE.md #9 and the medical-history rules.
+
+*Two independent actions* on every visit ("Diagrams" panel): Create Leg Diagram, Create
+Vein Diagram. Each opens an in-app editor (pen, 4 colours, 3 thicknesses, eraser, undo,
+redo, clear, save) over the type's IMMUTABLE base template (`public/diagram-templates/`,
+not patient data). A new diagram gets a fresh id; nothing is stored until the doctor draws
+and saves, so an untouched template is never filed.
+
+*Versions, never overwrite:* `diagrams` (visit, patient, type) and `diagram_versions`
+(v1, v2, ...: the editable strokes in template coordinates + the rendered PNG). Reopening
+continues from the latest version; every save is the next version. Optimistic concurrency
+(409, nothing written), clientMutationId replay/reuse refusal, open visit (423),
+expectedUserId, same-origin, audit (`diagram.create`, `diagram_version.create`). A diagram
+belongs to its visit: another visit cannot write to it. Tables are insert-only (triggers).
+
+*Private files:* PNG bytes are stored outside PostgreSQL and outside the web root in
+`FILE_STORAGE_DIR` (default `var/files`, git-ignored), write-once, under
+`patients/{patientId}/diagrams/{fileId}.png`; `patient_files` holds the metadata (name,
+type, size, SHA-256, patient, visit, user). They are served only by `GET /api/files/{id}`
+to signed-in users with `clinical.read`, `private, no-store`, and every read is audited
+(`patient_file.read`). Names follow §8.3: `2026-09-24_1030_LegDiagram_v01.png` (clinic
+time zone). The storage sits behind an interface so S3-compatible storage can replace it.
+
+*Placeholder templates:* the clinic's Leg (Front/Back) and Vein (Right Posterior, Central,
+Left Posterior) base images have not been supplied; the shipped SVGs are simple outlines
+labelled PLACEHOLDER. Replacing them means replacing the two files (same size) — earlier
+versions keep their own rendered PNGs.
+
+*Permissions:* draw/save = `clinical.write` (Doctor, Nurse/Assistant); view and open files =
+`clinical.read` (Admin read-only); Reception none.
+
+*Not in R4:* report insertion (R5 uses the latest saved Leg Diagram of the visit),
+external-editor round trip, S3 storage, backups of `FILE_STORAGE_DIR` (deployment, R6).

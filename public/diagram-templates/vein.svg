@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600">
+<rect width="900" height="600" fill="#fff"/>
+<text x="450" y="24" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="14" fill="#b0202e">PLACEHOLDER template — replace with the clinic&#39;s Vein Diagram (ADR-033)</text>
+<g fill="none" stroke="#333" stroke-width="2">
+  <path d="M80 70 C70 180 75 300 90 380 C95 450 90 500 100 540 L135 540 C130 480 135 420 138 360 C142 250 145 150 148 90"/>
+  <path d="M220 70 C230 180 225 300 210 380 C205 450 210 500 200 540 L165 540 C170 480 165 420 162 360 C158 250 155 150 152 90"/>
+  <path d="M80 70 Q150 40 220 70"/>
+</g>
+<text x="150" y="585" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="18" fill="#333">Right Posterior</text>
+<g fill="none" stroke="#333" stroke-width="2">
+  <path d="M380 70 C370 180 375 300 390 380 C395 450 390 500 400 540 L435 540 C430 480 435 420 438 360 C442 250 445 150 448 90"/>
+  <path d="M520 70 C530 180 525 300 510 380 C505 450 510 500 500 540 L465 540 C470 480 465 420 462 360 C458 250 455 150 452 90"/>
+  <path d="M380 70 Q450 40 520 70"/>
+</g>
+<text x="450" y="585" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="18" fill="#333">Central / front venous anatomy</text>
+<g fill="none" stroke="#333" stroke-width="2">
+  <path d="M680 70 C670 180 675 300 690 380 C695 450 690 500 700 540 L735 540 C730 480 735 420 738 360 C742 250 745 150 748 90"/>
+  <path d="M820 70 C830 180 825 300 810 380 C805 450 810 500 800 540 L765 540 C770 480 765 420 762 360 C758 250 755 150 752 90"/>
+  <path d="M680 70 Q750 40 820 70"/>
+</g>
+<text x="750" y="585" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="18" fill="#333">Left Posterior</text>
+</svg>

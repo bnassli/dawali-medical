@@ -203,3 +203,16 @@ verified backup. The seeded fields and section can stay unused or be retired.
 
 Audit actions added: `treatment_plan_item.create`, `treatment_plan_entry.create`,
 `treatment_plan_entry.update`.
+
+## R4 additions (ADR-033) — migration `0009_r4_diagrams.sql`
+
+| Table | Notes |
+|---|---|
+| `patient_files` | `id`, `patient_id`, `visit_id`, `kind` ('diagram'), `storage_key` (unique), `file_name`, `content_type`, `byte_size`, `sha256`, `created_by`, `created_at`. Metadata only; bytes live in `FILE_STORAGE_DIR`. Insert-only. |
+| `diagrams` | `id` (client-chosen uuid), `patient_id`, `visit_id`, `diagram_type` ('leg' \| 'vein'), `created_by`, `created_at`. Insert-only. |
+| `diagram_versions` | `id`, `diagram_id`, `version`, `strokes` (jsonb), `png_file_id` → `patient_files`, `client_mutation_id` (unique), `created_by`, `created_at`. Unique (`diagram_id`, `version`). Insert-only. |
+
+Rollback: see the migration header (destroys diagram records; the files in
+`FILE_STORAGE_DIR` are separate and must be backed up / removed deliberately).
+Audit actions added: `diagram.create`, `diagram_version.create`, `patient_file.read`.
+New env: `FILE_STORAGE_DIR` (default `var/files`).

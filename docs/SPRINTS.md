@@ -7,7 +7,8 @@ Sprint 3A: Past Medical Hx, Assessment Plan+ (data-driven clinical tabs; ADR-027
 R1a: Persistent Patient Header, Patient Search, V1 Create/Edit Patient, Inactive patients (ADR-028).
 R1b: Clinical tabs and Patient Search matched to the SonoSoft screens (ADR-029; PROMPT_R1B.md).
 R2: Treatment Plan — one plan per patient, SonoSoft layout, rows cancelled not deleted (ADR-030; PROMPT_R2.md).
-R3 (part 1): Laser Ablation and Follow Up Office Visit in SonoSoft layout (ADR-031). R3b: Post EVLT Comp Follow Up (ADR-032). The Comprehensive / General Clinical Exam follows.
+R3 (part 1): Laser Ablation and Follow Up Office Visit in SonoSoft layout (ADR-031). R3b: Post EVLT Comp Follow Up (ADR-032). The Comprehensive / General Clinical Exam follows (screenshot needed).
+R4: Diagram engine — Create Leg / Vein Diagram, in-app editor, versions, private files (ADR-033). Real base templates needed.
 
 ## V1 reconciliation (current plan)
 Source: `docs/FINAL_V1_REQUIREMENTS_RECONCILIATION.md` §15. It supersedes the former
