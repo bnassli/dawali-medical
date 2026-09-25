@@ -45,12 +45,14 @@ of the new UI (Product Owner decision, 2026-09-25).
 
 ## Reports
 
+The folder is `report-samples/`, not `reports/`: `.gitignore` blocks every `reports/` folder so real patient reports can never be committed. Keep it that way.
+
 | File | What it shows |
 | --- | --- |
-| `reports/sclerotherapy-report-a.jpg` | Sclerotherapy report: Template 1 (short procedure report), leg diagram with injection points |
-| `reports/sclerotherapy-report-b.jpg` | Sclerotherapy report, second patient, same template |
-| `reports/template2-venous-evaluation-report.jpg` | Template 2 (Initial Venous Consultation / Vascular Evaluation), both pages. The diagrams came out blank in SonoSoft |
-| `reports/initial-consultation-report.jpg` | Consultation report built from the Workup tabs above, with no ultrasound section |
+| `report-samples/sclerotherapy-report-a.jpg` | Sclerotherapy report: Template 1 (short procedure report), leg diagram with injection points |
+| `report-samples/sclerotherapy-report-b.jpg` | Sclerotherapy report, second patient, same template |
+| `report-samples/template2-venous-evaluation-report.jpg` | Template 2 (Initial Venous Consultation / Vascular Evaluation), both pages. The diagrams came out blank in SonoSoft |
+| `report-samples/initial-consultation-report.jpg` | Consultation report built from the Workup tabs above, with no ultrasound section |
 
 What the reports show about SonoSoft:
 
