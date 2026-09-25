@@ -7,6 +7,7 @@ import {
   clinicalOptions,
   clinicalSectionFields,
   clinicalSections,
+  patients,
   visits,
   type ClinicalEntryValue,
 } from "@/db/schema";
@@ -14,7 +15,15 @@ import { writeAudit } from "@/modules/audit/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { requirePermission } from "@/modules/permissions/service";
 import type { ActorContext } from "@/modules/permissions/types";
-import { FIELD_EXCLUSION_RULES, FIELD_TYPES, isSelectType } from "./definitions";
+import {
+  FEMALE_ONLY_FIELD_CODES,
+  FIELD_EXCLUSION_RULES,
+  FIELD_TYPES,
+  FIXED_CHOICES,
+  isSelectType,
+  NUMERIC_FIELD_RULES,
+  type NumericFieldRule,
+} from "./definitions";
 import {
   characterCount,
   MAX_FREE_TEXT_LENGTH,
@@ -159,7 +168,8 @@ export interface ClinicalFieldView {
 
 export interface ClinicalSectionView {
   section: { id: string; code: string; name: string };
-  visit: { id: string; patientId: string; status: string };
+  /** `patientSex` ('F' | 'M' | null) drives female-only fields (ADR-029). */
+  visit: { id: string; patientId: string; status: string; patientSex: string | null };
   fields: ClinicalFieldView[];
 }
 
@@ -206,8 +216,14 @@ export async function getClinicalSectionForVisit(
   });
 
   const [visit] = await db
-    .select({ id: visits.id, patientId: visits.patientId, status: visits.status })
+    .select({
+      id: visits.id,
+      patientId: visits.patientId,
+      status: visits.status,
+      patientSex: patients.sex,
+    })
     .from(visits)
+    .innerJoin(patients, eq(patients.id, visits.patientId))
     .where(eq(visits.id, visitId))
     .limit(1);
   if (!visit) throw new VisitNotFoundError(visitId);
@@ -465,6 +481,7 @@ async function saveInTransaction(
   }
 
   await assertNoExclusion(tx, visit.id, field, next);
+  await assertFemaleOnly(tx, visit.patientId, field, next);
 
   const version = currentVersion + 1;
   const [created] = await tx
@@ -690,6 +707,50 @@ async function assertNoExclusion(
   }
 }
 
+/**
+ * Female-only fields (FEMALE_ONLY_FIELD_CODES) refuse a non-empty value unless
+ * the patient's sex is 'F'. Clearing is always allowed, so a value left over
+ * from before a sex correction can still be removed (ADR-029).
+ */
+async function assertFemaleOnly(
+  tx: Database,
+  patientId: string,
+  field: typeof clinicalFieldDefinitions.$inferSelect,
+  next: ClinicalEntryValue,
+): Promise<void> {
+  if (!FEMALE_ONLY_FIELD_CODES.includes(field.code) || isEmptyValue(next)) return;
+  const [patient] = await tx
+    .select({ sex: patients.sex })
+    .from(patients)
+    .where(eq(patients.id, patientId))
+    .limit(1);
+  if (patient?.sex !== "F") {
+    throw new InvalidClinicalValueError(`"${field.label}" applies to female patients only.`);
+  }
+}
+
+/**
+ * Canonical decimal text for a number field: no leading zeros or trailing
+ * decimal zeros ("034.0" -> "34"), empty string for "no value".
+ */
+export function normalizeNumber(raw: string, rule: NumericFieldRule, label: string): string {
+  const text = raw.trim();
+  if (text === "") return "";
+  const pattern = rule.decimals > 0 ? new RegExp(`^\\d{1,6}(\\.\\d{1,${rule.decimals}})?$`) : /^\d{1,6}$/;
+  if (!pattern.test(text)) {
+    throw new InvalidClinicalValueError(
+      `"${label}" must be a number with at most ${rule.decimals} decimal place${rule.decimals === 1 ? "" : "s"}.`,
+    );
+  }
+  const n = Number(text);
+  if (n < rule.min || n > rule.max) {
+    throw new InvalidClinicalValueError(
+      `"${label}" must be between ${rule.min} and ${rule.max} ${rule.unit}.`,
+    );
+  }
+  return String(n);
+}
+
 async function normalizeValue(
   tx: Database,
   field: typeof clinicalFieldDefinitions.$inferSelect,
@@ -713,6 +774,24 @@ async function normalizeValue(
   }
   if (input.checked !== undefined) {
     throw new InvalidClinicalValueError(`Field "${field.label}" is not a checkbox.`);
+  }
+
+  if (field.fieldType === FIELD_TYPES.NUMBER || field.fieldType === FIELD_TYPES.CHOICE) {
+    if (optionIds.length > 0) {
+      throw new InvalidClinicalValueError(`Field "${field.label}" does not take options.`);
+    }
+    if (field.fieldType === FIELD_TYPES.NUMBER) {
+      const rule = NUMERIC_FIELD_RULES[field.code];
+      if (!rule) throw new InvalidClinicalValueError(`Field "${field.label}" is misconfigured.`);
+      return { optionIds: [], freeText: normalizeNumber(freeText, rule, field.label) };
+    }
+    const choices = FIXED_CHOICES[field.code] ?? [];
+    if (freeText !== "" && !choices.some((c) => c.value === freeText)) {
+      throw new InvalidClinicalValueError(
+        `"${field.label}" must be one of: ${choices.map((c) => c.value).join(", ")}.`,
+      );
+    }
+    return { optionIds: [], freeText };
   }
 
   if (field.fieldType === FIELD_TYPES.TEXT || field.fieldType === FIELD_TYPES.TEXTAREA) {

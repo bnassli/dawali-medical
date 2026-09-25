@@ -137,3 +137,50 @@ first. Normalised sex values are not reverted automatically; the raw values are 
 
 Audit actions added: `patient.deactivate`, `patient.reactivate`, `patient.sex_normalized`,
 `demographic_option.create`, `demographic_option.update`.
+
+## R1b additions (ADR-029) — migration `0007_r1b_sonosoft_reconciliation.sql`
+
+Configuration only, idempotent; no table or column changes and no clinical entry is
+inserted, updated or deleted. On a fresh database every statement is a no-op and the seed
+creates the R1b structure.
+
+| Change | Notes |
+|---|---|
+| Retire `past_medical_unknown`, `impression`, `recommendations`, `stockings_measurements` | `is_active = false`; their placements get `sort_order = 900 + sort_order` (shown last, read-only, only where a visit has history). |
+| Remove `family_history` placement from `subj_complaints_habits` | S1. The field and all entries stay; Past Medical Hx still shows it. |
+| `past_medical_additional_comments` textarea → select | New option list `past_medical_additional_comments`; value shape unchanged. |
+| New fields / placements (seed, not migration) | `symptoms_worse`, `family_history_vv`, `current_meds_none`, `allergies_no_known`, `family_history_unknown`, `female_statement`, `impression_1..8`, `impr_for_init_venous_interp`, `impression_list_style`, `recommendation_1..8`, `stockings_mid_thigh/mid_calf/mid_ankle/floor_to_gf/floor_to_knee`. |
+| New field types | `number` (canonical decimal text in `freeText`), `choice` (fixed value in `freeText`). `field_type` is free text, so no schema change. |
+
+Rollback of 0007 (take a backup first; entries written for the new fields are history and
+stay — the old fields simply become active again):
+
+```sql
+UPDATE clinical_field_definitions SET is_active = true
+ WHERE code IN ('past_medical_unknown','impression','recommendations','stockings_measurements');
+UPDATE clinical_section_fields sf SET sort_order = sf.sort_order - 900
+  FROM clinical_field_definitions f
+ WHERE f.id = sf.field_definition_id
+   AND f.code IN ('past_medical_unknown','impression','recommendations','stockings_measurements')
+   AND sf.sort_order >= 900;
+INSERT INTO clinical_section_fields (section_id, field_definition_id, sort_order)
+SELECT s.id, f.id, 14 FROM clinical_sections s, clinical_field_definitions f
+ WHERE s.code = 'subj_complaints_habits' AND f.code = 'family_history'
+ON CONFLICT DO NOTHING;
+UPDATE clinical_field_definitions SET field_type = 'textarea', option_list_id = NULL
+ WHERE code = 'past_medical_additional_comments';
+-- Hide the R1b fields in the old screens (the old seed never removes placements).
+UPDATE clinical_field_definitions SET is_active = false
+ WHERE code IN ('symptoms_worse','family_history_vv','current_meds_none','allergies_no_known',
+                'family_history_unknown','female_statement','impr_for_init_venous_interp',
+                'impression_list_style','stockings_mid_thigh','stockings_mid_calf',
+                'stockings_mid_ankle','stockings_floor_to_gf','stockings_floor_to_knee')
+    OR code ~ '^(impression|recommendation)_[1-8]$';
+```
+
+Then deploy the previous application version and run its seed (it resets every placement's
+sort order; its definitions expect the old structure). The R1b fields stay retired: visits
+that have R1b entries show them read-only, nothing is lost (the old UI does not know the
+`number`/`choice` types, so those values stay in the database but are not displayed). If
+Additional Comments entries were saved with list options after 0007, their option ids stay in
+history but the textarea shows only their free text.

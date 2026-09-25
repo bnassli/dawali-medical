@@ -5,6 +5,17 @@ export const FIELD_TYPES = {
   TEXTAREA: "textarea",
   /** Boolean flag stored as `checked` in the entry value (ADR-027). */
   CHECKBOX: "checkbox",
+  /**
+   * A number stored as canonical decimal text in `freeText` (ADR-029), e.g. "34.5".
+   * Range, decimals and unit come from NUMERIC_FIELD_RULES.
+   */
+  NUMBER: "number",
+  /**
+   * One of a few fixed, non-clinical presentation choices stored in `freeText`
+   * (ADR-029), e.g. "bullets" / "numbers". The values come from FIXED_CHOICES,
+   * not from an option list: they are not clinical dropdown options (rule #10).
+   */
+  CHOICE: "choice",
 } as const;
 
 export type FieldType = (typeof FIELD_TYPES)[keyof typeof FIELD_TYPES];
@@ -121,9 +132,9 @@ export function assertExclusionRulesConsistent(
  * order). No clinical option VALUES are defined here — dropdown options are
  * data (CLAUDE.md rule #10), created through "+ Add New".
  *
- * Section and field order follow docs/CLINICAL_TABS.md. Field types are a best
- * guess (no SonoSoft reference screens in the repo). Field CODES are durable
- * (reports and later tabs bind to them; see ADR-027 and PROMPT_SPRINT_3A.md).
+ * Section and field order follow docs/CLINICAL_TABS.md and, since R1b, the
+ * SonoSoft reference screens in docs/reference/sonosoft/ (ADR-029). Field CODES
+ * are durable (reports and later tabs bind to them; see ADR-027 and ADR-029).
  * Because clinical entries may already exist, the seed NEVER changes an
  * existing field's type, option list or free-text flag: such a change needs a
  * migration (ADR-026). Labels and placement order may be updated here.
@@ -132,63 +143,130 @@ export const SUBJ_COMPLAINTS_HABITS_SECTION_CODE = "subj_complaints_habits";
 export const PAST_MEDICAL_HX_SECTION_CODE = "past_medical_hx";
 export const ASSESSMENT_PLAN_SECTION_CODE = "assessment_plan";
 
+/** Assessment Plan+ shows 8 ordered Impression rows and 8 Recommendation rows (AP1/AP2). */
+export const IMPRESSION_ROWS = 8;
+export const RECOMMENDATION_ROWS = 8;
+
+function rowCodes(prefix: string, count: number): string[] {
+  return Array.from({ length: count }, (_, i) => `${prefix}_${i + 1}`);
+}
+
+/** One single-select field per row; all rows of a list share one option list. */
+function rowFields(
+  prefix: string,
+  label: string,
+  optionList: string,
+  count: number,
+): FieldDefinitionSeed[] {
+  return rowCodes(prefix, count).map((code, i) => ({
+    code,
+    label: `${label} ${i + 1}`,
+    type: FIELD_TYPES.SELECT,
+    optionList,
+  }));
+}
+
 export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
-  // --- Subj Complaints Habits (Sprint 2) ---
-  { code: "reason_for_visit", label: "Reason for Visit", type: FIELD_TYPES.SELECT },
+  // --- Subj Complaints Habits. Labels are SonoSoft's, word for word (R1b, ADR-029). ---
+  { code: "reason_for_visit", label: "Reason for visit", type: FIELD_TYPES.SELECT },
   { code: "problem_list", label: "Problem List", type: FIELD_TYPES.MULTISELECT },
   { code: "chief_complaints", label: "Chief Complaints", type: FIELD_TYPES.MULTISELECT },
-  { code: "characteristics", label: "Characteristics", type: FIELD_TYPES.MULTISELECT },
-  { code: "duration", label: "Duration", type: FIELD_TYPES.SELECT },
+  { code: "characteristics", label: "associated with", type: FIELD_TYPES.MULTISELECT },
+  { code: "duration", label: "How long?", type: FIELD_TYPES.SELECT },
+  {
+    code: "symptoms_worse",
+    label: "Symptoms getting worse over time?",
+    type: FIELD_TYPES.CHECKBOX,
+  },
   { code: "progression", label: "Progression", type: FIELD_TYPES.SELECT },
-  { code: "daily_activity_impact", label: "Daily Activity Impact", type: FIELD_TYPES.SELECT },
-  { code: "chest_comments", label: "Chest Comments", type: FIELD_TYPES.TEXTAREA },
-  { code: "comments", label: "Comments", type: FIELD_TYPES.TEXTAREA },
+  {
+    code: "daily_activity_impact",
+    label: "Affects daily living activities?",
+    type: FIELD_TYPES.SELECT,
+  },
+  { code: "chest_comments", label: "Chest comments", type: FIELD_TYPES.TEXTAREA },
+  { code: "comments", label: "Comment", type: FIELD_TYPES.TEXTAREA },
   { code: "aggravating_factors", label: "Aggravating Factors", type: FIELD_TYPES.MULTISELECT },
   { code: "relieving_factors", label: "Relieving Factors", type: FIELD_TYPES.MULTISELECT },
   {
     code: "previous_conservative_therapy",
-    label: "Previous Conservative Therapy",
+    label: "Previous conservative therapy",
     type: FIELD_TYPES.MULTISELECT,
   },
   {
     code: "previous_conservative_therapy_duration",
-    label: "Previous Conservative Therapy Duration",
+    label: "How long? (therapy)",
     type: FIELD_TYPES.SELECT,
   },
+  // Family History (general) is shown only in Past Medical Hx as "Family Medical Hx".
+  // Subj asks the separate varicose-vein question (S1, ADR-029).
   { code: "family_history", label: "Family History", type: FIELD_TYPES.MULTISELECT },
+  { code: "family_history_vv", label: "Family history of VV?", type: FIELD_TYPES.SELECT },
   { code: "alcohol", label: "Alcohol", type: FIELD_TYPES.SELECT },
   { code: "exercise", label: "Exercise", type: FIELD_TYPES.SELECT },
-  { code: "tobacco", label: "Tobacco", type: FIELD_TYPES.SELECT },
-  { code: "pain_meds", label: "Pain Meds", type: FIELD_TYPES.MULTISELECT },
+  { code: "tobacco", label: "Tobacco use", type: FIELD_TYPES.SELECT },
+  { code: "pain_meds", label: "Pain Meds for CC", type: FIELD_TYPES.MULTISELECT },
   { code: "current_meds", label: "Current Meds", type: FIELD_TYPES.MULTISELECT },
+  { code: "current_meds_none", label: "None", type: FIELD_TYPES.CHECKBOX },
   { code: "allergies", label: "Allergies", type: FIELD_TYPES.MULTISELECT },
+  { code: "allergies_no_known", label: "No known", type: FIELD_TYPES.CHECKBOX },
 
-  // --- Past Medical Hx (Sprint 3A). "Family Medical Hx" is NOT defined here: it
-  // is the existing global `family_history`, placed in this tab (one source). ---
+  // --- Past Medical Hx ---
   { code: "past_medical_history", label: "Past Medical Hx", type: FIELD_TYPES.MULTISELECT },
-  { code: "past_medical_unknown", label: "Unknown", type: FIELD_TYPES.CHECKBOX },
+  // Unknown sits under Family Medical Hx in SonoSoft (P1). Replaces the retired
+  // `past_medical_unknown` (migration 0007), which keeps its history read-only.
+  { code: "family_history_unknown", label: "Unknown", type: FIELD_TYPES.CHECKBOX },
   { code: "prior_test_results", label: "Prior Test Results", type: FIELD_TYPES.TEXTAREA },
   {
+    // Dropdown with free text in SonoSoft (P3); was a textarea (type changed by migration 0007).
     code: "past_medical_additional_comments",
     label: "Additional Comments",
-    type: FIELD_TYPES.TEXTAREA,
+    type: FIELD_TYPES.SELECT,
   },
   { code: "surgical_history", label: "Surgical Hx", type: FIELD_TYPES.MULTISELECT },
+  {
+    code: "female_statement",
+    label: "If FEMALE select the appropriate statement; otherwise disregard",
+    type: FIELD_TYPES.SELECT,
+  },
 
-  // --- Assessment Plan+ (Sprint 3A) ---
-  { code: "impression", label: "Impression", type: FIELD_TYPES.MULTISELECT },
-  { code: "recommendations", label: "Recommendations", type: FIELD_TYPES.MULTISELECT },
-  { code: "stockings_type", label: "Stockings Type", type: FIELD_TYPES.SELECT },
-  { code: "stockings_compression", label: "Stockings Compression", type: FIELD_TYPES.SELECT },
-  { code: "stockings_gender", label: "Stockings Gender", type: FIELD_TYPES.SELECT },
-  { code: "stockings_color", label: "Stockings Color", type: FIELD_TYPES.SELECT },
-  { code: "stockings_measurements", label: "Stockings Measurements", type: FIELD_TYPES.TEXTAREA },
+  // --- Assessment Plan+. Ordered rows share one option list per concept (AP1/AP2). ---
+  ...rowFields("impression", "Impression", "impression", IMPRESSION_ROWS),
+  {
+    code: "impr_for_init_venous_interp",
+    label: "Impr for Init Venous Interp",
+    type: FIELD_TYPES.SELECT,
+  },
+  { code: "impression_list_style", label: "Bullets / Numbers", type: FIELD_TYPES.CHOICE },
+  ...rowFields("recommendation", "Recommendation", "recommendations", RECOMMENDATION_ROWS),
+  { code: "stockings_type", label: "Type", type: FIELD_TYPES.SELECT },
+  { code: "stockings_compression", label: "Compression", type: FIELD_TYPES.SELECT },
+  { code: "stockings_gender", label: "Gender", type: FIELD_TYPES.SELECT },
+  { code: "stockings_color", label: "Color", type: FIELD_TYPES.SELECT },
+  { code: "stockings_mid_thigh", label: "Mid Thigh", type: FIELD_TYPES.NUMBER },
+  { code: "stockings_mid_calf", label: "Mid Calf", type: FIELD_TYPES.NUMBER },
+  { code: "stockings_mid_ankle", label: "Mid Ankle", type: FIELD_TYPES.NUMBER },
+  { code: "stockings_floor_to_gf", label: "Floor To GF", type: FIELD_TYPES.NUMBER },
+  { code: "stockings_floor_to_knee", label: "Floor To Knee", type: FIELD_TYPES.NUMBER },
   {
     code: "assessment_additional_comments",
     label: "Additional Comments",
     type: FIELD_TYPES.TEXTAREA,
   },
 ];
+
+/**
+ * Fields retired by R1b (migration 0007 sets is_active = false and moves their
+ * placements to the end of the tab). They are no longer defined here, so the
+ * seed never re-creates them on a fresh database; on existing databases their
+ * history stays visible read-only (ADR-026).
+ */
+export const RETIRED_FIELD_CODES = [
+  "past_medical_unknown",
+  "impression",
+  "recommendations",
+  "stockings_measurements",
+] as const;
 
 /**
  * EXPLICIT placement per section. Never derive a section's fields from the
@@ -201,6 +279,7 @@ export const SUBJ_COMPLAINTS_HABITS_FIELD_CODES = [
   "chief_complaints",
   "characteristics",
   "duration",
+  "symptoms_worse",
   "progression",
   "daily_activity_impact",
   "chest_comments",
@@ -209,34 +288,42 @@ export const SUBJ_COMPLAINTS_HABITS_FIELD_CODES = [
   "relieving_factors",
   "previous_conservative_therapy",
   "previous_conservative_therapy_duration",
-  "family_history",
+  "family_history_vv",
   "alcohol",
   "exercise",
   "tobacco",
   "pain_meds",
   "current_meds",
+  "current_meds_none",
   "allergies",
+  "allergies_no_known",
 ];
 
-/** docs/CLINICAL_TABS.md order; the female-specific field is deferred (ADR-027). */
+/** SonoSoft order (P1-P3): Unknown under Family Medical Hx; the female statement last. */
 export const PAST_MEDICAL_HX_FIELD_CODES = [
   "past_medical_history",
   "family_history",
-  "past_medical_unknown",
+  "family_history_unknown",
   "prior_test_results",
   "past_medical_additional_comments",
   "surgical_history",
+  "female_statement",
 ];
 
-/** Impression -> Recommendations -> Stockings detail -> Additional Comments. */
 export const ASSESSMENT_PLAN_FIELD_CODES = [
-  "impression",
-  "recommendations",
+  ...rowCodes("impression", IMPRESSION_ROWS),
+  "impr_for_init_venous_interp",
+  "impression_list_style",
+  ...rowCodes("recommendation", RECOMMENDATION_ROWS),
   "stockings_type",
   "stockings_compression",
   "stockings_gender",
   "stockings_color",
-  "stockings_measurements",
+  "stockings_mid_thigh",
+  "stockings_mid_calf",
+  "stockings_mid_ankle",
+  "stockings_floor_to_gf",
+  "stockings_floor_to_knee",
   "assessment_additional_comments",
 ];
 
@@ -262,10 +349,67 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
   },
 ];
 
-/** "Unknown" past medical history cannot coexist with Past Medical Hx values. */
+/**
+ * A checkbox that rules out values in another field on the same visit
+ * (ADR-027 mechanism). Enforced by the server inside the visit lock; the UI
+ * only disables the counterpart.
+ */
 export const FIELD_EXCLUSION_RULES: ExclusionRule[] = [
-  { flag: "past_medical_unknown", excludes: ["past_medical_history"] },
+  { flag: "family_history_unknown", excludes: ["family_history"] },
+  { flag: "current_meds_none", excludes: ["current_meds"] },
+  { flag: "allergies_no_known", excludes: ["allergies"] },
 ];
+
+/**
+ * Fields that may only hold a value for a female patient (`patients.sex = 'F'`).
+ * The UI keeps them in their SonoSoft position but disabled otherwise; the
+ * server refuses a non-empty value (P2, ADR-029). Clearing is always allowed.
+ */
+export const FEMALE_ONLY_FIELD_CODES: readonly string[] = ["female_statement"];
+
+export interface NumericFieldRule {
+  min: number;
+  max: number;
+  /** Maximum digits after the decimal point. */
+  decimals: number;
+  unit: string;
+}
+
+/** Stocking measurements: one set per visit, centimetres (AP5; unit is an open PO question). */
+export const STOCKING_MEASUREMENT_UNIT = "cm";
+const STOCKING_RULE: NumericFieldRule = { min: 0, max: 200, decimals: 1, unit: STOCKING_MEASUREMENT_UNIT };
+
+export const NUMERIC_FIELD_RULES: Record<string, NumericFieldRule> = {
+  stockings_mid_thigh: STOCKING_RULE,
+  stockings_mid_calf: STOCKING_RULE,
+  stockings_mid_ankle: STOCKING_RULE,
+  stockings_floor_to_gf: STOCKING_RULE,
+  stockings_floor_to_knee: STOCKING_RULE,
+};
+
+/** Fixed values of `choice` fields (presentation only, never clinical options). */
+export const FIXED_CHOICES: Record<string, readonly { value: string; label: string }[]> = {
+  impression_list_style: [
+    { value: "bullets", label: "Bullets" },
+    { value: "numbers", label: "Numbers" },
+  ],
+};
+
+/** Throws if a number/choice field has no rule, or a rule names an unknown field. */
+export function assertFieldRulesConsistent(defs: ClinicalDefinitions): void {
+  const byCode = new Map(defs.fields.map((f) => [f.code, f]));
+  for (const f of defs.fields) {
+    if (f.type === FIELD_TYPES.NUMBER && !NUMERIC_FIELD_RULES[f.code]) {
+      throw new Error(`Number field "${f.code}" has no NUMERIC_FIELD_RULES entry.`);
+    }
+    if (f.type === FIELD_TYPES.CHOICE && !FIXED_CHOICES[f.code]?.length) {
+      throw new Error(`Choice field "${f.code}" has no FIXED_CHOICES entry.`);
+    }
+  }
+  for (const code of [...Object.keys(NUMERIC_FIELD_RULES), ...Object.keys(FIXED_CHOICES), ...FEMALE_ONLY_FIELD_CODES]) {
+    if (!byCode.has(code)) throw new Error(`Field rule names unknown field "${code}".`);
+  }
+}
 
 export const DEFAULT_CLINICAL_DEFINITIONS: ClinicalDefinitions = {
   fields: CLINICAL_FIELD_DEFINITIONS,
@@ -274,3 +418,4 @@ export const DEFAULT_CLINICAL_DEFINITIONS: ClinicalDefinitions = {
 
 assertDefinitionsConsistent(DEFAULT_CLINICAL_DEFINITIONS);
 assertExclusionRulesConsistent(DEFAULT_CLINICAL_DEFINITIONS, FIELD_EXCLUSION_RULES);
+assertFieldRulesConsistent(DEFAULT_CLINICAL_DEFINITIONS);

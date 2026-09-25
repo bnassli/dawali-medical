@@ -11,8 +11,10 @@ import {
   ASSESSMENT_PLAN_FIELD_CODES,
   ASSESSMENT_PLAN_SECTION_CODE,
   DEFAULT_CLINICAL_DEFINITIONS,
+  FEMALE_ONLY_FIELD_CODES,
   FIELD_EXCLUSION_RULES,
   FIELD_TYPES,
+  optionListCodeFor,
   PAST_MEDICAL_HX_FIELD_CODES,
   PAST_MEDICAL_HX_SECTION_CODE,
   SUBJ_COMPLAINTS_HABITS_FIELD_CODES,
@@ -34,31 +36,34 @@ import type { ActorContext } from "@/modules/permissions/types";
 import { createVisit } from "@/modules/visits/service";
 import { createTestUser, openTestDb, saveCurrent, uniqueSuffix } from "./helpers";
 
-// docs/CLINICAL_TABS.md, "Subj Complaints Habits" — must be exactly unchanged by Sprint 3A.
+// SonoSoft labels, word for word (R1b, ADR-029). docs/reference/sonosoft/tabs/workup-01-*.
 const SUBJ_LABELS = [
-  "Reason for Visit",
+  "Reason for visit",
   "Problem List",
   "Chief Complaints",
-  "Characteristics",
-  "Duration",
+  "associated with",
+  "How long?",
+  "Symptoms getting worse over time?",
   "Progression",
-  "Daily Activity Impact",
-  "Chest Comments",
-  "Comments",
+  "Affects daily living activities?",
+  "Chest comments",
+  "Comment",
   "Aggravating Factors",
   "Relieving Factors",
-  "Previous Conservative Therapy",
-  "Previous Conservative Therapy Duration",
-  "Family History",
+  "Previous conservative therapy",
+  "How long? (therapy)",
+  "Family history of VV?",
   "Alcohol",
   "Exercise",
-  "Tobacco",
-  "Pain Meds",
+  "Tobacco use",
+  "Pain Meds for CC",
   "Current Meds",
+  "None",
   "Allergies",
+  "No known",
 ];
 
-// docs/CLINICAL_TABS.md, "Past Medical Hx" (female-specific field deferred).
+// SonoSoft order (R1b): Unknown under Family Medical Hx; the female statement last.
 const PMH_LABELS = [
   "Past Medical Hx",
   "Family Medical Hx",
@@ -66,17 +71,24 @@ const PMH_LABELS = [
   "Prior Test Results",
   "Additional Comments",
   "Surgical Hx",
+  "If FEMALE select the appropriate statement; otherwise disregard",
 ];
 
-// docs/CLINICAL_TABS.md, "Assessment Plan+".
+const rows = (label: string) => Array.from({ length: 8 }, (_, i) => `${label} ${i + 1}`);
 const ASSESSMENT_LABELS = [
-  "Impression",
-  "Recommendations",
-  "Stockings Type",
-  "Stockings Compression",
-  "Stockings Gender",
-  "Stockings Color",
-  "Stockings Measurements",
+  ...rows("Impression"),
+  "Impr for Init Venous Interp",
+  "Bullets / Numbers",
+  ...rows("Recommendation"),
+  "Type",
+  "Compression",
+  "Gender",
+  "Color",
+  "Mid Thigh",
+  "Mid Calf",
+  "Mid Ankle",
+  "Floor To GF",
+  "Floor To Knee",
   "Additional Comments",
 ];
 
@@ -85,32 +97,40 @@ const STOCKING_CODES = [
   "stockings_compression",
   "stockings_gender",
   "stockings_color",
-  "stockings_measurements",
+  "stockings_mid_thigh",
+  "stockings_mid_calf",
+  "stockings_mid_ankle",
+  "stockings_floor_to_gf",
+  "stockings_floor_to_knee",
 ];
 
 describe("definitions (pure)", () => {
-  it("every section places an explicit list; Subj is exactly its 20 fields, none of the new ones", () => {
-    expect(SUBJ_COMPLAINTS_HABITS_FIELD_CODES).toHaveLength(20);
+  it("every section places an explicit list; Subj has its 23 SonoSoft fields and no other tab's", () => {
+    expect(SUBJ_COMPLAINTS_HABITS_FIELD_CODES).toHaveLength(23);
     const subj = DEFAULT_CLINICAL_DEFINITIONS.sections.find(
       (s) => s.code === SUBJ_COMPLAINTS_HABITS_SECTION_CODE,
     );
     expect(subj?.fieldCodes).toEqual(SUBJ_COMPLAINTS_HABITS_FIELD_CODES);
     for (const code of [...PAST_MEDICAL_HX_FIELD_CODES, ...ASSESSMENT_PLAN_FIELD_CODES]) {
-      if (code === "family_history") continue; // the one shared concept
       expect(SUBJ_COMPLAINTS_HABITS_FIELD_CODES).not.toContain(code);
     }
   });
 
-  it("Family Medical Hx is family_history (shared), not a second field", () => {
+  it("S1: Family Medical Hx is family_history (Past Medical Hx only); Subj asks the separate VV question", () => {
     const codes = DEFAULT_CLINICAL_DEFINITIONS.fields.map((f) => f.code);
-    expect(codes.filter((c) => c.includes("family"))).toEqual(["family_history"]);
+    expect(codes.filter((c) => c.includes("family")).sort()).toEqual(
+      ["family_history", "family_history_unknown", "family_history_vv"].sort(),
+    );
     expect(PAST_MEDICAL_HX_FIELD_CODES).toContain("family_history");
-    expect(SUBJ_COMPLAINTS_HABITS_FIELD_CODES).toContain("family_history");
+    expect(SUBJ_COMPLAINTS_HABITS_FIELD_CODES).not.toContain("family_history");
+    expect(SUBJ_COMPLAINTS_HABITS_FIELD_CODES).toContain("family_history_vv");
   });
 
-  it("no female-specific field is defined (deferred until a SonoSoft reference exists)", () => {
-    const text = DEFAULT_CLINICAL_DEFINITIONS.fields.map((f) => `${f.code} ${f.label}`).join("|");
-    expect(text).not.toMatch(/female|women|gyn|pregnan|obstet|menstr/i);
+  it("P2: the female statement is a select, last in Past Medical Hx, and female-only", () => {
+    const f = DEFAULT_CLINICAL_DEFINITIONS.fields.find((x) => x.code === "female_statement");
+    expect(f?.type).toBe(FIELD_TYPES.SELECT);
+    expect(PAST_MEDICAL_HX_FIELD_CODES.at(-1)).toBe("female_statement");
+    expect(FEMALE_ONLY_FIELD_CODES).toEqual(["female_statement"]);
   });
 
   it("rejects a relabel of a field the section does not place, and an empty label", () => {
@@ -143,18 +163,21 @@ describe("definitions (pure)", () => {
       assertExclusionRulesConsistent(defs, [{ flag: "comments", excludes: ["allergies"] }]),
     ).toThrow(/checkbox/);
     expect(() =>
-      assertExclusionRulesConsistent(defs, [{ flag: "past_medical_unknown", excludes: ["nope"] }]),
+      assertExclusionRulesConsistent(defs, [{ flag: "family_history_unknown", excludes: ["nope"] }]),
     ).toThrow(/unknown field/);
     expect(() =>
-      assertExclusionRulesConsistent(defs, [{ flag: "past_medical_unknown", excludes: [] }]),
+      assertExclusionRulesConsistent(defs, [{ flag: "family_history_unknown", excludes: [] }]),
     ).toThrow(/excludes nothing/);
   });
 
-  it("Unknown is a checkbox and only Past Medical Hx is excluded by it", () => {
-    const unknown = DEFAULT_CLINICAL_DEFINITIONS.fields.find((f) => f.code === "past_medical_unknown");
+  it("P1/S5/S6: Unknown excludes Family Medical Hx; None and No known exclude their lists", () => {
+    const unknown = DEFAULT_CLINICAL_DEFINITIONS.fields.find((f) => f.code === "family_history_unknown");
     expect(unknown?.type).toBe(FIELD_TYPES.CHECKBOX);
+    expect(DEFAULT_CLINICAL_DEFINITIONS.fields.find((f) => f.code === "past_medical_unknown")).toBeUndefined();
     expect(FIELD_EXCLUSION_RULES).toEqual([
-      { flag: "past_medical_unknown", excludes: ["past_medical_history"] },
+      { flag: "family_history_unknown", excludes: ["family_history"] },
+      { flag: "current_meds_none", excludes: ["current_meds"] },
+      { flag: "allergies_no_known", excludes: ["allergies"] },
     ]);
   });
 });
@@ -251,7 +274,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       await expect(listClinicalSections(db, reception)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
-    it("Subj Complaints Habits is unchanged: exactly the 20 fields, in order", async () => {
+    it("Subj Complaints Habits: exactly its 23 fields with SonoSoft labels, in order", async () => {
       const d = await doctor();
       const visit = await newVisit(d);
       const subj = await view(d, visit.id, SUBJ_COMPLAINTS_HABITS_SECTION_CODE);
@@ -270,24 +293,30 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       expect(assessment.fields.map((f) => f.code)).toEqual(ASSESSMENT_PLAN_FIELD_CODES);
     });
 
-    it("field types: Unknown is a checkbox; Stockings are single-select lists plus a textarea", async () => {
+    it("field types: Unknown is a checkbox; rows are selects; measurements are numbers", async () => {
       const d = await doctor();
       const visit = await newVisit(d);
       const pmh = await view(d, visit.id, PAST_MEDICAL_HX_SECTION_CODE);
       const type = (code: string) => pmh.fields.find((f) => f.code === code)?.fieldType;
-      expect(type("past_medical_unknown")).toBe("checkbox");
+      expect(type("family_history_unknown")).toBe("checkbox");
+      expect(type("past_medical_additional_comments")).toBe("select");
+      expect(type("female_statement")).toBe("select");
       expect(type("past_medical_history")).toBe("multiselect");
       expect(type("surgical_history")).toBe("multiselect");
       expect(type("prior_test_results")).toBe("textarea");
 
       const a = await view(d, visit.id, ASSESSMENT_PLAN_SECTION_CODE);
       const at = (code: string) => a.fields.find((f) => f.code === code)?.fieldType;
-      expect(at("impression")).toBe("multiselect");
-      expect(at("recommendations")).toBe("multiselect");
+      for (let i = 1; i <= 8; i++) {
+        expect(at(`impression_${i}`)).toBe("select");
+        expect(at(`recommendation_${i}`)).toBe("select");
+      }
+      expect(at("impr_for_init_venous_interp")).toBe("select");
+      expect(at("impression_list_style")).toBe("choice");
       for (const code of ["stockings_type", "stockings_compression", "stockings_gender", "stockings_color"]) {
         expect(at(code)).toBe("select");
       }
-      expect(at("stockings_measurements")).toBe("textarea");
+      for (const code of STOCKING_CODES.slice(4)) expect(at(code), code).toBe("number");
     });
 
     it("the seed creates option lists for the new choice fields but no option VALUES (dynamic lists only)", async () => {
@@ -296,10 +325,16 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
           [...PAST_MEDICAL_HX_FIELD_CODES, ...ASSESSMENT_PLAN_FIELD_CODES].includes(f.code) &&
           (f.type === FIELD_TYPES.SELECT || f.type === FIELD_TYPES.MULTISELECT),
       );
-      expect(choice.map((f) => f.code).sort()).toEqual(
+      const listCodes = [
+        ...new Set(choice.map((f) => optionListCodeFor(f)).filter((c): c is string => c !== null)),
+      ];
+      expect(listCodes.sort()).toEqual(
         [
           "family_history",
+          "female_statement",
+          "impr_for_init_venous_interp",
           "impression",
+          "past_medical_additional_comments",
           "past_medical_history",
           "recommendations",
           "stockings_color",
@@ -309,7 +344,8 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
           "surgical_history",
         ].sort(),
       );
-      for (const f of choice) {
+      for (const code of listCodes) {
+        const f = { code };
         const lists = await db.execute<{ id: string }>(
           sql`SELECT id FROM clinical_option_lists WHERE code = ${f.code}`,
         );
@@ -334,45 +370,53 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
     });
   });
 
-  describe("Family Medical Hx shares family_history (one source of truth)", () => {
-    it("same field, one version stream, shown as 'Family Medical Hx' here and 'Family History' in Subj", async () => {
+  describe("S1: Family Medical Hx and Family history of VV are separate fields", () => {
+    it("family_history is shown only in Past Medical Hx; Subj's VV question has its own stream", async () => {
       const d = await doctor();
       const visit = await newVisit(d);
-      const fid = await fieldId("family_history");
-      const opt = await option(d, "family_history", `Father DVT ${uniqueSuffix()}`);
+      const s = uniqueSuffix();
+      const general = await option(d, "family_history", `Mother, sister ${s}`);
+      const vv = await option(d, "family_history_vv", `not sure ${s}`);
 
-      await saveCurrent(db, d, { visitId: visit.id, fieldId: fid, optionIds: [opt.id], freeText: "" });
+      await saveCurrent(db, d, {
+        visitId: visit.id,
+        fieldId: await fieldId("family_history"),
+        optionIds: [general.id],
+        freeText: "",
+      });
+      await saveCurrent(db, d, {
+        visitId: visit.id,
+        fieldId: await fieldId("family_history_vv"),
+        optionIds: [vv.id],
+        freeText: "",
+      });
 
       const subj = await view(d, visit.id, SUBJ_COMPLAINTS_HABITS_SECTION_CODE);
       const pmh = await view(d, visit.id, PAST_MEDICAL_HX_SECTION_CODE);
-      const inSubj = subj.fields.find((f) => f.code === "family_history");
-      const inPmh = pmh.fields.find((f) => f.code === "family_history");
-      expect(inSubj?.label).toBe("Family History");
-      expect(inPmh?.label).toBe("Family Medical Hx");
-      expect(inPmh?.id).toBe(inSubj?.id);
-      expect(inPmh?.version).toBe(1);
-      expect(inPmh?.value).toEqual(inSubj?.value);
-      expect(inPmh?.options.map((o) => o.id)).toEqual(inSubj?.options.map((o) => o.id));
-
-      // Editing "from the other tab" continues the SAME stream (v2), no second field.
-      await saveCurrent(db, d, { visitId: visit.id, fieldId: fid, optionIds: [], freeText: "none known" });
-      expect((await history(visit.id, "family_history")).map((r) => r.version)).toEqual([1, 2]);
-      const again = await view(d, visit.id, SUBJ_COMPLAINTS_HABITS_SECTION_CODE);
-      expect(again.fields.find((f) => f.code === "family_history")?.value.freeText).toBe("none known");
+      expect(subj.fields.find((f) => f.code === "family_history")).toBeUndefined();
+      expect(subj.fields.find((f) => f.code === "family_history_vv")?.value.optionIds).toEqual([vv.id]);
+      expect(pmh.fields.find((f) => f.code === "family_history")?.label).toBe("Family Medical Hx");
+      expect(pmh.fields.find((f) => f.code === "family_history")?.value.optionIds).toEqual([general.id]);
+      // separate lists: neither option leaks into the other field
+      expect(subj.fields.find((f) => f.code === "family_history_vv")?.options.map((o) => o.id)).not.toContain(
+        general.id,
+      );
+      expect((await history(visit.id, "family_history")).map((r) => r.version)).toEqual([1]);
+      expect((await history(visit.id, "family_history_vv")).map((r) => r.version)).toEqual([1]);
     });
   });
 
   describe("persistence, option lists and free text", () => {
-    it("Impression and Recommendations: reusable dynamic options plus visit-only free text, separate lists", async () => {
+    it("Impression and Recommendation rows: reusable dynamic options plus visit-only free text, separate lists", async () => {
       const d = await doctor();
       const visit = await newVisit(d);
       const s = uniqueSuffix();
-      const imp = await option(d, "impression", `Varicose veins ${s}`);
-      const rec = await option(d, "recommendations", `Compression ${s}`);
+      const imp = await option(d, "impression_1", `Varicose veins ${s}`);
+      const rec = await option(d, "recommendation_1", `Compression ${s}`);
 
       const a = await view(d, visit.id, ASSESSMENT_PLAN_SECTION_CODE);
-      const impField = a.fields.find((f) => f.code === "impression");
-      const recField = a.fields.find((f) => f.code === "recommendations");
+      const impField = a.fields.find((f) => f.code === "impression_1");
+      const recField = a.fields.find((f) => f.code === "recommendation_1");
       // lists are independent: one field's option never leaks into the other
       expect(impField?.options.map((o) => o.id)).toContain(imp.id);
       expect(impField?.options.map((o) => o.id)).not.toContain(rec.id);
@@ -381,12 +425,12 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
 
       await saveCurrent(db, d, {
         visitId: visit.id,
-        fieldId: await fieldId("impression"),
+        fieldId: await fieldId("impression_1"),
         optionIds: [imp.id],
         freeText: `visit-only wording ${s}`,
       });
       const after = await view(d, visit.id, ASSESSMENT_PLAN_SECTION_CODE);
-      const saved = after.fields.find((f) => f.code === "impression");
+      const saved = after.fields.find((f) => f.code === "impression_1");
       expect(saved?.value).toEqual({ optionIds: [imp.id], freeText: `visit-only wording ${s}` });
       // the free text never became a permanent option
       expect(saved?.options.map((o) => o.label)).not.toContain(`visit-only wording ${s}`);
@@ -435,27 +479,28 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       });
       await saveCurrent(db, d, {
         visitId: visit.id,
-        fieldId: await fieldId("stockings_measurements"),
+        fieldId: await fieldId("stockings_mid_calf"),
         optionIds: [],
-        freeText: "Ankle 22 cm, calf 36 cm",
+        freeText: "36",
       });
 
       const a = await view(d, visit.id, ASSESSMENT_PLAN_SECTION_CODE);
       const by = (code: string) => a.fields.find((f) => f.code === code);
       expect(by("stockings_type")?.version).toBe(1);
-      expect(by("stockings_measurements")?.version).toBe(1);
-      for (const code of ["stockings_compression", "stockings_gender", "stockings_color"]) {
+      expect(by("stockings_mid_calf")?.version).toBe(1);
+      expect(by("stockings_mid_calf")?.value.freeText).toBe("36");
+      for (const code of STOCKING_CODES.filter((c) => c !== "stockings_type" && c !== "stockings_mid_calf")) {
         expect(by(code)?.version, code).toBe(0);
         expect(by(code)?.value, code).toEqual({ optionIds: [], freeText: "" });
       }
       // Each field has its own history and its own audit trail; nothing demographic is copied in.
       const audits = await auditsFor(visit.id);
       expect(audits.map((r) => (r.metadata as { fieldCode: string }).fieldCode).sort()).toEqual(
-        ["stockings_measurements", "stockings_type"],
+        ["stockings_mid_calf", "stockings_type"],
       );
       for (const code of STOCKING_CODES) {
         expect((await history(visit.id, code)).length, code).toBe(
-          code === "stockings_type" || code === "stockings_measurements" ? 1 : 0,
+          code === "stockings_type" || code === "stockings_mid_calf" ? 1 : 0,
         );
       }
     });
@@ -477,17 +522,19 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
     });
   });
 
-  describe('"Unknown" is exclusive with Past Medical Hx values', () => {
+  // P1: "Unknown" sits under Family Medical Hx in SonoSoft. Variable names keep
+  // "pmh" for the field it excludes, which is now family_history.
+  describe('"Unknown" is exclusive with Family Medical Hx values', () => {
     async function setup() {
       const d = await doctor();
       const visit = await newVisit(d);
-      const pmhOpt = await option(d, "past_medical_history", `Hypertension ${uniqueSuffix()}`);
+      const pmhOpt = await option(d, "family_history", `Mother DVT ${uniqueSuffix()}`);
       return {
         d,
         visit,
         pmhOpt,
-        unknownId: await fieldId("past_medical_unknown"),
-        pmhId: await fieldId("past_medical_history"),
+        unknownId: await fieldId("family_history_unknown"),
+        pmhId: await fieldId("family_history"),
       };
     }
 
@@ -510,7 +557,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       });
       expect(second).toMatchObject({ changed: true, version: 2, value: { checked: false } });
 
-      expect((await history(visit.id, "past_medical_unknown")).map((r) => r.value.checked)).toEqual([
+      expect((await history(visit.id, "family_history_unknown")).map((r) => r.value.checked)).toEqual([
         true,
         false,
       ]);
@@ -520,7 +567,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       expect(audits[1]?.after).toMatchObject({ version: 2, value: { checked: false } });
     });
 
-    it("cannot be checked while Past Medical Hx has options or free text; nothing is written", async () => {
+    it("cannot be checked while Family Medical Hx has options or free text; nothing is written", async () => {
       const { d, visit, pmhOpt, unknownId, pmhId } = await setup();
       await saveCurrent(db, d, { visitId: visit.id, fieldId: pmhId, optionIds: [pmhOpt.id], freeText: "" });
       const before = await auditsFor(visit.id);
@@ -528,7 +575,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       await expect(
         saveCurrent(db, d, { visitId: visit.id, fieldId: unknownId, optionIds: [], freeText: "", checked: true }),
       ).rejects.toBeInstanceOf(ClinicalExclusionError);
-      expect(await history(visit.id, "past_medical_unknown")).toHaveLength(0);
+      expect(await history(visit.id, "family_history_unknown")).toHaveLength(0);
       expect(await auditsFor(visit.id)).toHaveLength(before.length);
 
       // free text alone counts as a value too
@@ -549,7 +596,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       expect(ok.changed).toBe(true);
     });
 
-    it("Past Medical Hx cannot get values while Unknown is checked; unchecking re-enables it", async () => {
+    it("Family Medical Hx cannot get values while Unknown is checked; unchecking re-enables it", async () => {
       const { d, visit, pmhOpt, unknownId, pmhId } = await setup();
       await saveCurrent(db, d, { visitId: visit.id, fieldId: unknownId, optionIds: [], freeText: "", checked: true });
 
@@ -559,7 +606,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       await expect(
         saveCurrent(db, d, { visitId: visit.id, fieldId: pmhId, optionIds: [], freeText: "diabetes" }),
       ).rejects.toBeInstanceOf(ClinicalExclusionError);
-      expect(await history(visit.id, "past_medical_history")).toHaveLength(0);
+      expect(await history(visit.id, "family_history")).toHaveLength(0);
 
       // Clearing (an empty value) is never refused, and other tabs' fields are unaffected.
       await saveCurrent(db, d, { visitId: visit.id, fieldId: unknownId, optionIds: [], freeText: "", checked: false });
@@ -572,10 +619,10 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       expect(ok).toMatchObject({ changed: true, version: 1 });
     });
 
-    it("only Past Medical Hx is excluded: Family Medical Hx, Surgical Hx and the notes still work with Unknown checked", async () => {
+    it("only Family Medical Hx is excluded: Past Medical Hx, Surgical Hx and the notes still work with Unknown checked", async () => {
       const { d, visit, unknownId } = await setup();
       await saveCurrent(db, d, { visitId: visit.id, fieldId: unknownId, optionIds: [], freeText: "", checked: true });
-      for (const code of ["family_history", "surgical_history", "prior_test_results", "past_medical_additional_comments"]) {
+      for (const code of ["past_medical_history", "surgical_history", "prior_test_results", "past_medical_additional_comments", "family_history_vv"]) {
         const r = await saveCurrent(db, d, {
           visitId: visit.id,
           fieldId: await fieldId(code),
@@ -592,7 +639,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       await saveCurrent(db, d, { visitId: visit.id, fieldId: unknownId, optionIds: [], freeText: "", checked: true });
       const r = await saveCurrent(db, d, {
         visitId: other.id,
-        fieldId: await fieldId("past_medical_history"),
+        fieldId: await fieldId("family_history"),
         optionIds: [],
         freeText: "fine on another visit",
       });
@@ -626,7 +673,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       expect(noop.changed).toBe(false);
     });
 
-    it("concurrent Unknown and Past Medical Hx saves on one visit cannot both succeed", async () => {
+    it("concurrent Unknown and Family Medical Hx saves on one visit cannot both succeed", async () => {
       const { d, visit, pmhOpt, unknownId, pmhId } = await setup();
       const results = await Promise.allSettled([
         saveCurrent(db, d, { visitId: visit.id, fieldId: unknownId, optionIds: [], freeText: "", checked: true }),
@@ -637,8 +684,8 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       expect(fulfilled).toHaveLength(1);
       expect(rejected).toHaveLength(1);
       expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ClinicalExclusionError);
-      const unknownRows = await history(visit.id, "past_medical_unknown");
-      const pmhRows = await history(visit.id, "past_medical_history");
+      const unknownRows = await history(visit.id, "family_history_unknown");
+      const pmhRows = await history(visit.id, "family_history");
       expect(unknownRows.length + pmhRows.length).toBe(1);
     });
 
@@ -657,10 +704,10 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       await expect(save(await fieldId("prior_test_results"), { checked: false })).rejects.toBeInstanceOf(
         InvalidClinicalValueError,
       );
-      await expect(save(await fieldId("impression"), { checked: true })).rejects.toBeInstanceOf(
+      await expect(save(await fieldId("impression_1"), { checked: true })).rejects.toBeInstanceOf(
         InvalidClinicalValueError,
       );
-      expect(await history(visit.id, "past_medical_unknown")).toHaveLength(0);
+      expect(await history(visit.id, "family_history_unknown")).toHaveLength(0);
     });
 
     it("unchecking an empty Unknown is a no-op; a replayed mutation writes nothing new", async () => {
@@ -673,7 +720,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
         checked: false,
       });
       expect(noop.changed).toBe(false);
-      expect(await history(visit.id, "past_medical_unknown")).toHaveLength(0);
+      expect(await history(visit.id, "family_history_unknown")).toHaveLength(0);
 
       const id = randomUUID();
       const input = {
@@ -689,7 +736,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       const replay = await saveClinicalEntry(db, d, input);
       expect(first.changed).toBe(true);
       expect(replay).toMatchObject({ changed: false, replayed: true, version: 1 });
-      expect(await history(visit.id, "past_medical_unknown")).toHaveLength(1);
+      expect(await history(visit.id, "family_history_unknown")).toHaveLength(1);
     });
   });
 
@@ -699,14 +746,14 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       const visit = await newVisit(await doctor());
       const ok = await saveCurrent(db, nurse, {
         visitId: visit.id,
-        fieldId: await fieldId("impression"),
+        fieldId: await fieldId("impression_1"),
         optionIds: [],
         freeText: "nurse wording",
       });
       expect(ok.changed).toBe(true);
       const unknown = await saveCurrent(db, nurse, {
         visitId: visit.id,
-        fieldId: await fieldId("past_medical_unknown"),
+        fieldId: await fieldId("family_history_unknown"),
         optionIds: [],
         freeText: "",
         checked: true,
@@ -723,11 +770,11 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       const { actor: admin } = await createTestUser(db, { roleCode: "ADMIN" });
       const { actor: reception } = await createTestUser(db, { roleCode: "RECEPTION" });
 
-      expect((await view(admin, visit.id, PAST_MEDICAL_HX_SECTION_CODE)).fields).toHaveLength(6);
+      expect((await view(admin, visit.id, PAST_MEDICAL_HX_SECTION_CODE)).fields).toHaveLength(7);
       await expect(
         saveCurrent(db, admin, {
           visitId: visit.id,
-          fieldId: await fieldId("past_medical_unknown"),
+          fieldId: await fieldId("family_history_unknown"),
           optionIds: [],
           freeText: "",
           checked: true,
@@ -736,7 +783,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       await expect(view(reception, visit.id, ASSESSMENT_PLAN_SECTION_CODE)).rejects.toBeInstanceOf(
         ForbiddenError,
       );
-      expect(await history(visit.id, "past_medical_unknown")).toHaveLength(0);
+      expect(await history(visit.id, "family_history_unknown")).toHaveLength(0);
     });
 
     it("a visit that is not open rejects writes to the new fields", async () => {
@@ -744,9 +791,9 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       const visit = await newVisit(d);
       await db.update(visits).set({ status: "closed" }).where(eq(visits.id, visit.id));
       for (const [code, extra] of [
-        ["impression", {}],
-        ["stockings_measurements", {}],
-        ["past_medical_unknown", { checked: true }],
+        ["impression_1", {}],
+        ["stockings_mid_calf", {}],
+        ["family_history_unknown", { checked: true }],
       ] as const) {
         await expect(
           saveCurrent(db, d, { visitId: visit.id, fieldId: await fieldId(code), optionIds: [], freeText: "", ...extra }),
@@ -757,7 +804,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
     it("optimistic concurrency applies to the new fields (stale version is a conflict, nothing written)", async () => {
       const d = await doctor();
       const visit = await newVisit(d);
-      const fid = await fieldId("recommendations");
+      const fid = await fieldId("recommendation_1");
       await saveCurrent(db, d, { visitId: visit.id, fieldId: fid, optionIds: [], freeText: "v1" });
       await expect(
         saveClinicalEntry(db, d, {
@@ -769,7 +816,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
           clientMutationId: randomUUID(),
         }),
       ).rejects.toMatchObject({ name: "ClinicalConflictError" });
-      expect((await history(visit.id, "recommendations")).map((r) => r.value.freeText)).toEqual(["v1"]);
+      expect((await history(visit.id, "recommendation_1")).map((r) => r.value.freeText)).toEqual(["v1"]);
     });
   });
 
@@ -801,25 +848,25 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
     it("maps the exclusion to 409 exclusive_value (not a version conflict) and writes nothing", async () => {
       const d = await doctor();
       const visit = await newVisit(d);
-      const unknownId = await fieldId("past_medical_unknown");
-      const pmhId = await fieldId("past_medical_history");
+      const unknownId = await fieldId("family_history_unknown");
+      const pmhId = await fieldId("family_history");
 
       const checked = await post(d, visit.id, unknownId, { checked: true });
       expect(checked.status).toBe(200);
       expect(checked.json.value).toMatchObject({ checked: true });
 
-      const refused = await post(d, visit.id, pmhId, { freeText: "hypertension" });
+      const refused = await post(d, visit.id, pmhId, { freeText: "mother" });
       expect(refused.status).toBe(409);
       expect(refused.json.error).toBe("exclusive_value");
-      expect(await history(visit.id, "past_medical_history")).toHaveLength(0);
+      expect(await history(visit.id, "family_history")).toHaveLength(0);
     });
 
     it("rejects `checked` on a non-checkbox field (400) and a non-boolean checked (400)", async () => {
       const d = await doctor();
       const visit = await newVisit(d);
-      const onText = await post(d, visit.id, await fieldId("impression"), { checked: true });
+      const onText = await post(d, visit.id, await fieldId("impression_1"), { checked: true });
       expect(onText.status).toBe(400);
-      const wrongType = await post(d, visit.id, await fieldId("past_medical_unknown"), { checked: "yes" });
+      const wrongType = await post(d, visit.id, await fieldId("family_history_unknown"), { checked: "yes" });
       expect(wrongType.status).toBe(400);
       expect(wrongType.json.error).toBe("invalid_input");
     });
@@ -857,7 +904,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
         const pmh = await view(d, visit.id, PAST_MEDICAL_HX_SECTION_CODE);
         expect(pmh.fields.find((f) => f.code === "family_history")?.label).toBe("Family Medical History");
         const subj = await view(d, visit.id, SUBJ_COMPLAINTS_HABITS_SECTION_CODE);
-        expect(subj.fields.find((f) => f.code === "family_history")?.label).toBe("Family History");
+        expect(subj.fields.find((f) => f.code === "family_history")).toBeUndefined();
         expect(await counts()).toEqual(before);
       } finally {
         await seedClinicalDefinitions(db);

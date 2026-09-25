@@ -53,7 +53,7 @@ export interface VisitFixture {
 
 /** Creates a patient + open visit through the real services, as the E2E doctor. */
 export async function createVisitFixture(
-  opts: { patientId?: string; reason?: string } = {},
+  opts: { patientId?: string; reason?: string; sex?: "M" | "F" } = {},
 ): Promise<VisitFixture> {
   return withDb(async (db) => {
     const actor = await loadActorContext(db, user("doctor").userId);
@@ -66,7 +66,7 @@ export async function createVisitFixture(
         lastName: `Patient-${s}`,
         middleName: undefined,
         dateOfBirth: undefined,
-        sex: undefined,
+        sex: opts.sex,
         phone: undefined,
         email: undefined,
         icareFileNo: undefined,
@@ -228,4 +228,29 @@ export function statusOf(page: Page, code: string): Locator {
 
 export function unsavedBanner(page: Page): Locator {
   return page.getByTestId("unsaved-banner");
+}
+
+/**
+ * Opens a field's list in the SonoSoft form (R1b, ADR-029): the drop-down
+ * arrow of a combo box, or Alt+Down in a list box that SonoSoft opens from a
+ * button. Returns the field container.
+ */
+export async function openList(page: Page, code: string, label: string): Promise<Locator> {
+  const f = field(page, code);
+  const arrow = f.getByRole("button", { name: `Open ${label} list` });
+  const opener = f.getByRole("button", { name: label, exact: true });
+  if ((await arrow.count()) > 0) {
+    if ((await arrow.getAttribute("aria-expanded")) !== "true") await arrow.click();
+  } else if ((await opener.count()) > 0) {
+    if ((await opener.getAttribute("aria-expanded")) !== "true") await opener.click();
+  } else {
+    await f.getByLabel(`${label} — visit-only free text`).press("Alt+ArrowDown");
+  }
+  return f;
+}
+
+/** The new-option input of a field; "+ Add New" sits at the bottom of the field's list. */
+export async function newOptionInput(page: Page, code: string, label: string): Promise<Locator> {
+  const f = await openList(page, code, label);
+  return f.getByLabel(`New ${label} option`);
 }

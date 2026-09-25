@@ -500,3 +500,79 @@ change a patient revalidate the patient layout so the header never shows stale d
 
 *Not changed:* clinical model, autosave, navigation guard, clinical permissions, audit and
 append-only triggers.
+
+ADR-029: R1b — Clinical tabs and Patient Search follow the SonoSoft reference screens.
+Source: `docs/reference/sonosoft/tabs/` and the Product Owner decision of 2026-09-25 ("build
+it exactly like the screenshots"; doctors must not have to learn a new screen). Where this
+conflicts with ADR-027 or `docs/FINAL_V1_REQUIREMENTS_RECONCILIATION.md` §6, this ADR wins.
+Spec: `PROMPT_R1B.md`.
+
+*Labels and order are SonoSoft's, word for word* ("Reason for visit", "associated with",
+"How long?", "Symptoms getting worse over time?", "Tobacco use", "Pain Meds for CC", ...).
+Field codes do not change, so history is untouched by a relabel.
+
+*S1 (supersedes ADR-027 "one concept in two tabs" for family history):* Subj asks its own
+question "Family history of VV?" (`family_history_vv`, single select). The general family
+history (`family_history`) is shown only in Past Medical Hx as "Family Medical Hx".
+Migration 0007 removes the Subj placement; no entry is touched.
+
+*P1:* "Unknown" belongs to Family Medical Hx, as in SonoSoft: new checkbox
+`family_history_unknown` excludes `family_history` (same exclusion mechanism as ADR-027).
+`past_medical_unknown` is retired. Subj gets the same pattern: "None" excludes Current Meds,
+"No known" excludes Allergies.
+
+*P2 — female statement:* `female_statement` (select, last in Past Medical Hx, SonoSoft
+label) may hold a value only when `patients.sex = 'F'`. The UI keeps it in place but
+disabled ("For female patients only."); the server refuses a non-empty value otherwise.
+Clearing an existing value is always allowed. Rule list: `FEMALE_ONLY_FIELD_CODES`.
+
+*P3:* Past Medical Hx "Additional Comments" is a dropdown with free text (type changed
+textarea → select by 0007; the stored value shape is the same, so old entries stay valid).
+
+*AP1/AP2 — ordered rows:* Impression and Recommendations are 8 single-select rows each
+(`impression_1..8`, `recommendation_1..8`); all rows of one concept share one option list
+("impression", "recommendations"), so an option added on any row is offered on all. The
+"Select Impressions" / "Select Recomendations" control puts the chosen option in the first
+empty row; each row keeps its own version stream and audit. "Impr for Init Venous Interp"
+is its own select. `impression_list_style` ("Bullets / Numbers") is a `choice` field.
+
+*AP5 — stocking measurements:* five `number` fields (Mid Thigh, Mid Calf, Mid Ankle, Floor
+To GF, Floor To Knee) replace the free-text `stockings_measurements`. Unit cm (assumption,
+open PO question), 0–200, one decimal; stored as canonical decimal text in `freeText`
+(`NUMERIC_FIELD_RULES`).
+
+*New field types:* `number` (validated decimal text) and `choice` (fixed presentation
+values in `FIXED_CHOICES`; these are not clinical options, so CLAUDE.md #10 does not apply).
+`assertFieldRulesConsistent` fails at startup if a number/choice field has no rule.
+
+*Retired fields (0007):* `past_medical_unknown`, `impression`, `recommendations`,
+`stockings_measurements` get `is_active = false` and move to the end of their tab. As in
+ADR-026 they stay visible, read-only, only on visits that have history for them. Nothing is
+converted automatically: turning old multiselect/free-text values into rows or numbers
+would put words in the doctor's mouth.
+
+*Layouts are presentation only, drawn at SonoSoft's pixel positions:*
+`src/modules/clinical/layouts.ts` gives every control, label, frame and button of a tab
+its position and size measured on the reference screenshot (the same coordinates as the
+approved "Dawali SonoSoft Tabs" mock-up); `sono-form.tsx` draws them with SonoSoft's
+Tahoma font, grey fields and drop-down arrows, and scales the whole form to the page
+width (1x–1.6x) so proportions never change. Controls behave like SonoSoft's: a single
+choice is an editable combo box (pick from the list or type; typed text is the visit-only
+free text, rules in `combo-text.ts`); a multiple choice is a grey box showing the chosen
+items with room to type, its list opening from the arrow or SonoSoft's button ("Current
+Meds", "Past Medical Hx"...); "+ Add New" sits at the bottom of each list. Save status is
+announced to screen readers and shown only when something needs attention. Controls
+SonoSoft has but Dawali does not store (Tutorial, Reconcile, Recode / Snomed, Add Charge)
+are not drawn. The data model (fields, order, types) stays in `definitions.ts`; a placed
+field that a layout does not name (e.g. a retired field with history) is shown under the
+form, so nothing can disappear. Open lists float over the page and close on click (not
+mouse-down), so closing one never moves the control being clicked.
+
+*Patient Search (PS1–PS4):* the search window opens with the most recently updated patients
+(`recent: true`, newest first); it searches as you type (300 ms debounce, stale responses
+ignored), there is no Search button; the list is on top with the hint "Double click on the
+patient you would like to select." and the header "MedicalID"; criteria and "Create a New
+Patient Record" (with SonoSoft's sentence) are below. Birthdate is typed day/month/year
+("E.G. 01/01/1925") and converted to ISO in the browser; criteria still go by POST only.
+
+*Not in R1b:* S2/S4/S7/S11/AP6/AP7 (open questions), pixel-exact fidelity, Treatment Plan.

@@ -78,12 +78,38 @@ test.describe("Patient Search", () => {
 
     const rows = dialog.locator("table.search-results tbody tr");
     await expect(rows).toHaveCount(2);
-    await expect(dialog.getByRole("columnheader", { name: "Medical / File ID" })).toBeVisible();
+    await expect(dialog.getByRole("columnheader", { name: "MedicalID" })).toBeVisible();
+    await expect(dialog.getByText("Double click on the patient you would like to select.")).toBeVisible();
     expect(page.url()).not.toContain(insuranceId);
 
     await rows.filter({ hasText: b.lastName }).dblclick();
     await page.waitForURL(`**/patients/${b.id}`);
     await expect(header(page)).toContainText(b.lastName);
+  });
+
+  test("opens with the recent patients, searches as you type, and takes the birthdate as day/month/year", async ({
+    page,
+  }) => {
+    const s = uniq();
+    const p = await patientFixture({ lastName: `Dob-${s}`, dateOfBirth: "1925-01-01" });
+    await loginAs(page, "reception");
+    await page.goto("/patients");
+
+    // PS1: the list is already filled, newest change first.
+    const rows = page.locator("table.search-results tbody tr");
+    await expect(rows.first()).toContainText(p.lastName);
+    await expect(page.getByRole("button", { name: "Search", exact: true })).toHaveCount(0);
+
+    // PS4: day/month/year, with SonoSoft's example underneath.
+    const dob = page.getByLabel("Birthdate");
+    await expect(page.getByText("E.G. 01/01/1925")).toBeVisible();
+    await dob.fill("31/02/1925");
+    await expect(page.getByText("Birthdate must be day/month/year, e.g. 01/01/1925.")).toBeVisible();
+    await dob.fill("01/01/1925");
+    await page.getByLabel("Last Name").fill(`Dob-${s}`);
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText("1925-01-01");
+    expect(page.url()).not.toContain("1925");
   });
 
   test("offers Create New Patient Record prefilled with the typed criteria", async ({ page }) => {
@@ -93,10 +119,11 @@ test.describe("Patient Search", () => {
     await page.getByLabel("Last Name").fill(`Newlast-${s}`);
     await page.getByLabel("First Name").fill(`Newfirst-${s}`);
     await page.getByLabel("Insurance ID").fill(`NINS-${s}`);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    // search as you type: no button needed (PS1)
     await expect(page.getByText("No patients matched your search.")).toBeVisible();
+    await expect(page.getByText(/The data will be transferred to the Patient Demographic form/)).toBeVisible();
 
-    await page.getByRole("button", { name: "Create New Patient Record" }).click();
+    await page.getByRole("button", { name: "Create a New Patient Record" }).click();
     await expect(page.getByLabel("File / Medical ID (iCare)")).toHaveValue(`NEW-${s}`);
     await expect(page.getByLabel("Last Name")).toHaveValue(`Newlast-${s}`);
     await expect(page.getByLabel("First Name")).toHaveValue(`Newfirst-${s}`);
@@ -178,10 +205,8 @@ test.describe("Inactive Patient", () => {
 
     await page.goto("/patients");
     await page.getByLabel("Last Name").fill(`Inact-${s}`);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
     await expect(page.getByText("No patients matched your search.")).toBeVisible();
     await page.getByLabel("Include inactive").check();
-    await page.getByRole("button", { name: "Search", exact: true }).click();
     await expect(page.locator("table.search-results tbody tr")).toHaveCount(1);
   });
 });

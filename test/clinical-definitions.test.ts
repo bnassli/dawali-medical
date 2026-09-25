@@ -146,8 +146,8 @@ describe("clinical definitions: global fields, section placement, reusable lists
               code: tab2,
               name: "A later tab",
               sortOrder: 50,
-              // Current Meds / Allergies / Family History reappear, in another order, plus reason.
-              fieldCodes: ["allergies", "current_meds", "family_history", "reason_for_visit"],
+              // Current Meds / Allergies / Pain Meds reappear, in another order, plus reason.
+              fieldCodes: ["allergies", "current_meds", "pain_meds", "reason_for_visit"],
             },
           ],
         }),
@@ -158,7 +158,7 @@ describe("clinical definitions: global fields, section placement, reusable lists
       expect(second.fields.map((f) => f.code)).toEqual([
         "allergies",
         "current_meds",
-        "family_history",
+        "pain_meds",
         "reason_for_visit",
       ]);
       // Same global field ids in both tabs.
@@ -381,7 +381,7 @@ describe("clinical definitions: global fields, section placement, reusable lists
         .select()
         .from(clinicalFieldDefinitions)
         .where(eq(clinicalFieldDefinitions.code, "comments"));
-      expect(restored?.label).toBe("Comments");
+      expect(restored?.label).toBe("Comment");
     });
 
     it("refuses a section that places an unknown field, before touching the database", async () => {

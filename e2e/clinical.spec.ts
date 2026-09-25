@@ -8,6 +8,8 @@ import {
   field,
   legacyVisitReason,
   loginAs,
+  newOptionInput,
+  openList,
   optionLabels,
   revokeSessions,
   statusOf,
@@ -17,32 +19,35 @@ import {
   visitUrl,
 } from "./support";
 
-// Order from docs/CLINICAL_TABS.md, "Subj Complaints Habits".
-const SUBJ_COMPLAINTS_HABITS_ORDER = [
-  "Reason for Visit",
-  "Problem List",
-  "Chief Complaints",
-  "Characteristics",
-  "Duration",
-  "Progression",
-  "Daily Activity Impact",
-  "Chest Comments",
-  "Comments",
-  "Aggravating Factors",
-  "Relieving Factors",
-  "Previous Conservative Therapy",
-  "Previous Conservative Therapy Duration",
-  "Family History",
-  "Alcohol",
-  "Exercise",
-  "Tobacco",
-  "Pain Meds",
-  "Current Meds",
-  "Allergies",
+// SonoSoft order and labels (docs/CLINICAL_TABS.md, R1b / ADR-029), by field code.
+const SUBJ_COMPLAINTS_HABITS_CODES = [
+  "reason_for_visit",
+  "problem_list",
+  "chief_complaints",
+  "characteristics",
+  "duration",
+  "symptoms_worse",
+  "progression",
+  "daily_activity_impact",
+  "chest_comments",
+  "comments",
+  "aggravating_factors",
+  "relieving_factors",
+  "previous_conservative_therapy",
+  "previous_conservative_therapy_duration",
+  "family_history_vv",
+  "alcohol",
+  "exercise",
+  "tobacco",
+  "pain_meds",
+  "current_meds",
+  "current_meds_none",
+  "allergies",
+  "allergies_no_known",
 ];
 
 test.describe("Subj Complaints Habits (browser)", () => {
-  test("renders the tab with fields in the exact CLINICAL_TABS.md order", async ({ page }) => {
+  test("renders the tab with fields in the exact SonoSoft order", async ({ page }) => {
     const visit = await createVisitFixture();
     await loginAs(page, "doctor");
     await page.goto(visitUrl(visit));
@@ -50,9 +55,9 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await expect(
       page.getByRole("navigation", { name: "Clinical tabs" }).getByText("Subj Complaints Habits"),
     ).toBeVisible();
-    await expect(page.locator(".clinical-field .field-head label")).toHaveText(
-      SUBJ_COMPLAINTS_HABITS_ORDER,
-    );
+    await expect
+      .poll(() => page.locator("[data-field]").evaluateAll((els) => els.map((e) => e.getAttribute("data-field"))))
+      .toEqual(SUBJ_COMPLAINTS_HABITS_CODES);
   });
 
   test("selections and free text persist across a reload (select, multiselect, textarea)", async ({
@@ -64,13 +69,13 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await page.goto(visitUrl(visit));
 
     const duration = field(page, "duration");
-    await duration.getByLabel("New Duration option").fill(`Under a week ${s}`);
+    await (await newOptionInput(page, "duration", "How long?")).fill(`Under a week ${s}`);
     await duration.getByRole("button", { name: "+ Add New" }).click();
     await expect(statusOf(page, "duration")).toHaveText("Saved");
 
     const aggravating = field(page, "aggravating_factors");
     for (const label of [`Standing ${s}`, `Heat ${s}`]) {
-      await aggravating.getByLabel("New Aggravating Factors option").fill(label);
+      await (await newOptionInput(page, "aggravating_factors", "Aggravating Factors")).fill(label);
       await aggravating.getByRole("button", { name: "+ Add New" }).click();
       await expect(aggravating.getByRole("checkbox", { name: label })).toBeChecked();
     }
@@ -78,18 +83,18 @@ test.describe("Subj Complaints Habits (browser)", () => {
 
     await field(page, "comments").locator("textarea").fill(`note ${s}`);
     await expect(statusOf(page, "comments")).toHaveText("Saved");
-    await duration.getByLabel("Duration — visit-only free text").fill(`about 5 days ${s}`);
+    // Typing after the chosen option = visit-only text (SonoSoft combo box).
+    await duration.getByRole("combobox").fill(`Under a week ${s}, about 5 days ${s}`);
     await expect(statusOf(page, "duration")).toHaveText("Saved");
 
     await page.reload();
 
-    await expect(duration.getByRole("combobox")).toHaveValue(/.+/);
-    await expect(duration.getByRole("combobox").locator("option:checked")).toHaveText(
-      `Under a week ${s}`,
-    );
-    await expect(duration.getByLabel("Duration — visit-only free text")).toHaveValue(
-      `about 5 days ${s}`,
-    );
+    await expect(duration.getByRole("combobox")).toHaveValue(`Under a week ${s}, about 5 days ${s}`);
+    const durationEntry = (await entryHistory(visit.visitId, "duration")).at(-1);
+    expect(durationEntry?.optionIds).toHaveLength(1);
+    expect(durationEntry?.freeText).toBe(`about 5 days ${s}`);
+    await expect(aggravating).toContainText(`Standing ${s}, Heat ${s}`);
+    await openList(page, "aggravating_factors", "Aggravating Factors");
     await expect(aggravating.getByRole("checkbox", { name: `Standing ${s}` })).toBeChecked();
     await expect(aggravating.getByRole("checkbox", { name: `Heat ${s}` })).toBeChecked();
     await expect(field(page, "comments").locator("textarea")).toHaveValue(`note ${s}`);
@@ -109,13 +114,15 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await loginAs(page, "doctor");
     await page.goto(visitUrl(visitA));
     const allergiesA = field(page, "allergies");
-    await allergiesA.getByLabel("New Allergies option").fill(permanent);
+    await (await newOptionInput(page, "allergies", "Allergies")).fill(permanent);
     await allergiesA.getByRole("button", { name: "+ Add New" }).click();
+    await expect(allergiesA).toContainText(permanent);
+    await page.keyboard.press("Escape");
     await allergiesA.getByLabel("Allergies — visit-only free text").fill(visitOnly);
     await expect(statusOf(page, "allergies")).toHaveText("Saved");
 
     await page.goto(visitUrl(visitB));
-    const allergiesB = field(page, "allergies");
+    const allergiesB = await openList(page, "allergies", "Allergies");
     await expect(allergiesB.getByRole("checkbox", { name: permanent })).toBeVisible();
     await expect(allergiesB.getByRole("checkbox", { name: permanent })).not.toBeChecked();
     await expect(allergiesB.getByLabel("Allergies — visit-only free text")).toHaveValue("");
@@ -134,49 +141,50 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await loginAs(page, "doctor");
     await page.goto(visitUrl(visit));
 
-    // Natural tab order inside a field: control -> free text -> new-option input.
-    await page.getByLabel("Reason for Visit", { exact: true }).focus();
-    await page.keyboard.press("Tab");
-    await expect(page.getByLabel("Reason for Visit — visit-only free text")).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(page.getByLabel("New Reason for Visit option")).toBeFocused();
-
-    // Add two options with Enter in the new-option input.
+    // The folded list of a combo box opens from the keyboard; "+ Add New" is at its bottom.
+    // Adding closes the list and returns focus to the combo box, like choosing a value.
     const progression = field(page, "progression");
-    const newOption = page.getByLabel("New Progression option");
+    const combo = progression.getByRole("combobox");
+    const newOption = progression.getByLabel("New Progression option");
+    await combo.focus();
     for (const label of [`Stable ${s}`, `Improving ${s}`]) {
+      await page.keyboard.press("ArrowDown");
+      await expect(combo).toHaveAttribute("aria-expanded", "true");
       await newOption.focus();
       await page.keyboard.type(label);
       await page.keyboard.press("Enter");
-      await expect(progression.getByRole("combobox").locator("option:checked")).toHaveText(label);
+      await expect(combo).toHaveValue(label);
+      await expect(combo).toHaveAttribute("aria-expanded", "false");
+      await expect(combo).toBeFocused();
     }
     await expect(statusOf(page, "progression")).toHaveText("Saved");
 
-    // Change the select with the arrow keys only.
-    await progression.getByRole("combobox").focus();
+    // Change the choice with the arrow keys and Enter only.
+    await combo.focus();
+    await page.keyboard.press("ArrowDown"); // opens on the chosen option (Improving)
     await page.keyboard.press("ArrowUp");
-    await expect(progression.getByRole("combobox").locator("option:checked")).toHaveText(`Stable ${s}`);
+    await page.keyboard.press("Enter");
+    await expect(combo).toHaveValue(`Stable ${s}`);
     await expect(statusOf(page, "progression")).toHaveText("Saved");
 
     // Toggle a checkbox with Space.
-    const family = field(page, "family_history");
-    await family.getByLabel("New Family History option").focus();
-    await page.keyboard.type(`Father ${s}`);
+    const painMeds = field(page, "pain_meds");
+    await (await newOptionInput(page, "pain_meds", "Pain Meds for CC")).focus();
+    await page.keyboard.type(`Ibuprofen ${s}`);
     await page.keyboard.press("Enter");
-    const checkbox = family.getByRole("checkbox", { name: `Father ${s}` });
+    const checkbox = painMeds.getByRole("checkbox", { name: `Ibuprofen ${s}` });
     await expect(checkbox).toBeChecked();
-    await expect(statusOf(page, "family_history")).toHaveText("Saved");
+    await expect(statusOf(page, "pain_meds")).toHaveText("Saved");
     await checkbox.focus();
     await page.keyboard.press("Space");
     await expect(checkbox).not.toBeChecked();
-    await expect(statusOf(page, "family_history")).toHaveText("Saved");
+    await expect(statusOf(page, "pain_meds")).toHaveText("Saved");
 
     await page.reload();
+    await expect(field(page, "progression").getByRole("combobox")).toHaveValue(`Stable ${s}`);
+    await openList(page, "pain_meds", "Pain Meds for CC");
     await expect(
-      field(page, "progression").getByRole("combobox").locator("option:checked"),
-    ).toHaveText(`Stable ${s}`);
-    await expect(
-      field(page, "family_history").getByRole("checkbox", { name: `Father ${s}` }),
+      field(page, "pain_meds").getByRole("checkbox", { name: `Ibuprofen ${s}` }),
     ).not.toBeChecked();
   });
 
@@ -356,16 +364,15 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await page.waitForURL(/\/visits\//);
     const visitId = page.url().split("/visits/")[1] ?? "";
 
-    await expect(page.getByLabel("Reason for Visit — visit-only free text")).toHaveValue(
-      "Swollen ankle",
-    );
+    const reason = page.getByRole("combobox", { name: "Reason for visit" });
+    await expect(reason).toHaveValue("Swollen ankle");
     await expect(page.getByText("Reason: Swollen ankle")).toBeVisible();
     expect(await legacyVisitReason(visitId)).toBeNull();
     expect((await entryHistory(visitId, "reason_for_visit")).map((r) => r.freeText)).toEqual([
       "Swollen ankle",
     ]);
 
-    await page.getByLabel("Reason for Visit — visit-only free text").fill("Swollen ankle, left side");
+    await reason.fill("Swollen ankle, left side");
     await expect(statusOf(page, "reason_for_visit")).toHaveText("Saved");
 
     await page.goto(`/patients/${patientId}`);
@@ -382,6 +389,8 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await loginAs(page, "nurse");
     await page.goto(visitUrl(visit));
     await expect(field(page, "comments").locator("textarea")).toBeEnabled();
+    await openList(page, "progression", "Progression");
+    await expect(field(page, "progression").getByRole("listbox")).toBeVisible();
     await expect(page.getByRole("button", { name: "+ Add New" })).toHaveCount(0);
     await page.goto(`/patients/${visit.patientId}`);
     await expect(page.getByLabel("Reason for new visit")).toBeVisible();
@@ -395,7 +404,9 @@ test.describe("Subj Complaints Habits (browser)", () => {
       await adminPage.goto(visitUrl(visit));
       await expect(adminPage.getByText("read-only access")).toBeVisible();
       await expect(field(adminPage, "comments").locator("textarea")).toBeDisabled();
-      await expect(adminPage.getByRole("button", { name: "+ Add New" }).first()).toBeVisible();
+      // Admin keeps list maintenance: "+ Add New" at the bottom of the list.
+      await adminPage.getByRole("button", { name: "Open Progression list" }).click();
+      await expect(field(adminPage, "progression").getByRole("button", { name: "+ Add New" })).toBeVisible();
 
       await loginAs(receptionPage, "reception");
       await receptionPage.goto(visitUrl(visit));
