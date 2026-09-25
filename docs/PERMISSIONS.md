@@ -31,3 +31,5 @@ Sprint 3A adds no permissions: Past Medical Hx and Assessment Plan+ use the four
 Existing databases get these by re-running `npm run db:seed` (role permissions are recomputed).
 
 `report.finalize` (R5, ADR-034): finalize or amend a report; Doctor only. Drafts need `clinical.write`.
+
+`inventory.read`, `inventory.manage` (Inventory role, Admin), `inventory.consume` (Doctor, Nurse/Assistant) — I1, ADR-035.

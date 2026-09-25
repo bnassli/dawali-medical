@@ -25,6 +25,9 @@ export const PERMISSIONS = {
   CLINICAL_OPTION_ADD: "clinical_option.add",
   CLINICAL_OPTION_MANAGE: "clinical_option.manage",
   REPORT_FINALIZE: "report.finalize",
+  INVENTORY_READ: "inventory.read",
+  INVENTORY_MANAGE: "inventory.manage",
+  INVENTORY_CONSUME: "inventory.consume",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -57,6 +60,10 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
     "Retire/reactivate clinical option list options",
   [PERMISSIONS.REPORT_FINALIZE]:
     "Finalize or amend a report (the .docx is signed with this user's name)",
+  [PERMISSIONS.INVENTORY_READ]: "View stock levels, batches and expiry dates",
+  [PERMISSIONS.INVENTORY_MANAGE]:
+    "Manage products and suppliers; receive, transfer and adjust stock",
+  [PERMISSIONS.INVENTORY_CONSUME]: "Record materials used on a patient's visit",
 };
 
 export const ROLES = {
@@ -96,6 +103,8 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     PERMISSIONS.CLINICAL_OPTION_ADD,
     // Only a doctor signs a report (R5, ADR-034).
     PERMISSIONS.REPORT_FINALIZE,
+    PERMISSIONS.INVENTORY_READ,
+    PERMISSIONS.INVENTORY_CONSUME,
   ],
   [ROLES.NURSE_ASSISTANT]: [
     PERMISSIONS.PATIENT_READ,
@@ -103,6 +112,8 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     PERMISSIONS.VISIT_CREATE,
     PERMISSIONS.CLINICAL_READ,
     PERMISSIONS.CLINICAL_WRITE,
+    PERMISSIONS.INVENTORY_READ,
+    PERMISSIONS.INVENTORY_CONSUME,
   ],
   [ROLES.RECEPTION]: [
     PERMISSIONS.PATIENT_READ,
@@ -112,5 +123,6 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     PERMISSIONS.VISIT_READ,
     PERMISSIONS.VISIT_CREATE,
   ],
-  [ROLES.INVENTORY]: [],
+  // Storekeeper (I1, ADR-035): stock only, no patient data.
+  [ROLES.INVENTORY]: [PERMISSIONS.INVENTORY_READ, PERMISSIONS.INVENTORY_MANAGE],
 };

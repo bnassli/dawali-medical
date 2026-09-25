@@ -100,5 +100,12 @@ section omitted) → amended, conflict, nurse cannot finalize, draft refused aft
 append-only, missing/foreign diagram refused); Playwright `e2e/reports.spec.ts` (warning
 without a diagram, preview, draft, finalize download, amended version, nurse view).
 
+I1 additions (ADR-035): Vitest `test/inventory.test.ts` (stores, scan stored + AI draft,
+AI answer parsing and API request, packs to units, statement refused, receipt once and
+duplicate invoice refused, FEFO order, consumption on patient + doctor, no negative stock,
+closed visit, opening balance, transfer, append-only ledger, permissions); Playwright
+`e2e/inventory.spec.ts` (scan → review → confirm, nurse records usage, stock and
+per-doctor totals).
+
 Core target smoke flow:
 Login → Search/Create Patient → Open/Create Visit → Patient Chart → Save clinical data → Create Diagram → Generate Report → Logout.

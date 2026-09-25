@@ -743,3 +743,40 @@ Admin reads. The .docx downloads through the private file route.
 
 *Pending from the clinic:* the logo image (the header prints "Dawali Clinic" /
 "عيادات دوالي" as text until then) and the doctors' signature/initials images.
+
+ADR-035: I1 — Inventory (Operations store first). Product Owner request of 2026-09-25:
+two stores (Operations, Clinic), the Operations store is the priority; purchase invoices are
+scanned and read by AI; the nurse records the materials used on a visit against the
+patient AND the doctor, and they are taken off the store. Sample invoices reviewed
+(Specialized Distributor tax invoices, 2 pages, "box of 5", VAT 15%, no lot/expiry
+printed; a statement of account).
+
+*Ledger, not counters:* the balance of a batch in a store is the SUM of append-only
+`stock_movements` (receipt, transfer_out/in, consumption, adjustment); nothing is ever
+overwritten; a mistake is corrected by an adjustment with a reason. Stock can never go
+below zero (checked under a per-store-per-batch advisory lock). Expiry belongs to the
+batch (`inventory_batches`: product + lot + expiry); lists are earliest-expiry first (FEFO).
+
+*Receiving (scan → AI → review → confirm):* the scan (JPG/PNG/WEBP/PDF, ≤10 MB) is kept
+privately (`invoice_scans`, file storage `inventory/invoices/`), then read by Claude
+(`ANTHROPIC_API_KEY`, `INVOICE_AI_MODEL`, default `claude-sonnet-5`) into a DRAFT: supplier,
+invoice number and date, lines with product, packs, units per pack, pack price before VAT,
+lot/expiry if printed. Nothing reaches the stock until a person reviews every value, adds
+lot/expiry from the boxes and confirms. A statement of account (or any non-invoice) is
+flagged and cannot be received. Without an AI key the scan is still stored and the invoice
+is typed in. Stock is counted in units: 10 "box of 5" = 50. The same invoice number of the
+same supplier cannot be received twice; a scan can be received once. Invoices are supplier
+documents (no patient data) sent to the AI.
+
+*Materials used (visit page):* store + batch (FEFO, with what is left), quantity, and the
+treating doctor (Doctor-role users; a doctor defaults to himself). The row carries the
+visit, patient and doctor; the visit must be open. The Inventory page shows the last 30
+days per doctor, and per patient for users with patient access.
+
+*Permissions:* `inventory.read`, `inventory.manage` (receive, adjust, transfer, products —
+the Inventory role and Admin), `inventory.consume` (Doctor, Nurse/Assistant). The
+Inventory role sees stock only, no patient data.
+
+*Not in I1:* matching the statement of account to received invoices, costs/valuation
+reports, returns to supplier, reorder levels, the Clinic store workflow in detail, and
+billing of materials to the patient (iCare).

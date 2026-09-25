@@ -24,4 +24,4 @@ R4: Diagram engine (Create Leg Diagram / Create Vein Diagram, versioned, no over
 R5: Report engine (Template 1 and 2, editable DOCX, lifecycle, patient file indexing).
 R6: iCare integration (manual external identifier, then connector/sync), staging validation, deployment hardening.
 
-Future: Inventory + invoice OCR/AI + batch/expiry + procedure consumption.
+I1: Inventory — Operations store first: scanned invoices read by AI and reviewed, batches/expiry (FEFO), ledger, transfers, opening balances, materials used per patient and doctor (ADR-035).

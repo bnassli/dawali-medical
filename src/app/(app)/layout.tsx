@@ -17,6 +17,7 @@ export default async function AppLayout({
       <header className="top-nav">
         <div className="links">
           <Link href="/patients">Patients</Link>
+          {actor.permissions.has(PERMISSIONS.INVENTORY_READ) ? <Link href="/inventory">Inventory</Link> : null}
           {canSeeAdmin ? <Link href="/admin/users">Admin: Users</Link> : null}
           {canManageOptions ? <Link href="/admin/options">Admin: Options</Link> : null}
         </div>

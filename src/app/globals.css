@@ -912,3 +912,11 @@ output.derived {
 .report-clinic { font-size: 18pt; font-weight: 700; }
 .report-page-break { border-top: 2px dashed #bbb; margin-top: 1rem; padding-top: 1rem; }
 .report-diagram-img { display: block; max-width: 100%; margin: 0.75rem auto; }
+
+/* ---- Inventory (I1, ADR-035) ---- */
+.inv-row { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: flex-end; margin: 0.5rem 0; }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.inv-table th, .inv-table td { border-bottom: 1px solid var(--border); padding: 0.3rem 0.4rem; text-align: left; }
+.inv-table input { width: 100%; min-width: 4rem; }
+.inv-expiring td { background: #fff4d6; }
+.inv-expired td { background: #fde2e1; color: var(--danger); }

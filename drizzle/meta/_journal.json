@@ -78,6 +78,13 @@
       "when": 1790365232477,
       "tag": "0010_r5_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790366755227,
+      "tag": "0011_i1_inventory",
+      "breakpoints": true
     }
   ]
 }

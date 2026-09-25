@@ -34,6 +34,14 @@ const EXPECTED_TABLES = [
   "diagram_versions",
   "reports",
   "report_versions",
+  "warehouses",
+  "inventory_products",
+  "suppliers",
+  "inventory_batches",
+  "invoice_scans",
+  "purchase_receipts",
+  "purchase_receipt_lines",
+  "stock_movements",
 ];
 
 async function checkTablesExist(connectionString: string): Promise<string[]> {

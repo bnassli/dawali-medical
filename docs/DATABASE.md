@@ -227,3 +227,14 @@ New env: `FILE_STORAGE_DIR` (default `var/files`).
 Report files are `patient_files` rows with kind `report`. New permission `report.finalize`
 (Doctor). Audit actions: `report.create`, `report_version.draft`, `report_version.finalize`,
 `report_version.amend`. Rollback: see the migration header.
+
+## I1 additions (ADR-035) — migration `0011_i1_inventory.sql`
+
+`warehouses` (seeded: operations, clinic), `inventory_products` (unique lower(name), unit),
+`suppliers` (unique lower(name)), `inventory_batches` (product, lot, expiry; insert-only),
+`invoice_scans` (private file + AI reading; insert-only), `purchase_receipts` (client id,
+supplier, invoice no/date, store, scan; insert-only), `purchase_receipt_lines` (batch, packs,
+pack_size, pack price ex VAT; insert-only), `stock_movements` (the ledger: store, batch,
+signed quantity in units, type, receipt/transfer/visit/patient/doctor, reason, mutation id;
+insert-only, CHECKs on type and non-zero quantity). New env: `ANTHROPIC_API_KEY`,
+`INVOICE_AI_MODEL`. Rollback: see the migration header.

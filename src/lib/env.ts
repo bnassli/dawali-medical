@@ -50,6 +50,12 @@ const envSchema = z.object({
    * Production may later swap in S3-compatible storage behind the same interface.
    */
   FILE_STORAGE_DIR: z.string().min(1).default("var/files"),
+  /**
+   * Reading scanned purchase invoices with AI (I1, ADR-035). Without a key the
+   * scan is still stored and the invoice is typed in by hand.
+   */
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  INVOICE_AI_MODEL: z.string().min(1).default("claude-sonnet-5"),
   SEED_ADMIN_EMAIL: z.string().email().optional(),
   SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
 });

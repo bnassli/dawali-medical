@@ -11,7 +11,7 @@ export interface E2EUser {
   password: string;
 }
 
-export type E2EUserKey = "doctor" | "doctor2" | "nurse" | "admin" | "reception" | "expiry";
+export type E2EUserKey = "doctor" | "doctor2" | "nurse" | "admin" | "reception" | "expiry" | "store";
 
 const ROLE_FOR: Record<E2EUserKey, RoleCode> = {
   doctor: "DOCTOR",
@@ -20,6 +20,7 @@ const ROLE_FOR: Record<E2EUserKey, RoleCode> = {
   admin: "ADMIN",
   reception: "RECEPTION",
   expiry: "DOCTOR",
+  store: "INVENTORY",
 };
 
 /**
