@@ -708,7 +708,7 @@ external-editor round trip, S3 storage, backups of `FILE_STORAGE_DIR` (deploymen
 ADR-034: R5 — Report engine (.docx). Source: FINAL_V1 §9, `docs/REPORTS.md`, the report
 samples in `docs/reference/sonosoft/report-samples/` and their README notes.
 
-*Templates are data* (`src/modules/reports/templates.ts`): ordered sections (heading,
+*Templates are data* (`src/modules/report-engine/templates.ts` (not "reports/": that folder name is git-ignored to keep real reports out of the repo)): ordered sections (heading,
 text or list, page break, diagram after). Template 1 (short procedure: narrative + Leg
 Diagram) and Template 2 (HISTORY, PAST MEDICAL HISTORY, PHYSICAL EXAMINATION + Leg
 Diagram; page 2: ULTRASOUND FINDINGS + Vein Diagram, IMPRESSION, RECOMMENDATIONS). A new

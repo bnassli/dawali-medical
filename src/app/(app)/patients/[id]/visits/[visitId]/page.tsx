@@ -17,7 +17,7 @@ import { DiagramsPanel } from "./diagrams-panel";
 import { ReportsPanel } from "./reports-panel";
 import { MaterialsPanel } from "./materials-panel";
 import { listDoctors, listWarehouses, stockLevels, visitConsumption } from "@/modules/inventory/service";
-import { listReportsForVisit } from "@/modules/reports/service";
+import { listReportsForVisit } from "@/modules/report-engine/service";
 import { listDiagramsForVisit } from "@/modules/diagrams/service";
 
 export default async function VisitChartPage({

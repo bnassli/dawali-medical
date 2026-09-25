@@ -10,14 +10,14 @@ import { clinicalFieldDefinitions, patients } from "@/db/schema";
 import { LocalFileStorage } from "@/lib/file-storage";
 import { saveClinicalEntry } from "@/modules/clinical/service";
 import { saveDiagramVersion, readPatientFile } from "@/modules/diagrams/service";
-import { composeHistory, composePastMedicalHistory, composeSections } from "@/modules/reports/compose";
+import { composeHistory, composePastMedicalHistory, composeSections } from "@/modules/report-engine/compose";
 import {
   getReportEditorData,
   InvalidReportError,
   listReportsForVisit,
   ReportConflictError,
   saveReportVersion,
-} from "@/modules/reports/service";
+} from "@/modules/report-engine/service";
 import { createPatient } from "@/modules/patients/service";
 import { ForbiddenError } from "@/modules/permissions/service";
 import type { ActorContext } from "@/modules/permissions/types";
