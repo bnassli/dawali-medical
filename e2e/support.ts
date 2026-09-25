@@ -231,14 +231,26 @@ export function unsavedBanner(page: Page): Locator {
 }
 
 /**
- * The new-option input of a field. In the SonoSoft-style layout "+ Add New" is
- * folded behind a small "+" button (R1b); this unfolds it when needed.
+ * Opens a field's list in the SonoSoft form (R1b, ADR-029): the drop-down
+ * arrow of a combo box, or Alt+Down in a list box that SonoSoft opens from a
+ * button. Returns the field container.
  */
-export async function newOptionInput(page: Page, code: string, label: string): Promise<Locator> {
+export async function openList(page: Page, code: string, label: string): Promise<Locator> {
   const f = field(page, code);
-  const toggle = f.getByRole("button", { name: `Add option to ${label}` });
-  if ((await toggle.count()) > 0 && (await toggle.getAttribute("aria-expanded")) !== "true") {
-    await toggle.click();
+  const arrow = f.getByRole("button", { name: `Open ${label} list` });
+  const opener = f.getByRole("button", { name: label, exact: true });
+  if ((await arrow.count()) > 0) {
+    if ((await arrow.getAttribute("aria-expanded")) !== "true") await arrow.click();
+  } else if ((await opener.count()) > 0) {
+    if ((await opener.getAttribute("aria-expanded")) !== "true") await opener.click();
+  } else {
+    await f.getByLabel(`${label} — visit-only free text`).press("Alt+ArrowDown");
   }
+  return f;
+}
+
+/** The new-option input of a field; "+ Add New" sits at the bottom of the field's list. */
+export async function newOptionInput(page: Page, code: string, label: string): Promise<Locator> {
+  const f = await openList(page, code, label);
   return f.getByLabel(`New ${label} option`);
 }

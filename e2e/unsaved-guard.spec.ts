@@ -448,7 +448,7 @@ test.describe("intake Reason for Visit length", () => {
     await page.getByLabel("Reason for new visit").fill("y".repeat(5000));
     await page.getByRole("button", { name: "New visit" }).click();
     await page.waitForURL(/\/visits\//);
-    await expect(page.getByLabel("Reason for visit — visit-only free text")).toHaveValue("y".repeat(5000));
+    await expect(page.getByRole("combobox", { name: "Reason for visit" })).toHaveValue("y".repeat(5000));
   });
 });
 
@@ -467,10 +467,9 @@ test.describe("retired fields keep history visible", () => {
       await expect(tobacco).toBeVisible();
       await expect(tobacco).toHaveAttribute("data-field-active", "false");
       await expect(tobacco).toContainText("retired field, read-only");
-      await expect(tobacco.getByLabel("Tobacco use — visit-only free text")).toHaveValue("quit in 2019");
-      await expect(tobacco.getByLabel("Tobacco use — visit-only free text")).toBeDisabled();
+      await expect(tobacco.getByRole("combobox")).toHaveValue("quit in 2019");
       await expect(tobacco.getByRole("combobox")).toBeDisabled();
-      await expect(tobacco.getByRole("button", { name: /Add New|Add option to/ })).toHaveCount(0);
+      await expect(tobacco.getByRole("button", { name: /^Open .* list$/ })).toBeDisabled();
       // Field order is unchanged around it: still in its SonoSoft place in Habits.
       const codes = await page
         .locator("[data-field]")

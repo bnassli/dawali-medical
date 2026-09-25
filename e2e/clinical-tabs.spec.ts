@@ -6,6 +6,7 @@ import {
   field,
   loginAs,
   newOptionInput,
+  openList,
   statusOf,
   uniq,
   unsavedBanner,
@@ -67,11 +68,11 @@ const ASSESSMENT_CODES = [
   ...rows("recommendation"),
   "stockings_type",
   "stockings_compression",
+  "stockings_gender",
+  "stockings_color",
   "stockings_mid_thigh",
   "stockings_mid_calf",
   "stockings_mid_ankle",
-  "stockings_gender",
-  "stockings_color",
   "stockings_floor_to_gf",
   "stockings_floor_to_knee",
   "assessment_additional_comments",
@@ -119,16 +120,19 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await expect(tabsNav(page).locator(".tab.active")).toHaveText("Subj Complaints Habits");
     await expect.poll(() => fieldCodes(page)).toEqual(SUBJ_CODES);
     await expect(page.locator(".clinical-form")).toHaveCount(1);
-    // SonoSoft wording, shown next to each control.
-    await expect(field(page, "reason_for_visit").locator(".field-head label")).toHaveText("Reason for visit");
-    await expect(field(page, "characteristics").locator(".field-head label")).toHaveText("associated with");
-    await expect(field(page, "previous_conservative_therapy_duration").locator(".field-head label")).toHaveText(
-      "How long?",
-    );
+    // SonoSoft wording, shown next to each control (drawn at SonoSoft's positions).
+    const labelFor = (code: string) => page.locator(`label[for="field-${code}"]`);
+    await expect(labelFor("reason_for_visit")).toHaveText("Reason for visit");
+    await expect(field(page, "characteristics").getByRole("textbox")).toHaveAttribute("placeholder", "associated with");
+    await expect(labelFor("previous_conservative_therapy_duration")).toHaveText("How long?");
+    await expect(page.getByRole("button", { name: "Problem List" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Add Chief Complaints with characteristics and Associated conditions" }),
+    ).toBeVisible();
     await expect(page.getByRole("checkbox", { name: "Symptoms getting worse over time?" })).toBeVisible();
     await expect(page.getByRole("checkbox", { name: "None", exact: true })).toBeVisible();
     await expect(page.getByRole("checkbox", { name: "No known" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Habits" })).toBeVisible();
+    await expect(page.getByText("Habits", { exact: true })).toBeVisible();
 
     await tabsNav(page).getByRole("link", { name: "Past Medical Hx" }).click();
     await expect(page).toHaveURL(tabUrl(visit, PMH_TAB));
@@ -136,16 +140,18 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await expect.poll(() => fieldCodes(page)).toEqual(PMH_CODES);
     await expect(page.locator(".clinical-form")).toHaveCount(1);
     await expect(page.getByText("Click to Add")).toBeVisible();
-    await expect(field(page, "family_history").locator(".field-head label")).toHaveText("Family Medical Hx");
+    for (const opener of ["Past Medical Hx", "Family Medical Hx", "Prior Test Results", "Surgical Hx"]) {
+      await expect(page.getByRole("button", { name: opener, exact: true })).toBeVisible();
+    }
 
     await tabsNav(page).getByRole("link", { name: "Assessment Plan+" }).click();
     await expect(page).toHaveURL(tabUrl(visit, ASSESSMENT_TAB));
     await expect.poll(() => fieldCodes(page)).toEqual(ASSESSMENT_CODES);
     for (const title of ["Impression", "Recommendations", "Stockings detail"]) {
-      await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+      await expect(page.getByText(title, { exact: true })).toBeVisible();
     }
-    await expect(page.getByRole("combobox", { name: "Select Impressions" })).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "Select Recomendations" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Select Impressions" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Select Recomendations" })).toBeVisible();
     await expect(page.getByRole("radiogroup", { name: "Bullets / Numbers" })).toBeVisible();
 
     await tabsNav(page).getByRole("link", { name: "Subj Complaints Habits" }).click();
@@ -177,23 +183,28 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await expect(statusOf(page, "prior_test_results")).toHaveText("Saved");
     // P3: Additional Comments is a dropdown with free text, like SonoSoft.
     await addOption(page, "past_medical_additional_comments", `See old file ${s}`, "Additional Comments");
+    // Typing after the chosen option adds visit-only text, as in SonoSoft's combo box.
     await field(page, "past_medical_additional_comments")
-      .getByLabel("Additional Comments — visit-only free text")
-      .fill(`PMH note ${s}`);
+      .getByRole("combobox")
+      .fill(`See old file ${s}, PMH note ${s}`);
     await expect(statusOf(page, "past_medical_additional_comments")).toHaveText("Saved");
 
     await page.reload();
+    await expect(field(page, "past_medical_history")).toContainText(`Hypertension ${s}`);
+    await openList(page, "past_medical_history", "Past Medical Hx");
     await expect(
       field(page, "past_medical_history").getByRole("checkbox", { name: `Hypertension ${s}` }),
     ).toBeChecked();
     await expect(field(page, "past_medical_history").getByLabel("Past Medical Hx — visit-only free text")).toHaveValue(
       `only today ${s}`,
     );
-    await expect(field(page, "surgical_history").getByRole("checkbox", { name: `Appendectomy ${s}` })).toBeChecked();
+    await expect(field(page, "surgical_history")).toContainText(`Appendectomy ${s}`);
     await expect(field(page, "prior_test_results").locator("textarea")).toHaveValue(`Duplex normal ${s}`);
     const comments = field(page, "past_medical_additional_comments");
-    await expect(comments.getByRole("combobox").locator("option:checked")).toHaveText(`See old file ${s}`);
-    await expect(comments.getByLabel("Additional Comments — visit-only free text")).toHaveValue(`PMH note ${s}`);
+    await expect(comments.getByRole("combobox")).toHaveValue(`See old file ${s}, PMH note ${s}`);
+    const last = (await entryHistory(visit.visitId, "past_medical_additional_comments")).at(-1);
+    expect(last?.optionIds).toHaveLength(1);
+    expect(last?.freeText).toBe(`PMH note ${s}`);
   });
 
   test("Assessment Plan+ rows: one list per concept, Select Impressions fills the next empty row, rows persist in order", async ({
@@ -207,12 +218,18 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     // "+ Add New" on row 1 adds to the shared Impression list and selects it there.
     await addOption(page, "impression_1", `Great saphenous reflux ${s}`, "Impression 1");
     await addOption(page, "impression_2", `Perforator reflux ${s}`, "Impression 2");
-    const filler = page.getByRole("combobox", { name: "Select Impressions" });
-    await expect(filler.locator("option").first()).toHaveText("→ row 3");
-    await filler.selectOption({ label: `Great saphenous reflux ${s}` });
+    const filler = page.getByRole("button", { name: "Select Impressions" });
+    await filler.click();
+    await expect(page.getByText("→ row 3")).toBeVisible();
+    await page
+      .getByRole("listbox", { name: "Select Impressions" })
+      .getByRole("option", { name: `Great saphenous reflux ${s}` })
+      .click();
     await expect(statusOf(page, "impression_3")).toHaveText("Saved");
-    await expect(filler.locator("option").first()).toHaveText("→ row 4");
-    await field(page, "impression_3").getByLabel("Impression 3 — visit-only free text").fill(`right leg ${s}`);
+    await filler.click();
+    await expect(page.getByText("→ row 4")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await field(page, "impression_3").getByRole("combobox").fill(`Great saphenous reflux ${s}, right leg ${s}`);
     await expect(statusOf(page, "impression_3")).toHaveText("Saved");
 
     await page.getByRole("radiogroup", { name: "Bullets / Numbers" }).getByRole("radio", { name: "Numbers" }).check();
@@ -223,17 +240,20 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await expect(statusOf(page, "assessment_additional_comments")).toHaveText("Saved");
 
     await page.reload();
-    const checked = (code: string) => field(page, code).getByRole("combobox").locator("option:checked");
-    await expect(checked("impression_1")).toHaveText(`Great saphenous reflux ${s}`);
-    await expect(checked("impression_2")).toHaveText(`Perforator reflux ${s}`);
-    await expect(checked("impression_3")).toHaveText(`Great saphenous reflux ${s}`);
+    const combo = (code: string) => field(page, code).getByRole("combobox");
+    await expect(combo("impression_1")).toHaveValue(`Great saphenous reflux ${s}`);
+    await expect(combo("impression_2")).toHaveValue(`Perforator reflux ${s}`);
+    await expect(combo("impression_3")).toHaveValue(`Great saphenous reflux ${s}, right leg ${s}`);
     await expect(field(page, "impression_4").getByRole("combobox")).toHaveValue("");
     await expect(page.getByRole("radio", { name: "Numbers" })).toBeChecked();
-    await expect(checked("recommendation_1")).toHaveText(`Ablation ${s}`);
+    await expect(combo("recommendation_1")).toHaveValue(`Ablation ${s}`);
     // Lists are independent: Recommendations does not offer Impression's option.
+    await openList(page, "recommendation_2", "Recommendation 2");
+    await expect(field(page, "recommendation_2").getByRole("option", { name: `Ablation ${s}` })).toBeVisible();
     await expect(
       field(page, "recommendation_2").getByRole("option", { name: `Great saphenous reflux ${s}` }),
     ).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await expect(field(page, "assessment_additional_comments").locator("textarea")).toHaveValue(
       `assessment note ${s}`,
     );
@@ -257,7 +277,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await addOption(page, "family_history", `Mother DVT ${s}`, "Family Medical Hx");
 
     await page.reload();
-    await expect(field(page, "family_history").getByRole("checkbox", { name: `Mother DVT ${s}` })).toBeChecked();
+    await expect(field(page, "family_history")).toContainText(`Mother DVT ${s}`);
     expect(await entryHistory(visit.visitId, "family_history_vv")).toHaveLength(1);
     expect(await entryHistory(visit.visitId, "family_history")).toHaveLength(1);
   });
@@ -285,9 +305,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
       await expect(statusOf(page, code)).toHaveText("");
     }
     await page.reload();
-    await expect(field(page, "stockings_type").getByRole("combobox").locator("option:checked")).toHaveText(
-      `Thigh-high ${s}`,
-    );
+    await expect(field(page, "stockings_type").getByRole("combobox")).toHaveValue(`Thigh-high ${s}`);
     await expect(field(page, "stockings_mid_calf").getByLabel("Mid Calf")).toHaveValue("36.5");
 
     expect(await entryHistory(visit.visitId, "stockings_type")).toHaveLength(1);
@@ -313,7 +331,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     const locked = field(page, "female_statement");
     await expect(locked.getByRole("combobox")).toBeDisabled();
     await expect(locked).toContainText("For female patients only.");
-    await expect(locked.getByRole("button", { name: /Add option to/ })).toHaveCount(0);
+    await expect(locked.getByRole("button", { name: /^Open .* list$/ })).toBeDisabled();
 
     await page.goto(tabUrl(female, PMH_TAB));
     const open = field(page, "female_statement");
@@ -339,6 +357,7 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await expect(unknown).toBeDisabled();
     await expect(field(page, "family_history_unknown")).toContainText("Clear Family Medical Hx");
 
+    await openList(page, "family_history", "Family Medical Hx");
     await family.getByRole("checkbox", { name: `Sister ${s}` }).uncheck();
     await expect(statusOf(page, "family_history")).toHaveText("Saved");
     await expect(unknown).toBeEnabled();
@@ -346,9 +365,11 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await unknown.check();
     await expect(statusOf(page, "family_history_unknown")).toHaveText("Saved");
     // Family Medical Hx is now unavailable, including free text and + Add New.
+    await page.getByRole("button", { name: "Family Medical Hx", exact: true }).click();
     await expect(family.getByRole("checkbox", { name: `Sister ${s}` })).toBeDisabled();
     await expect(family.getByLabel("Family Medical Hx — visit-only free text")).toBeDisabled();
-    await expect(family.getByRole("button", { name: /Add New|Add option to/ })).toHaveCount(0);
+    await expect(family.getByRole("button", { name: "+ Add New" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await expect(family).toContainText("Uncheck Unknown");
     // Other Past Medical Hx fields are not affected.
     await expect(field(page, "past_medical_history").getByLabel("Past Medical Hx — visit-only free text")).toBeEnabled();
@@ -485,14 +506,19 @@ test.describe("Sprint 3A tabs: Past Medical Hx and Assessment Plan+", () => {
     await loginAs(page, "nurse");
     await page.goto(tabUrl(visit, PMH_TAB));
     await expectDocumentedTabs(page);
+    await openList(page, "past_medical_history", "Past Medical Hx");
+    await expect(field(page, "past_medical_history").getByRole("checkbox").first().or(field(page, "past_medical_history").getByText("No options yet."))).toBeVisible();
     await expect(page.getByRole("button", { name: "+ Add New" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await field(page, "prior_test_results").locator("textarea").fill("nurse entry");
     await expect(statusOf(page, "prior_test_results")).toHaveText("Saved");
     await field(page, "family_history_unknown").getByRole("checkbox", { name: "Unknown" }).check();
     await expect(statusOf(page, "family_history_unknown")).toHaveText("Saved");
     await page.goto(tabUrl(visit, ASSESSMENT_TAB));
-    await expect(page.getByRole("button", { name: /Add New|Add option to/ })).toHaveCount(0);
-    await field(page, "impression_1").getByLabel("Impression 1 — visit-only free text").fill("nurse wording");
+    await openList(page, "impression_1", "Impression 1");
+    await expect(page.getByRole("button", { name: "+ Add New" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await field(page, "impression_1").getByRole("combobox").fill("nurse wording");
     await expect(statusOf(page, "impression_1")).toHaveText("Saved");
 
     const adminCtx = await browser.newContext();

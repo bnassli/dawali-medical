@@ -9,6 +9,7 @@ import {
   legacyVisitReason,
   loginAs,
   newOptionInput,
+  openList,
   optionLabels,
   revokeSessions,
   statusOf,
@@ -82,18 +83,18 @@ test.describe("Subj Complaints Habits (browser)", () => {
 
     await field(page, "comments").locator("textarea").fill(`note ${s}`);
     await expect(statusOf(page, "comments")).toHaveText("Saved");
-    await duration.getByLabel("How long? — visit-only free text").fill(`about 5 days ${s}`);
+    // Typing after the chosen option = visit-only text (SonoSoft combo box).
+    await duration.getByRole("combobox").fill(`Under a week ${s}, about 5 days ${s}`);
     await expect(statusOf(page, "duration")).toHaveText("Saved");
 
     await page.reload();
 
-    await expect(duration.getByRole("combobox")).toHaveValue(/.+/);
-    await expect(duration.getByRole("combobox").locator("option:checked")).toHaveText(
-      `Under a week ${s}`,
-    );
-    await expect(duration.getByLabel("How long? — visit-only free text")).toHaveValue(
-      `about 5 days ${s}`,
-    );
+    await expect(duration.getByRole("combobox")).toHaveValue(`Under a week ${s}, about 5 days ${s}`);
+    const durationEntry = (await entryHistory(visit.visitId, "duration")).at(-1);
+    expect(durationEntry?.optionIds).toHaveLength(1);
+    expect(durationEntry?.freeText).toBe(`about 5 days ${s}`);
+    await expect(aggravating).toContainText(`Standing ${s}, Heat ${s}`);
+    await openList(page, "aggravating_factors", "Aggravating Factors");
     await expect(aggravating.getByRole("checkbox", { name: `Standing ${s}` })).toBeChecked();
     await expect(aggravating.getByRole("checkbox", { name: `Heat ${s}` })).toBeChecked();
     await expect(field(page, "comments").locator("textarea")).toHaveValue(`note ${s}`);
@@ -115,11 +116,13 @@ test.describe("Subj Complaints Habits (browser)", () => {
     const allergiesA = field(page, "allergies");
     await (await newOptionInput(page, "allergies", "Allergies")).fill(permanent);
     await allergiesA.getByRole("button", { name: "+ Add New" }).click();
+    await expect(allergiesA).toContainText(permanent);
+    await page.keyboard.press("Escape");
     await allergiesA.getByLabel("Allergies — visit-only free text").fill(visitOnly);
     await expect(statusOf(page, "allergies")).toHaveText("Saved");
 
     await page.goto(visitUrl(visitB));
-    const allergiesB = field(page, "allergies");
+    const allergiesB = await openList(page, "allergies", "Allergies");
     await expect(allergiesB.getByRole("checkbox", { name: permanent })).toBeVisible();
     await expect(allergiesB.getByRole("checkbox", { name: permanent })).not.toBeChecked();
     await expect(allergiesB.getByLabel("Allergies — visit-only free text")).toHaveValue("");
@@ -138,32 +141,30 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await loginAs(page, "doctor");
     await page.goto(visitUrl(visit));
 
-    // Natural tab order inside a field: control -> visit-only free text.
-    await page.getByLabel("Reason for visit", { exact: true }).focus();
-    await page.keyboard.press("Tab");
-    await expect(page.getByLabel("Reason for visit — visit-only free text")).toBeFocused();
-
-    // The folded "+" opens the new-option input from the keyboard (Enter).
+    // The folded list of a combo box opens from the keyboard; "+ Add New" is at its bottom.
+    // Adding closes the list and returns focus to the combo box, like choosing a value.
     const progression = field(page, "progression");
-    const addToggle = progression.getByRole("button", { name: "Add option to Progression" });
-    await addToggle.focus();
-    await page.keyboard.press("Enter");
-    await expect(addToggle).toHaveAttribute("aria-expanded", "true");
-
-    // Add two options with Enter in the new-option input.
+    const combo = progression.getByRole("combobox");
     const newOption = progression.getByLabel("New Progression option");
+    await combo.focus();
     for (const label of [`Stable ${s}`, `Improving ${s}`]) {
+      await page.keyboard.press("ArrowDown");
+      await expect(combo).toHaveAttribute("aria-expanded", "true");
       await newOption.focus();
       await page.keyboard.type(label);
       await page.keyboard.press("Enter");
-      await expect(progression.getByRole("combobox").locator("option:checked")).toHaveText(label);
+      await expect(combo).toHaveValue(label);
+      await expect(combo).toHaveAttribute("aria-expanded", "false");
+      await expect(combo).toBeFocused();
     }
     await expect(statusOf(page, "progression")).toHaveText("Saved");
 
-    // Change the select with the arrow keys only.
-    await progression.getByRole("combobox").focus();
+    // Change the choice with the arrow keys and Enter only.
+    await combo.focus();
+    await page.keyboard.press("ArrowDown"); // opens on the chosen option (Improving)
     await page.keyboard.press("ArrowUp");
-    await expect(progression.getByRole("combobox").locator("option:checked")).toHaveText(`Stable ${s}`);
+    await page.keyboard.press("Enter");
+    await expect(combo).toHaveValue(`Stable ${s}`);
     await expect(statusOf(page, "progression")).toHaveText("Saved");
 
     // Toggle a checkbox with Space.
@@ -180,9 +181,8 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await expect(statusOf(page, "pain_meds")).toHaveText("Saved");
 
     await page.reload();
-    await expect(
-      field(page, "progression").getByRole("combobox").locator("option:checked"),
-    ).toHaveText(`Stable ${s}`);
+    await expect(field(page, "progression").getByRole("combobox")).toHaveValue(`Stable ${s}`);
+    await openList(page, "pain_meds", "Pain Meds for CC");
     await expect(
       field(page, "pain_meds").getByRole("checkbox", { name: `Ibuprofen ${s}` }),
     ).not.toBeChecked();
@@ -364,16 +364,15 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await page.waitForURL(/\/visits\//);
     const visitId = page.url().split("/visits/")[1] ?? "";
 
-    await expect(page.getByLabel("Reason for visit — visit-only free text")).toHaveValue(
-      "Swollen ankle",
-    );
+    const reason = page.getByRole("combobox", { name: "Reason for visit" });
+    await expect(reason).toHaveValue("Swollen ankle");
     await expect(page.getByText("Reason: Swollen ankle")).toBeVisible();
     expect(await legacyVisitReason(visitId)).toBeNull();
     expect((await entryHistory(visitId, "reason_for_visit")).map((r) => r.freeText)).toEqual([
       "Swollen ankle",
     ]);
 
-    await page.getByLabel("Reason for visit — visit-only free text").fill("Swollen ankle, left side");
+    await reason.fill("Swollen ankle, left side");
     await expect(statusOf(page, "reason_for_visit")).toHaveText("Saved");
 
     await page.goto(`/patients/${patientId}`);
@@ -390,8 +389,9 @@ test.describe("Subj Complaints Habits (browser)", () => {
     await loginAs(page, "nurse");
     await page.goto(visitUrl(visit));
     await expect(field(page, "comments").locator("textarea")).toBeEnabled();
+    await openList(page, "progression", "Progression");
+    await expect(field(page, "progression").getByRole("listbox")).toBeVisible();
     await expect(page.getByRole("button", { name: "+ Add New" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /^Add option to / })).toHaveCount(0);
     await page.goto(`/patients/${visit.patientId}`);
     await expect(page.getByLabel("Reason for new visit")).toBeVisible();
 
@@ -404,8 +404,8 @@ test.describe("Subj Complaints Habits (browser)", () => {
       await adminPage.goto(visitUrl(visit));
       await expect(adminPage.getByText("read-only access")).toBeVisible();
       await expect(field(adminPage, "comments").locator("textarea")).toBeDisabled();
-      // Admin keeps list maintenance: the folded "+" opens "+ Add New".
-      await adminPage.getByRole("button", { name: "Add option to Progression" }).click();
+      // Admin keeps list maintenance: "+ Add New" at the bottom of the list.
+      await adminPage.getByRole("button", { name: "Open Progression list" }).click();
       await expect(field(adminPage, "progression").getByRole("button", { name: "+ Add New" })).toBeVisible();
 
       await loginAs(receptionPage, "reception");

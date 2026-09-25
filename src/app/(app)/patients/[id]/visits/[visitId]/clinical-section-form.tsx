@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   CHOICE_DEBOUNCE_MS,
   fetchSectionState,
@@ -8,9 +8,6 @@ import {
   postNewOption,
   SaverGroup,
   TYPING_DEBOUNCE_MS,
-  type EntryValue,
-  type FieldSnapshot,
-  type OptionView,
 } from "@/modules/clinical/autosave-client";
 import {
   FEMALE_ONLY_FIELD_CODES,
@@ -18,84 +15,18 @@ import {
   FIXED_CHOICES,
   NUMERIC_FIELD_RULES,
 } from "@/modules/clinical/definitions";
-import {
-  layoutFieldCodes,
-  SECTION_LAYOUTS,
-  type LayoutBox,
-  type LayoutCell,
-  type RowFiller,
-} from "@/modules/clinical/layouts";
+import { layoutFieldCodes, SECTION_LAYOUTS } from "@/modules/clinical/layouts";
 import { isGuardedLinkClick } from "@/modules/clinical/navigation-guard";
+import {
+  describe,
+  hasValue,
+  statusText,
+  useExclusionBlock,
+  useSaver,
+  type Exclusion,
+} from "./clinical-field-helpers";
+import { SonoForm, type SonoFieldContext } from "./sono-form";
 import type { ClinicalFieldView } from "@/modules/clinical/service";
-
-function useSaver(saver: FieldSaver): FieldSnapshot {
-  return useSyncExternalStore(saver.subscribe, saver.getSnapshot, saver.getSnapshot);
-}
-
-function statusText(snap: FieldSnapshot): string {
-  switch (snap.status) {
-    case "dirty":
-      return "Unsaved…";
-    case "saving":
-      return "Saving…";
-    case "saved":
-      return "Saved";
-    case "conflict":
-      return "Conflict";
-    case "session-expired":
-      return "Session expired — not saved";
-    case "actor-mismatch":
-      return "Signed in as another user — not saved";
-    case "locked":
-      return "Locked — not saved";
-    case "error":
-      return "Not saved";
-    default:
-      return "";
-  }
-}
-
-function describe(value: EntryValue, options: OptionView[]): string {
-  if (value.checked !== undefined) return value.checked ? "Checked" : "Unchecked";
-  const labels = value.optionIds.map((id) => options.find((o) => o.id === id)?.label ?? "(unknown option)");
-  const parts = [...labels, value.freeText].filter((p) => p !== "");
-  return parts.length > 0 ? parts.join("; ") : "(empty)";
-}
-
-/**
- * Mutual exclusion between fields of this tab (ADR-027, FIELD_EXCLUSION_RULES),
- * e.g. "Unknown" vs Past Medical Hx. The UI only disables: it never clears or
- * rewrites the other field. The server enforces the same rule.
- */
-interface Exclusion {
-  /** "flag" = this is the checkbox; "excluded" = this is a field the checkbox rules out. */
-  role: "flag" | "excluded";
-  peers: FieldSaver[];
-  peerLabels: string[];
-}
-
-function hasValue(v: EntryValue): boolean {
-  return v.optionIds.length > 0 || v.freeText.trim() !== "" || v.checked === true;
-}
-
-function useExclusionBlock(exclusion: Exclusion | null, selfActive: boolean): boolean {
-  const peers = exclusion?.peers ?? NO_PEERS;
-  const role = exclusion?.role;
-  const subscribe = useCallback(
-    (listener: () => void) => {
-      const offs = peers.map((p) => p.subscribe(listener));
-      return () => offs.forEach((off) => off());
-    },
-    [peers],
-  );
-  const getBlocked = useCallback(() => {
-    if (!role || selfActive) return false; // never trap a value the user must be able to clear
-    return peers.some((p) => hasValue(p.getSnapshot().value));
-  }, [peers, role, selfActive]);
-  return useSyncExternalStore(subscribe, getBlocked, getBlocked);
-}
-
-const NO_PEERS: FieldSaver[] = [];
 
 function FieldEditor({
   field,
@@ -105,7 +36,6 @@ function FieldEditor({
   canWrite,
   canAddOption,
   exclusion,
-  cell,
   lockedReason,
 }: {
   field: ClinicalFieldView;
@@ -115,14 +45,10 @@ function FieldEditor({
   canWrite: boolean;
   canAddOption: boolean;
   exclusion: Exclusion | null;
-  /** Placement in a SonoSoft-style layout (compact rendering); null = plain vertical form. */
-  cell?: LayoutCell | null;
   /** Why the field cannot take a new value (e.g. female-only); clearing stays possible. */
   lockedReason?: string | null;
 }) {
   const snap = useSaver(saver);
-  const compact = Boolean(cell);
-  const visibleLabel = cell?.label ?? field.label;
   const isSelect = field.fieldType === "select";
   const isMulti = field.fieldType === "multiselect";
   const isChoice = isSelect || isMulti;
@@ -142,9 +68,6 @@ function FieldEditor({
     expired?: boolean;
   } | null>(null);
   const [adding, setAdding] = useState(false);
-  // Compact (SonoSoft) layout keeps "+ Add New" folded behind a small "+" so
-  // each field stays one line, like SonoSoft's combo boxes.
-  const [showAdd, setShowAdd] = useState(false);
 
   const blocked = useExclusionBlock(
     exclusion,
@@ -199,77 +122,33 @@ function FieldEditor({
     });
   }
 
-  // The control's accessible name is always the field's own label, even when
-  // the layout shows a shorter one ("1:", "How long?") or none.
   const controlName = field.label;
   const canAddOptionHere = isChoice && canAddOption && !retired && !blocked && !locked;
   const numberRule = isNumber ? NUMERIC_FIELD_RULES[field.code] : undefined;
   const choices = isFixedChoice ? (FIXED_CHOICES[field.code] ?? []) : [];
-  const classes = [
-    "field",
-    "clinical-field",
-    compact ? "compact" : "",
-    compact && cell?.size ? `size-${cell.size}` : "",
-    compact && cell?.tall ? "tall" : "",
-    isCheckbox ? "is-checkbox" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const classes = ["field", "clinical-field", isCheckbox ? "is-checkbox" : ""].filter(Boolean).join(" ");
 
   return (
     <div className={classes} data-field={field.code} data-field-active={field.isActive ? "true" : "false"}>
-      {compact && isCheckbox ? null : (
-        <div className="field-head">
-          <label htmlFor={inputId} className={cell?.hideLabel ? "visually-hidden" : undefined}>
-            {visibleLabel}
-            {retired ? <span className="muted"> (retired field, read-only)</span> : null}
-          </label>
-          <span className={`save-status ${snap.status}`} role="status" aria-live="polite">
-            {statusText(snap)}
-          </span>
-          {compact && canAddOptionHere ? (
-            <button
-              type="button"
-              className="add-toggle secondary"
-              aria-expanded={showAdd}
-              aria-label={`Add option to ${field.label}`}
-              title="Add a new option to this list"
-              onClick={() => setShowAdd((v) => !v)}
-            >
-              +
-            </button>
-          ) : null}
-        </div>
-      )}
+      <div className="field-head">
+        <label htmlFor={inputId}>
+          {field.label}
+          {retired ? <span className="muted"> (retired field, read-only)</span> : null}
+        </label>
+        <span className={`save-status ${snap.status}`} role="status" aria-live="polite">
+          {statusText(snap)}
+        </span>
+      </div>
 
       <div className="field-body">
         {isCheckbox ? (
-          compact ? (
-            <div className="check-inline">
-              <input
-                id={inputId}
-                type="checkbox"
-                checked={snap.value.checked === true}
-                disabled={disabled}
-                onChange={(e) => changeChecked(e.target.checked)}
-              />
-              <label htmlFor={inputId}>
-                {visibleLabel}
-                {retired ? <span className="muted"> (retired field, read-only)</span> : null}
-              </label>
-              <span className={`save-status ${snap.status}`} role="status" aria-live="polite">
-                {statusText(snap)}
-              </span>
-            </div>
-          ) : (
-            <input
-              id={inputId}
-              type="checkbox"
-              checked={snap.value.checked === true}
-              disabled={disabled}
-              onChange={(e) => changeChecked(e.target.checked)}
-            />
-          )
+          <input
+            id={inputId}
+            type="checkbox"
+            checked={snap.value.checked === true}
+            disabled={disabled}
+            onChange={(e) => changeChecked(e.target.checked)}
+          />
         ) : null}
 
         {blockedText ? <span className="muted">{blockedText}</span> : null}
@@ -380,7 +259,7 @@ function FieldEditor({
           <textarea
             id={inputId}
             aria-label={controlName}
-            rows={compact && !cell?.tall ? 1 : 3}
+            rows={3}
             value={freeText}
             disabled={disabled}
             onChange={(e) => changeFreeText(e.target.value)}
@@ -421,7 +300,7 @@ function FieldEditor({
           </button>
         ) : null}
 
-        {canAddOptionHere && (!compact || showAdd) ? (
+        {canAddOptionHere ? (
           <div className="add-new">
             <input
               type="text"
@@ -461,58 +340,6 @@ function FieldEditor({
         ) : null}
       </div>
     </div>
-  );
-}
-
-/**
- * SonoSoft's "Select Impressions" / "Select Recomendations": choosing an option
- * puts it into the first empty row (AP1/AP2). Rows keep their own saves.
- */
-function RowFillerControl({
-  filler,
-  rows,
-  disabled,
-}: {
-  filler: RowFiller;
-  rows: { field: ClinicalFieldView; saver: FieldSaver }[];
-  disabled: boolean;
-}) {
-  const snaps = rows.map((r) => r.saver.getSnapshot());
-  const subscribe = useCallback(
-    (listener: () => void) => {
-      const offs = rows.map((r) => r.saver.subscribe(listener));
-      return () => offs.forEach((off) => off());
-    },
-    [rows],
-  );
-  const firstEmpty = useSyncExternalStore(
-    subscribe,
-    () => rows.findIndex((r) => !hasValue(r.saver.getSnapshot().value)),
-    () => rows.findIndex((r) => !hasValue(r.saver.getSnapshot().value)),
-  );
-  const options = (snaps[0]?.options ?? []).filter((o) => o.isActive);
-  const target = firstEmpty >= 0 ? rows[firstEmpty] : undefined;
-
-  return (
-    <label className="row-filler">
-      <span>{filler.label}</span>
-      <select
-        aria-label={filler.label}
-        value=""
-        disabled={disabled || !target || options.length === 0}
-        onChange={(e) => {
-          if (!target || !e.target.value) return;
-          target.saver.edit({ optionIds: [e.target.value], freeText: "" }, CHOICE_DEBOUNCE_MS);
-        }}
-      >
-        <option value="">{target ? `→ row ${firstEmpty + 1}` : "All rows are filled"}</option>
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
@@ -821,7 +648,7 @@ function ClinicalSectionFormInner({
     return null;
   }
 
-  function renderField(field: ClinicalFieldView, cell: LayoutCell | null) {
+  function renderField(field: ClinicalFieldView) {
     const saver = group.get(field.id);
     return saver ? (
       <FieldEditor
@@ -833,50 +660,16 @@ function ClinicalSectionFormInner({
         canWrite={canWrite}
         canAddOption={canAddOption}
         exclusion={exclusions.get(field.id) ?? null}
-        cell={cell}
         lockedReason={lockedReasonFor(field)}
       />
     ) : null;
   }
 
-  function renderBox(box: LayoutBox) {
-    const rows = box.rows
-      .map((r) => r.cells.filter((c) => byCode.has(c.code)))
-      .filter((cells) => cells.length > 0);
-    if (rows.length === 0) return null;
-    const fillerRows = box.filler
-      ? box.filler.codes.flatMap((code) => {
-          const field = byCode.get(code);
-          const saver = field ? group.get(field.id) : undefined;
-          return field && saver && field.isActive ? [{ field, saver }] : [];
-        })
-      : [];
-    return (
-      <section
-        key={box.id}
-        className={`layout-box tone-${box.tone}`}
-        data-box={box.id}
-        aria-label={box.title}
-      >
-        {box.title || box.filler ? (
-          <div className="box-head">
-            {box.title ? <h3 className="box-title">{box.title}</h3> : null}
-            {box.filler && fillerRows.length > 0 ? (
-              <RowFillerControl filler={box.filler} rows={fillerRows} disabled={readOnly} />
-            ) : null}
-          </div>
-        ) : null}
-        {box.caption ? <p className="box-caption">{box.caption}</p> : null}
-        {rows.map((cells) => (
-          <div className="layout-row" key={cells.map((c) => c.code).join(":")}>
-            {cells.map((c) => {
-              const field = byCode.get(c.code);
-              return field ? renderField(field, c) : null;
-            })}
-          </div>
-        ))}
-      </section>
-    );
+  function fieldFor(code: string): SonoFieldContext | null {
+    const field = byCode.get(code);
+    const saver = field ? group.get(field.id) : undefined;
+    if (!field || !saver) return null;
+    return { field, saver, exclusion: exclusions.get(field.id) ?? null, lockedReason: lockedReasonFor(field) };
   }
 
   function stay() {
@@ -905,20 +698,24 @@ function ClinicalSectionFormInner({
           : ""}
       </div>
       {layout ? (
-        <div className="clinical-form clinical-layout" data-layout={sectionCode}>
-          {layout.boxes.map((box) => renderBox(box))}
+        <>
+          <SonoForm
+            layout={layout}
+            sectionCode={sectionCode}
+            fieldFor={fieldFor}
+            actorId={actorId}
+            readOnly={readOnly}
+            canWrite={canWrite}
+            canAddOption={canAddOption}
+          />
           {unplaced.length > 0 ? (
-            <div className="layout-box tone-plain" data-box="other">
-              {unplaced.map((field) => (
-                <div className="layout-row" key={field.id}>
-                  {renderField(field, { code: field.code, size: "full" })}
-                </div>
-              ))}
+            <div className="sono-extra" data-box="other">
+              {unplaced.map((field) => renderField(field))}
             </div>
           ) : null}
-        </div>
+        </>
       ) : (
-        <div className="clinical-form">{fields.map((field) => renderField(field, null))}</div>
+        <div className="clinical-form">{fields.map((field) => renderField(field))}</div>
       )}
       {prompt ? <DiscardDialog items={prompt.items} onStay={stay} onDiscard={discardAndLeave} /> : null}
     </div>

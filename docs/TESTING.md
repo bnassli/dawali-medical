@@ -63,7 +63,10 @@ R1b additions (ADR-029):
   placement removal, Additional Comments type change, idempotency).
 - Vitest `test/patient-search-r1b.test.ts`: day/month/year parsing, `recent` list
   (newest first; an edited patient moves to the top), schema refuses empty criteria.
-- Playwright: SonoSoft field order and labels per tab, "Select Impressions" filling the
+- Vitest `test/combo-text.test.ts`: what typing in a SonoSoft combo box saves (option kept,
+  text after the comma, exact label chooses, retired labels, round trip).
+- Playwright: SonoSoft field order and labels per tab, combo boxes and lists (mouse and
+  keyboard), "Select Impressions" filling the
   next row, Bullets/Numbers, numeric stockings (cm, invalid value refused), female-only
   field, S1, Unknown/None/No known, recent list + live search + birthdate format.
 

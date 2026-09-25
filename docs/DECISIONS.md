@@ -551,11 +551,22 @@ ADR-026 they stay visible, read-only, only on visits that have history for them.
 converted automatically: turning old multiselect/free-text values into rows or numbers
 would put words in the doctor's mouth.
 
-*Layouts are presentation only:* `src/modules/clinical/layouts.ts` places each field of a
-tab into SonoSoft's boxes and rows (red/blue/plain frames, label on the left, "Habits",
-"Stockings detail"...). The data model (fields, order, types) stays in `definitions.ts`; a
-placed field that a layout does not name is shown after the boxes, so nothing can
-disappear. In the compact layout "+ Add New" is folded behind a small "+" per field.
+*Layouts are presentation only, drawn at SonoSoft's pixel positions:*
+`src/modules/clinical/layouts.ts` gives every control, label, frame and button of a tab
+its position and size measured on the reference screenshot (the same coordinates as the
+approved "Dawali SonoSoft Tabs" mock-up); `sono-form.tsx` draws them with SonoSoft's
+Tahoma font, grey fields and drop-down arrows, and scales the whole form to the page
+width (1x–1.6x) so proportions never change. Controls behave like SonoSoft's: a single
+choice is an editable combo box (pick from the list or type; typed text is the visit-only
+free text, rules in `combo-text.ts`); a multiple choice is a grey box showing the chosen
+items with room to type, its list opening from the arrow or SonoSoft's button ("Current
+Meds", "Past Medical Hx"...); "+ Add New" sits at the bottom of each list. Save status is
+announced to screen readers and shown only when something needs attention. Controls
+SonoSoft has but Dawali does not store (Tutorial, Reconcile, Recode / Snomed, Add Charge)
+are not drawn. The data model (fields, order, types) stays in `definitions.ts`; a placed
+field that a layout does not name (e.g. a retired field with history) is shown under the
+form, so nothing can disappear. Open lists float over the page and close on click (not
+mouse-down), so closing one never moves the control being clicked.
 
 *Patient Search (PS1–PS4):* the search window opens with the most recently updated patients
 (`recent: true`, newest first); it searches as you type (300 ms debounce, stale responses
