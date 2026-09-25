@@ -7,10 +7,18 @@ import {
   getVisitReasons,
   listClinicalSections,
 } from "@/modules/clinical/service";
+import { TREATMENT_PLAN_SECTION_CODE } from "@/modules/clinical/definitions";
+import { getTreatmentPlanForVisit } from "@/modules/clinical/treatment-plan";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { getVisitById } from "@/modules/visits/service";
 import { loadPatient } from "../../../page-data";
 import { ClinicalSectionForm } from "./clinical-section-form";
+import { DiagramsPanel } from "./diagrams-panel";
+import { ReportsPanel } from "./reports-panel";
+import { MaterialsPanel } from "./materials-panel";
+import { listDoctors, listWarehouses, stockLevels, visitConsumption } from "@/modules/inventory/service";
+import { listReportsForVisit } from "@/modules/report-engine/service";
+import { listDiagramsForVisit } from "@/modules/diagrams/service";
 
 export default async function VisitChartPage({
   params,
@@ -42,8 +50,51 @@ export default async function VisitChartPage({
   const activeTab = requestedTab ? tabs.find((t) => t.code === requestedTab) : tabs[0];
   if (canRead && requestedTab && !activeTab) notFound();
 
-  const section = activeTab
-    ? await getClinicalSectionForVisit(getDb(), actor, visit.id, activeTab.code)
+  // The Treatment Plan tab shows the patient's plan: its "fields" are the plan's
+  // cells (ADR-030). Every other tab shows the visit's clinical entries.
+  const section = !activeTab
+    ? null
+    : activeTab.code === TREATMENT_PLAN_SECTION_CODE
+      ? {
+          code: activeTab.code,
+          fields: (await getTreatmentPlanForVisit(getDb(), actor, visit.id)).fields,
+          patientSex: patient.sex ?? null,
+        }
+      : await getClinicalSectionForVisit(getDb(), actor, visit.id, activeTab.code).then((v) => ({
+          code: v.section.code,
+          fields: v.fields,
+          patientSex: v.visit.patientSex,
+        }));
+
+  const diagrams = canRead ? await listDiagramsForVisit(getDb(), actor, visit.id) : [];
+  const reportList = canRead ? await listReportsForVisit(getDb(), actor, visit.id) : [];
+
+  // Materials used (I1, ADR-035): Operations store first, earliest expiry first.
+  const canSeeStock = actor.permissions.has(PERMISSIONS.INVENTORY_READ);
+  const canConsume = actor.permissions.has(PERMISSIONS.INVENTORY_CONSUME) && visitOpen;
+  const materials = canSeeStock
+    ? await (async () => {
+        const stores = await listWarehouses(getDb(), actor);
+        const stock = canConsume
+          ? (await Promise.all(stores.map((w) => stockLevels(getDb(), actor, w.id)))).flat()
+          : [];
+        const used = await visitConsumption(getDb(), actor, visit.id);
+        const doctors = canConsume ? await listDoctors(getDb()) : [];
+        const dmy = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "no expiry");
+        return {
+          batches: stock.map((r) => ({
+            warehouseId: r.warehouseId,
+            warehouseName: r.warehouseName,
+            batchId: r.batchId,
+            label: `${r.productName} — lot ${r.lotNumber || "—"}, exp ${dmy(r.expiryDate)} (${r.quantity} ${r.unit} left)`,
+          })),
+          doctors,
+          used: used.map((u) => ({
+            id: u.id,
+            text: `${u.quantity} ${u.unit} ${u.productName} (lot ${u.lotNumber || "—"}) — Dr. ${u.doctorName ?? "?"}, recorded by ${u.recordedBy ?? "?"}`,
+          })),
+        };
+      })()
     : null;
 
   const reason = canRead
@@ -95,21 +146,48 @@ export default async function VisitChartPage({
               </p>
             ) : null}
             <ClinicalSectionForm
-              key={`${visit.id}:${section.section.code}`}
+              key={`${visit.id}:${section.code}`}
               visitId={visit.id}
               actorId={actor.userId}
-              sectionCode={section.section.code}
+              sectionCode={section.code}
               fields={section.fields}
               readOnly={!canWrite || !visitOpen}
               canWrite={canWrite}
               canAddOption={canAddOption}
-              patientSex={section.visit.patientSex}
+              patientSex={section.patientSex}
             />
           </>
         ) : (
           <p className="muted">You do not have access to clinical entries.</p>
         )}
       </div>
+
+      {canRead ? (
+        <DiagramsPanel
+          base={`/patients/${patient.id}/visits/${visit.id}`}
+          diagrams={diagrams}
+          canCreate={canWrite && visitOpen}
+        />
+      ) : null}
+      {canRead ? (
+        <ReportsPanel
+          base={`/patients/${patient.id}/visits/${visit.id}`}
+          reports={reportList}
+          canCreate={canWrite && visitOpen}
+        />
+      ) : null}
+
+      {materials ? (
+        <MaterialsPanel
+          visitId={visit.id}
+          path={`/patients/${patient.id}/visits/${visit.id}`}
+          batches={materials.batches}
+          doctors={materials.doctors}
+          defaultDoctorId={materials.doctors.some((d) => d.id === actor.userId) ? actor.userId : null}
+          canRecord={canConsume}
+          used={materials.used}
+        />
+      ) : null}
 
       {/* Action area */}
       <div className="action-bar">

@@ -12,3 +12,9 @@ export function parseDayMonthYear(text: string): string | null {
   if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
+
+/** ISO yyyy-mm-dd as SonoSoft shows it (dd/mm/yyyy); anything else unchanged. */
+export function isoToDayMonthYear(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}

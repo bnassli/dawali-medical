@@ -57,6 +57,34 @@
       "when": 1790354566547,
       "tag": "0007_r1b_sonosoft_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790362649357,
+      "tag": "0008_r2_treatment_plan",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790364653996,
+      "tag": "0009_r4_diagrams",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790365232477,
+      "tag": "0010_r5_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790366755227,
+      "tag": "0011_i1_inventory",
+      "breakpoints": true
     }
   ]
 }

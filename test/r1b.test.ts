@@ -301,13 +301,15 @@ describe("R1b: migration 0007 on existing data", () => {
     db = conn.db;
     close = () => conn.pool.end();
 
-    // Every committed migration except 0007.
+    // The database as it was before R1b: every committed migration before 0007.
+    // (Later migrations are left out too: drizzle only applies migrations newer
+    // than the last one applied, so a later one would hide 0007.)
     tmp = mkdtempSync(path.join(os.tmpdir(), "dawali-mig-"));
     cpSync(path.resolve(process.cwd(), "drizzle"), tmp, { recursive: true });
-    unlinkSync(path.join(tmp, "0007_r1b_sonosoft_reconciliation.sql"));
     const journalPath = path.join(tmp, "meta", "_journal.json");
-    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { tag: string }[] };
-    journal.entries = journal.entries.filter((e) => !e.tag.startsWith("0007_"));
+    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { idx: number; tag: string }[] };
+    for (const e of journal.entries.filter((x) => x.idx >= 7)) unlinkSync(path.join(tmp, `${e.tag}.sql`));
+    journal.entries = journal.entries.filter((e) => e.idx < 7);
     writeFileSync(journalPath, JSON.stringify(journal));
     await migrate(db, { migrationsFolder: tmp });
 
@@ -324,7 +326,7 @@ describe("R1b: migration 0007 on existing data", () => {
       { visitId: visit!.id, fieldDefinitionId: ids.family_history!, version: 1, value: { optionIds: [], freeText: "mother" } },
     ]);
 
-    // The real path: db:migrate (applies only 0007) then db:seed.
+    // The real path: db:migrate (applies 0007 and later) then db:seed.
     await runMigrations(url);
     await seed(url);
   }, 120_000);

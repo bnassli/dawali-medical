@@ -23,6 +23,12 @@ import {
   VisitNotFoundError,
   VisitNotOpenError,
 } from "./service";
+import { TREATMENT_PLAN_SECTION_CODE } from "./definitions";
+import {
+  getTreatmentPlanForVisit,
+  saveTreatmentPlanCell,
+  TreatmentPlanItemNotFoundError,
+} from "./treatment-plan";
 
 /**
  * Framework-independent HTTP handlers for clinical autosave. They take a
@@ -52,14 +58,14 @@ export interface ApiDeps {
   allowRequestOrigin: boolean;
 }
 
-function json(status: number, body: Record<string, unknown>): Response {
+export function json(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
 }
 
-function fail(status: number, error: string, message: string, extra: Record<string, unknown> = {}) {
+export function fail(status: number, error: string, message: string, extra: Record<string, unknown> = {}) {
   return json(status, { ok: false, error, message, ...extra });
 }
 
@@ -149,7 +155,8 @@ function mapError(err: unknown): Response {
     err instanceof VisitNotFoundError ||
     err instanceof ClinicalFieldNotFoundError ||
     err instanceof ClinicalSectionNotFoundError ||
-    err instanceof ClinicalOptionNotFoundError
+    err instanceof ClinicalOptionNotFoundError ||
+    err instanceof TreatmentPlanItemNotFoundError
   ) {
     return fail(404, "not_found", err.message);
   }
@@ -163,7 +170,7 @@ function mapError(err: unknown): Response {
   return fail(500, "internal_error", "Unexpected server error.");
 }
 
-async function prepare<T>(
+export async function prepare<T>(
   request: Request,
   deps: ApiDeps,
   maxBytes: number,
@@ -201,7 +208,7 @@ async function prepare<T>(
  * different user (someone signed in on the same browser), refuse: text typed
  * as user A must never be saved under user B. Audited; nothing is written.
  */
-async function actorMismatch(
+export async function actorMismatch(
   deps: ApiDeps,
   actor: ActorContext,
   expectedUserId: string,
@@ -219,7 +226,7 @@ async function actorMismatch(
   );
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** POST /api/visits/{visitId}/clinical-entries/{fieldId}. patientId is derived from the visit, never accepted. */
 export async function handleSaveClinicalEntry(
@@ -281,7 +288,11 @@ export async function handleGetClinicalSection(
     return fail(400, "invalid_input", "Invalid visit or section.");
   }
   try {
-    const view = await getClinicalSectionForVisit(deps.db, actor, params.visitId, params.sectionCode);
+    // The Treatment Plan tab's "fields" are the cells of the patient's plan (ADR-030).
+    const view =
+      params.sectionCode === TREATMENT_PLAN_SECTION_CODE
+        ? await getTreatmentPlanForVisit(deps.db, actor, params.visitId)
+        : await getClinicalSectionForVisit(deps.db, actor, params.visitId, params.sectionCode);
     return json(200, {
       ok: true,
       visitId: view.visit.id,
@@ -293,6 +304,43 @@ export async function handleGetClinicalSection(
         options: f.options,
         isActive: f.isActive,
       })),
+    });
+  } catch (err) {
+    return mapError(err);
+  }
+}
+
+/**
+ * POST /api/visits/{visitId}/treatment-plan/{itemId}/{fieldId}: one cell of the
+ * patient's Treatment Plan (ADR-030). Same body, checks and status mapping as a
+ * clinical entry; the patient is derived from the visit, never accepted.
+ */
+export async function handleSaveTreatmentPlanCell(
+  request: Request,
+  params: { visitId: string; itemId: string; fieldId: string },
+  deps: ApiDeps,
+): Promise<Response> {
+  const prepared = await prepare(request, deps, MAX_SAVE_BODY_BYTES, saveClinicalEntryBodySchema);
+  if (!prepared.ok) return prepared.response;
+  if (![params.visitId, params.itemId, params.fieldId].every((v) => UUID_PATTERN.test(v))) {
+    return fail(400, "invalid_input", "Invalid visit, row or field id.");
+  }
+  const { expectedUserId, ...rest } = prepared.body;
+  const mismatch = await actorMismatch(deps, prepared.actor, expectedUserId, {
+    entityType: "treatment_plan_entry",
+    entityId: params.itemId,
+    visitId: params.visitId,
+  });
+  if (mismatch) return mismatch;
+  const input = saveClinicalEntrySchema.parse({ ...rest, visitId: params.visitId, fieldId: params.fieldId });
+  try {
+    const result = await saveTreatmentPlanCell(deps.db, prepared.actor, { ...input, itemId: params.itemId });
+    return json(200, {
+      ok: true,
+      changed: result.changed,
+      replayed: result.replayed,
+      version: result.version,
+      value: result.value,
     });
   } catch (err) {
     return mapError(err);

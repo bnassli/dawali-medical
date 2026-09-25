@@ -36,6 +36,8 @@ export interface FieldItem {
   placeholder?: string;
   /** false = no drop-down arrow; the list opens from SonoSoft's button next to it. */
   arrow?: boolean;
+  /** Radio choices in one line without a frame (SonoSoft's "Patient feels"). */
+  inline?: boolean;
   /** Multiselect shown only as its opener button (SonoSoft's "Problem List"). */
   buttonOnly?: { text: string; color?: TextColor };
 }
@@ -83,7 +85,14 @@ export interface FillerItem {
   codes: string[];
 }
 
-export type LayoutItem = FieldItem | LabelItem | OpenerItem | BoxItem | FillerItem;
+/** SonoSoft's small "Clear" button next to a row: empties that field (a new, audited version). */
+export interface ClearItem {
+  kind: "clear";
+  rect: Rect;
+  forCode: string;
+}
+
+export type LayoutItem = FieldItem | LabelItem | OpenerItem | BoxItem | FillerItem | ClearItem;
 
 export interface SectionLayout {
   width: number;
@@ -303,10 +312,266 @@ const ASSESSMENT_PLAN: SectionLayout = {
   ],
 };
 
+/**
+ * docs/reference/sonosoft/tabs/treatment-01-treatment-plan.jpg (R2, ADR-030).
+ * One line per plan row, 20 px apart; `rows` = saved rows + empty rows. The
+ * cell codes are `${column}__${row}` (see treatment-plan.ts). "Cancelled" is
+ * not in SonoSoft (PO decision: rows are cancelled, never deleted).
+ */
+export function treatmentPlanLayout(rows: number): SectionLayout {
+  const items: LayoutItem[] = [
+    l("Scheduled", 14, 309, { bold: true, underline: true, size: 10 }),
+    l("Completed", 88, 309, { bold: true, underline: true, size: 10 }),
+    l("Recommended Treatment/Procedures in the order to be received", 166, 309, {
+      bold: true,
+      underline: true,
+      size: 10,
+    }),
+    l("Approval/Status/Comments", 577, 309, { bold: true, underline: true, size: 10, color: "navy" }),
+    l("Cancelled", 786, 309, { bold: true, underline: true, size: 9 }),
+  ];
+  for (let i = 1; i <= rows; i++) {
+    const y = 336 + (i - 1) * 20;
+    items.push(
+      f(`treatment_scheduled__${i}`, r(12, y, 58, 16), { bold: true, size: 9.5 }),
+      f(`treatment_completed__${i}`, r(89, y, 57, 16), { bold: true, size: 9.5 }),
+      f(`treatment_procedure__${i}`, r(165, y, 347, 16), { bold: true, size: 9.5 }),
+      f(`treatment_status__${i}`, r(519, y, 261, 16), { bold: true, size: 9.5 }),
+      f(`treatment_cancelled__${i}`, r(806, y + 2, 11, 11)),
+    );
+  }
+  return {
+    width: 840,
+    height: 336 + rows * 20 - 292 + 12,
+    origin: { x: 0, y: 292 },
+    background: "#f0f0f0",
+    items,
+  };
+}
+
+const BLUE_BOX = "#3d4fa0";
+const sub = (text: string, x: number, y: number) => l(text, x, y, { bold: true, color: "blue", size: 9.5 });
+
+/** docs/reference/sonosoft/tabs/treatment-02-laser-ablation.jpg (R3, ADR-031). */
+const LASER_ABLATION: SectionLayout = {
+  width: 790,
+  height: 425,
+  origin: { x: 0, y: 292 },
+  background: "#f0f0f0",
+  items: [
+    l("Laser Ablation", 277, 305, { title: true }),
+    l("Treated Vessel:", 62, 330, { w: 90, align: "right", forCode: "laser_vessel" }),
+    f("laser_side", r(155, 329, 64, 16)),
+    f("laser_vessel", r(226, 329, 163, 16)),
+    l("beginning at", 393, 330, { forCode: "laser_start_cm" }),
+    f("laser_start_cm", r(446, 329, 33, 16)),
+    l("cm. from the junction and terminated at the", 484, 330, { forCode: "laser_terminated_at" }),
+    f("laser_terminated_at", r(666, 329, 102, 16)),
+
+    box(r(11, 353, 764, 31), BLUE_BOX),
+    l("Ambulatory Phlebectomy?", 47, 360),
+    l("Location :", 182, 360, { forCode: "laser_phlebectomy_location" }),
+    f("laser_phlebectomy_location", r(226, 359, 282, 16)),
+    l("# of incisions:", 514, 360, { forCode: "laser_incisions" }),
+    f("laser_incisions", r(573, 359, 39, 16)),
+    l("using", 621, 360, { forCode: "laser_phlebectomy_using" }),
+    f("laser_phlebectomy_using", r(646, 359, 122, 16)),
+
+    l("Anesthesia", 107, 390, { forCode: "laser_anesthesia" }),
+    f("laser_anesthesia", r(155, 389, 434, 16), { bold: true }),
+    l("Cleansed with", 609, 390, { forCode: "laser_cleansed_with" }),
+    f("laser_cleansed_with", r(668, 389, 100, 16)),
+    f("laser_agent_1_amount", r(155, 410, 50, 16)),
+    f("laser_agent_1", r(209, 410, 134, 16)),
+    f("laser_agent_2_amount", r(359, 410, 50, 16)),
+    f("laser_agent_2", r(412, 410, 146, 16)),
+    f("laser_agent_3_amount", r(563, 410, 50, 16)),
+    f("laser_agent_3", r(617, 410, 151, 16)),
+
+    sub("For Single Pass", 221, 436),
+    sub("For duplication and 2nd Pass", 510, 436),
+    l("Entry point", 105, 454, { forCode: "laser_entry_point" }),
+    f("laser_entry_point", r(155, 453, 93, 16), { bold: true }),
+    l("to the", 257, 454, { forCode: "laser_pass1_to" }),
+    f("laser_pass1_to", r(284, 453, 118, 16), { bold: true }),
+    l("then from the", 411, 454, { forCode: "laser_pass2_from" }),
+    f("laser_pass2_from", r(468, 453, 94, 16)),
+    l("to the", 570, 454, { forCode: "laser_pass2_to" }),
+    f("laser_pass2_to", r(599, 453, 117, 16), { bold: true }),
+
+    box(r(11, 478, 766, 70), BLUE_BOX),
+    l("Treatment Parameters:", 19, 484, { w: 130, align: "right", forCode: "laser_parameters" }),
+    f("laser_parameters", r(155, 483, 144, 16)),
+    l("Treatment was CHANGED at the", 303, 484, { forCode: "laser_changed_at" }),
+    f("laser_changed_at", r(436, 483, 62, 16)),
+    f("laser_changed_to", r(500, 483, 210, 16)),
+    f("laser_changed_value", r(714, 483, 52, 16)),
+    l("Total laser energy used was:", 9, 504, { w: 140, align: "right", forCode: "laser_energy_joules" }),
+    f("laser_energy_joules", r(155, 503, 73, 16)),
+    l("joules for", 232, 504, { forCode: "laser_seconds" }),
+    f("laser_seconds", r(279, 503, 51, 16)),
+    l("seconds", 336, 504),
+    l("Total length of vein treated:", 398, 504, { forCode: "laser_length_treated" }),
+    f("laser_length_treated", r(515, 503, 41, 16)),
+    l("Average Dia.of Vein:", 588, 504, { forCode: "laser_avg_diameter" }),
+    f("laser_avg_diameter", r(676, 503, 34, 16)),
+    l("OPTIONAL:", 70, 524, { w: 80, align: "right", forCode: "laser_optional" }),
+    f("laser_optional", r(155, 523, 334, 16)),
+    f("laser_optional_value", r(493, 523, 40, 16)),
+    l("Fluence:", 637, 527, { forCode: "laser_fluence" }),
+    f("laser_fluence", r(676, 525, 34, 16)),
+
+    l("Add'l Surgical Comments:", 2, 557, { w: 150, align: "right", color: "red", forCode: "laser_surgical_comments" }),
+    f("laser_surgical_comments", r(155, 555, 615, 62)),
+    l("Final Comments:", 2, 621, { w: 150, align: "right", color: "red", forCode: "laser_final_comments" }),
+    f("laser_final_comments", r(155, 620, 615, 50)),
+    f("laser_machine", r(155, 678, 150, 16), { bold: true }),
+    l("Please set your Laser Machine as default", 310, 679, { size: 12, forCode: "laser_machine" }),
+  ],
+};
+
+/** docs/reference/sonosoft/tabs/treatment-09-follow-up-office-visit.jpg (R3, ADR-031). */
+const FOLLOW_UP: SectionLayout = {
+  width: 790,
+  height: 580,
+  origin: { x: 0, y: 292 },
+  background: "#f0f0f0",
+  items: [
+    box(r(8, 300, 680, 128)),
+    l("Subjective", 15, 305, { underline: true, size: 11.5, forCode: "followup_subjective" }),
+    l("Patient feels:", 84, 314),
+    f("followup_patient_feels", r(146, 312, 204, 15), { inline: true }),
+    f("followup_subjective_statement", r(352, 313, 324, 16)),
+    f("followup_subjective", r(148, 337, 528, 86)),
+
+    box(r(8, 431, 680, 115)),
+    l("Objective Findings", 17, 439, { underline: true, size: 11.5, forCode: "followup_objective" }),
+    f("followup_objective", r(148, 435, 528, 106)),
+
+    box(r(8, 549, 680, 142)),
+    l("Assessment", 15, 553, { underline: true, size: 11.5, forCode: "followup_assessment_1" }),
+    ...[1, 2, 3].flatMap((i) => {
+      const y = [557, 600, 643][i - 1] ?? 557;
+      return [
+        l(`${i}:`, 136, y, { size: 9, forCode: `followup_assessment_${i}` }),
+        f(`followup_assessment_${i}`, r(148, y, 528, i === 3 ? 42 : 39)),
+      ];
+    }),
+
+    box(r(8, 694, 680, 168)),
+    l("Plan", 15, 699, { underline: true, size: 11.5, forCode: "followup_plan_1" }),
+    { kind: "filler", label: "Select", rect: r(68, 703, 34, 17), codes: ["followup_plan_1", "followup_plan_2"] },
+    l("Plan 1:", 116, 701, { size: 9, forCode: "followup_plan_1" }),
+    f("followup_plan_1", r(148, 700, 528, 75)),
+    l("Plan 2:", 116, 778, { size: 9, forCode: "followup_plan_2" }),
+    f("followup_plan_2", r(148, 778, 528, 75)),
+  ],
+};
+
+/**
+ * docs/reference/sonosoft/tabs/treatment-10-post-evlt-comp-follow-up-part1.jpg and
+ * -part2.jpg (R3b, ADR-032). The two screenshots do not show what lies between
+ * Cardio and Indications; nothing is invented there, so everything from
+ * Indications down is drawn GAP px higher than in SonoSoft.
+ */
+const POST_EVLT_GAP = 56;
+const postEvlt = (): SectionLayout => {
+  const up = (y: number) => y - POST_EVLT_GAP;
+  const rowLabel = (text: string, y: number, code: string, x = 30, w = 100) =>
+    l(text, x, y, { w, align: "right", bold: true, forCode: code });
+  const exam = [
+    ["Constitution", "exam_constitution", 592],
+    ["Eyes", "exam_eyes", 625],
+    ["ENMT", "exam_enmt", 659],
+    ["Neck", "exam_neck", 692],
+    ["Lungs", "exam_lungs", 726],
+    ["Cardio", "exam_cardio", 759],
+  ] as const;
+  return {
+    width: 700,
+    height: up(1410) - 292 + 12,
+    origin: { x: 0, y: 292 },
+    background: "#f0f0f0",
+    items: [
+      box(r(15, 325, 672, up(1410) - 325)),
+      l("Height:", 27, 336, { forCode: "vital_height" }),
+      f("vital_height", r(61, 334, 28, 18)),
+      l("Weight:", 96, 336, { forCode: "vital_weight" }),
+      f("vital_weight", r(133, 334, 32, 18)),
+      l("Pulse:", 189, 336, { forCode: "vital_pulse" }),
+      f("vital_pulse", r(219, 334, 22, 18)),
+      l("Bp:", 248, 336, { forCode: "vital_bp" }),
+      f("vital_bp", r(266, 334, 52, 18)),
+      l("Rhythm:", 329, 336, { forCode: "vital_rhythm" }),
+      f("vital_rhythm", r(368, 335, 67, 16)),
+      l("Temp:", 443, 336, { forCode: "vital_temp" }),
+      f("vital_temp", r(472, 334, 33, 18)),
+      l("Respiratory Rate:", 512, 336, { forCode: "vital_respiratory_rate" }),
+      f("vital_respiratory_rate", r(593, 334, 20, 18)),
+      l("BMI:", 627, 336, { forCode: "vital_bmi" }),
+      f("vital_bmi", r(646, 334, 31, 18)),
+      box(r(15, 362, 672, 1)),
+
+      l("Subjective", 28, 370, { w: 100, align: "right", bold: true, underline: true, size: 10, forCode: "post_subjective" }),
+      f("post_subjective", r(132, 368, 519, 30)),
+      l("Objective Findings", 18, 400, { w: 110, align: "right", bold: true, underline: true, size: 10, forCode: "post_objective" }),
+      f("post_objective", r(132, 402, 519, 30)),
+      rowLabel("Past Medical Hx", 436, "past_medical_history", 17, 110),
+      f("past_medical_history", r(132, 436, 519, 30)),
+      rowLabel("Current Meds", 469, "current_meds", 17, 110),
+      f("current_meds", r(132, 469, 519, 30)),
+      rowLabel("Allergies", 502, "allergies", 17, 110),
+      f("allergies", r(132, 502, 519, 30)),
+      rowLabel("Social Hx", 536, "social_history", 17, 110),
+      f("social_history", r(132, 536, 519, 24)),
+      box(r(15, 563, 672, 1)),
+
+      l("Physical Exam Findings", 23, 571, { bold: true, underline: true, size: 10 }),
+      ...exam.flatMap(([text, code, y]) => [rowLabel(text, y + 1, code), f(code, r(132, y, 519, 30))]),
+
+      l("Indications", 27, up(866), { w: 100, align: "right", bold: true, forCode: "us_indications" }),
+      f("us_indications", r(132, up(860), 519, 28)),
+      l("Findings", 30, up(893), { w: 100, align: "right", forCode: "us_findings" }),
+      f("us_findings", r(132, up(892), 519, 30)),
+      l("Impression", 30, up(926), { w: 100, align: "right", forCode: "us_impression" }),
+      f("us_impression", r(132, up(925), 519, 16)),
+      box(r(15, up(950), 672, 1)),
+
+      l("CEAP:", 89, up(963), { w: 80, align: "right", bold: true, forCode: "ceap" }),
+      f("ceap", r(172, up(962), 278, 16)),
+      l("VCSS Right:", 89, up(983), { w: 80, align: "right", bold: true, forCode: "vcss_right" }),
+      f("vcss_right", r(172, up(982), 278, 16)),
+      l("VCSS Left:", 89, up(1003), { w: 80, align: "right", bold: true, forCode: "vcss_left" }),
+      f("vcss_left", r(172, up(1002), 278, 16)),
+      box(r(15, up(1023), 672, 1)),
+
+      { kind: "filler", label: "Add Impression", rect: r(23, up(1037), 92, 27), codes: ["impression_1", "impression_2", "impression_3", "impression_4"] },
+      f("impression_list_style", r(25, up(1082), 80, 43)),
+      ...[1, 2, 3, 4].flatMap((i): LayoutItem[] => {
+        const y = up(1037 + (i - 1) * 30);
+        return [
+          { kind: "clear", rect: r(118, y, 32, 15), forCode: `impression_${i}` },
+          l(`${i}:`, 161, y + 2, { bold: true, forCode: `impression_${i}` }),
+          f(`impression_${i}`, r(172, y, 480, 26)),
+        ];
+      }),
+      l("Impr for Init Venous Interp", 17, up(1157), { w: 150, align: "right", size: 9, forCode: "impr_for_init_venous_interp" }),
+      f("impr_for_init_venous_interp", r(172, up(1156), 480, 16)),
+      box(r(15, up(1180), 672, 1)),
+
+      { kind: "filler", label: "Add Recomendations", rect: r(23, up(1190), 122, 25), codes: rowCodes("recommendation").slice(0, 5) },
+      ...[1, 2, 3, 4, 5].map((i) => f(`recommendation_${i}`, r(172, up(1190 + (i - 1) * 43), 480, 40))),
+    ],
+  };
+};
+
 export const SECTION_LAYOUTS: Record<string, SectionLayout> = {
   subj_complaints_habits: SUBJ,
   past_medical_hx: PAST_MEDICAL_HX,
   assessment_plan: ASSESSMENT_PLAN,
+  laser_ablation: LASER_ABLATION,
+  follow_up_office_visit: FOLLOW_UP,
+  post_evlt_follow_up: postEvlt(),
 };
 
 /** Every field code a layout places. */

@@ -134,6 +134,8 @@ export interface FieldSaverConfig {
   initialVersion: number;
   initialValue: EntryValue;
   initialOptions: OptionView[];
+  /** Save endpoint; default is the visit's clinical entry for fieldId (Treatment Plan cells have their own, ADR-030). */
+  url?: string;
   fetchImpl?: FetchLike;
   newId?: () => string;
 }
@@ -399,7 +401,7 @@ export class FieldSaver {
     let res: Response;
     try {
       res = await this.fetchImpl(
-        `/api/visits/${this.cfg.visitId}/clinical-entries/${this.cfg.fieldId}`,
+        this.cfg.url ?? `/api/visits/${this.cfg.visitId}/clinical-entries/${this.cfg.fieldId}`,
         {
           method: "POST",
           credentials: "same-origin",

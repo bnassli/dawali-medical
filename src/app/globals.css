@@ -574,6 +574,12 @@ output.derived {
   border-color: #bfbfbf;
 }
 
+/* A date SonoSoft would not accept (R2): outlined, kept on screen, not saved. */
+.sono-field > input.invalid {
+  outline: 1px solid #c62828;
+  outline-offset: -1px;
+}
+
 .sono-field > textarea {
   resize: none;
   line-height: 1.3;
@@ -664,6 +670,15 @@ output.derived {
   justify-content: space-around;
   padding: 0 0 0 6px;
   font-size: 10.5px;
+}
+
+.sono-radios.inline {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+  font-size: 9.5px;
 }
 
 .sono-radios label {
@@ -877,3 +892,31 @@ output.derived {
 .container:has(.sono-form) {
   max-width: 1400px;
 }
+
+/* ---- Diagrams (R4, ADR-033) ---- */
+.diagrams-panel { margin-top: 1rem; }
+.diagram-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.diagram-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-bottom: 0.5rem; }
+.diagram-toolbar [role="group"] { display: inline-flex; gap: 0.25rem; }
+.diagram-toolbar button[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.diagram-toolbar .swatch { width: 1.6rem; height: 1.6rem; padding: 0; border: 1px solid var(--border); }
+.diagram-canvas { display: block; width: 100%; max-width: 900px; height: auto; border: 1px solid var(--border); background: #fff; }
+
+/* ---- Reports (R5, ADR-034) ---- */
+.report-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; }
+@media (max-width: 900px) { .report-columns { grid-template-columns: 1fr; } }
+.report-form textarea { width: 100%; }
+.report-diagram { display: block; margin-top: 0.3rem; font-size: 0.9rem; }
+.report-preview { background: #fff; color: #000; border: 1px solid var(--border); padding: 1.5rem 2rem; font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.35; }
+.report-preview p { margin: 0 0 0.6rem; }
+.report-clinic { font-size: 18pt; font-weight: 700; }
+.report-page-break { border-top: 2px dashed #bbb; margin-top: 1rem; padding-top: 1rem; }
+.report-diagram-img { display: block; max-width: 100%; margin: 0.75rem auto; }
+
+/* ---- Inventory (I1, ADR-035) ---- */
+.inv-row { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: flex-end; margin: 0.5rem 0; }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.inv-table th, .inv-table td { border-bottom: 1px solid var(--border); padding: 0.3rem 0.4rem; text-align: left; }
+.inv-table input { width: 100%; min-width: 4rem; }
+.inv-expiring td { background: #fff4d6; }
+.inv-expired td { background: #fde2e1; color: var(--danger); }

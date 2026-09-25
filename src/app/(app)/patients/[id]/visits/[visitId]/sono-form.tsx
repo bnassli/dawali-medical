@@ -34,6 +34,7 @@ import type {
   TextColor,
 } from "@/modules/clinical/layouts";
 import { comboText, parseComboText } from "@/modules/clinical/combo-text";
+import { isoToDayMonthYear, parseDayMonthYear } from "@/lib/day-month-year";
 import type { ClinicalFieldView } from "@/modules/clinical/service";
 import { describe, hasValue, statusText, useExclusionBlock, useSaver, type Exclusion } from "./clinical-field-helpers";
 
@@ -45,6 +46,8 @@ export interface SonoFieldContext {
   saver: FieldSaver;
   exclusion: Exclusion | null;
   lockedReason: string | null;
+  /** Adds a new option to every field that shares this field's list (rows of one concept). */
+  shareOption?: (option: OptionView) => void;
 }
 
 interface SonoFormProps {
@@ -161,6 +164,11 @@ function SonoItem({
       if (!fieldFor(item.forCode)) return null;
       return <SonoOpener item={item} origin={o} onOpen={() => focusField(item.forCode)} />;
     }
+    case "clear": {
+      const ctx = fieldFor(item.forCode);
+      if (!ctx) return null;
+      return <SonoClear rect={item.rect} origin={o} ctx={ctx} disabled={readOnly} />;
+    }
     case "filler":
       return <SonoFiller item={item} origin={o} fieldFor={fieldFor} disabled={readOnly} />;
     case "field": {
@@ -243,6 +251,33 @@ function SonoOpener({
       onClick={onOpen}
     >
       {item.text}
+    </button>
+  );
+}
+
+/** SonoSoft's "Clear": empties one row field (saved as a new version, never erased). */
+function SonoClear({
+  rect,
+  origin,
+  ctx,
+  disabled,
+}: {
+  rect: Rect;
+  origin: { x: number; y: number };
+  ctx: SonoFieldContext;
+  disabled: boolean;
+}) {
+  const snap = useSaver(ctx.saver);
+  return (
+    <button
+      type="button"
+      className="sono-btn"
+      aria-label={`Clear ${ctx.field.label}`}
+      style={{ ...place(rect, origin), fontSize: 9 }}
+      disabled={disabled || !ctx.field.isActive || snap.conflict !== null || !hasValue(snap.value)}
+      onClick={() => ctx.saver.edit({ optionIds: [], freeText: "" }, CHOICE_DEBOUNCE_MS)}
+    >
+      Clear
     </button>
   );
 }
@@ -405,6 +440,7 @@ function SonoField({
     .join(" ");
 
   const [draft, setDraft] = useState<string | null>(null);
+  const [dateDraft, setDateDraft] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [adding, setAdding] = useState(false);
   const [addMessage, setAddMessage] = useState<{ ok: boolean; text: string; expired?: boolean } | null>(null);
@@ -445,13 +481,14 @@ function SonoField({
     if (!label) return;
     setAdding(true);
     setAddMessage(null);
-    const result = await postNewOption(field.id, label, actorId);
+    const result = await postNewOption(field.optionFieldId ?? field.id, label, actorId);
     setAdding(false);
     if (!result.ok) {
       setAddMessage({ ok: false, text: result.message, expired: result.sessionExpired });
       return;
     }
-    saver.addOptionToList(result.option);
+    if (ctx.shareOption) ctx.shareOption(result.option);
+    else saver.addOptionToList(result.option);
     setNewLabel("");
     if (canWrite && !disabled) {
       if (isMulti) saver.edit({ optionIds: [...optionIds, result.option.id], freeText }, CHOICE_DEBOUNCE_MS);
@@ -682,6 +719,36 @@ function SonoField({
         onBlur={() => void saver.flush()}
       />
     );
+  } else if (type === "date") {
+    // SonoSoft dates are typed day/month/year; stored as ISO (ADR-030). An
+    // impossible date is kept on screen, marked, and sent as typed so the
+    // server refuses it: the field shows "Not saved" and leaving the page asks
+    // first, exactly like any other text that could not be saved.
+    const shown = dateDraft ?? isoToDayMonthYear(freeText);
+    const invalid = dateDraft !== null && parseDayMonthYear(dateDraft) === null;
+    control = (
+      <input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        aria-label={field.label}
+        aria-invalid={invalid || undefined}
+        className={invalid ? "invalid" : undefined}
+        title="Type the date as day/month/year, e.g. 17/08/2022."
+        value={shown}
+        disabled={disabled}
+        onChange={(e) => {
+          const text = e.target.value;
+          setDateDraft(text);
+          const iso = parseDayMonthYear(text);
+          saver.edit({ optionIds: [], freeText: iso ?? text }, TYPING_DEBOUNCE_MS);
+        }}
+        onBlur={() => {
+          if (dateDraft !== null && parseDayMonthYear(dateDraft) !== null) setDateDraft(null);
+          void saver.flush();
+        }}
+      />
+    );
   } else if (type === "text" || type === "number") {
     const unit = type === "number" ? NUMERIC_FIELD_RULES[field.code]?.unit : undefined;
     control = (
@@ -712,7 +779,12 @@ function SonoField({
     );
   } else if (type === "choice") {
     control = (
-      <div className="sono-radios" role="radiogroup" aria-label={field.label} id={id}>
+      <div
+        className={item.inline ? "sono-radios inline" : "sono-radios"}
+        role="radiogroup"
+        aria-label={field.label}
+        id={id}
+      >
         {(FIXED_CHOICES[field.code] ?? []).map((c) => (
           <label key={c.value}>
             <input

@@ -184,3 +184,57 @@ that have R1b entries show them read-only, nothing is lost (the old UI does not 
 `number`/`choice` types, so those values stay in the database but are not displayed). If
 Additional Comments entries were saved with list options after 0007, their option ids stay in
 history but the textarea shows only their free text.
+
+## R2 additions (ADR-030) — migration `0008_r2_treatment_plan.sql`
+
+| Table | Columns | Notes |
+|---|---|---|
+| `treatment_plan_items` | `id` (client-chosen uuid), `patient_id`, `position`, `created_in_visit_id`, `created_by`, `created_at` | One row of a patient's plan. Unique (`patient_id`, `position`). Insert-only (trigger). |
+| `treatment_plan_entries` | `id`, `item_id`, `field_definition_id`, `version`, `value` (jsonb, clinical value shape), `visit_id`, `client_mutation_id` (unique), `created_by`, `created_at` | Append-only versions of one cell. Unique (`item_id`, `field_definition_id`, `version`). Update/Delete rejected by trigger. |
+
+Seeded (not migrated): column fields `treatment_scheduled`, `treatment_completed` (type
+`date`), `treatment_procedure`, `treatment_status` (select, own option lists),
+`treatment_cancelled` (checkbox), and the section `treatment_plan` (sort 4, no placed
+fields).
+
+Rollback: see the header of the migration file. Dropping the two tables DESTROYS every
+Treatment Plan row, so it is only for a database with no plan data to keep, or after a
+verified backup. The seeded fields and section can stay unused or be retired.
+
+Audit actions added: `treatment_plan_item.create`, `treatment_plan_entry.create`,
+`treatment_plan_entry.update`.
+
+## R4 additions (ADR-033) — migration `0009_r4_diagrams.sql`
+
+| Table | Notes |
+|---|---|
+| `patient_files` | `id`, `patient_id`, `visit_id`, `kind` ('diagram'), `storage_key` (unique), `file_name`, `content_type`, `byte_size`, `sha256`, `created_by`, `created_at`. Metadata only; bytes live in `FILE_STORAGE_DIR`. Insert-only. |
+| `diagrams` | `id` (client-chosen uuid), `patient_id`, `visit_id`, `diagram_type` ('leg' \| 'vein'), `created_by`, `created_at`. Insert-only. |
+| `diagram_versions` | `id`, `diagram_id`, `version`, `strokes` (jsonb), `png_file_id` → `patient_files`, `client_mutation_id` (unique), `created_by`, `created_at`. Unique (`diagram_id`, `version`). Insert-only. |
+
+Rollback: see the migration header (destroys diagram records; the files in
+`FILE_STORAGE_DIR` are separate and must be backed up / removed deliberately).
+Audit actions added: `diagram.create`, `diagram_version.create`, `patient_file.read`.
+New env: `FILE_STORAGE_DIR` (default `var/files`).
+
+## R5 additions (ADR-034) — migration `0010_r5_reports.sql`
+
+| Table | Notes |
+|---|---|
+| `reports` | `id` (client uuid), `patient_id`, `visit_id`, `template_code`, `created_by`, `created_at`. Insert-only. |
+| `report_versions` | `id`, `report_id`, `version`, `status` (CHECK draft/final/amended), `content` (jsonb: section texts + chosen diagram file ids), `docx_file_id` → `patient_files` (CHECK: NULL exactly for drafts), `client_mutation_id` (unique), `created_by`, `created_at`. Unique (`report_id`, `version`). Insert-only. |
+
+Report files are `patient_files` rows with kind `report`. New permission `report.finalize`
+(Doctor). Audit actions: `report.create`, `report_version.draft`, `report_version.finalize`,
+`report_version.amend`. Rollback: see the migration header.
+
+## I1 additions (ADR-035) — migration `0011_i1_inventory.sql`
+
+`warehouses` (seeded: operations, clinic), `inventory_products` (unique lower(name), unit),
+`suppliers` (unique lower(name)), `inventory_batches` (product, lot, expiry; insert-only),
+`invoice_scans` (private file + AI reading; insert-only), `purchase_receipts` (client id,
+supplier, invoice no/date, store, scan; insert-only), `purchase_receipt_lines` (batch, packs,
+pack_size, pack price ex VAT; insert-only), `stock_movements` (the ledger: store, batch,
+signed quantity in units, type, receipt/transfer/visit/patient/doctor, reason, mutation id;
+insert-only, CHECKs on type and non-zero quantity). New env: `ANTHROPIC_API_KEY`,
+`INVOICE_AI_MODEL`. Rollback: see the migration header.

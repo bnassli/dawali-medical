@@ -16,6 +16,8 @@ export const FIELD_TYPES = {
    * not from an option list: they are not clinical dropdown options (rule #10).
    */
   CHOICE: "choice",
+  /** A calendar date stored as ISO `YYYY-MM-DD` in `freeText`, typed day/month/year (R2). */
+  DATE: "date",
 } as const;
 
 export type FieldType = (typeof FIELD_TYPES)[keyof typeof FIELD_TYPES];
@@ -142,6 +144,7 @@ export function assertExclusionRulesConsistent(
 export const SUBJ_COMPLAINTS_HABITS_SECTION_CODE = "subj_complaints_habits";
 export const PAST_MEDICAL_HX_SECTION_CODE = "past_medical_hx";
 export const ASSESSMENT_PLAN_SECTION_CODE = "assessment_plan";
+export const TREATMENT_PLAN_SECTION_CODE = "treatment_plan";
 
 /** Assessment Plan+ shows 8 ordered Impression rows and 8 Recommendation rows (AP1/AP2). */
 export const IMPRESSION_ROWS = 8;
@@ -253,6 +256,85 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
     label: "Additional Comments",
     type: FIELD_TYPES.TEXTAREA,
   },
+
+  // --- Laser Ablation (R3, ADR-031): SonoSoft's labels; every list starts empty. ---
+  { code: "laser_side", label: "Treated Vessel side", type: FIELD_TYPES.SELECT },
+  { code: "laser_vessel", label: "Treated Vessel", type: FIELD_TYPES.SELECT },
+  { code: "laser_start_cm", label: "beginning at (cm from the junction)", type: FIELD_TYPES.TEXT },
+  { code: "laser_terminated_at", label: "terminated at the", type: FIELD_TYPES.SELECT },
+  { code: "laser_phlebectomy_location", label: "Ambulatory Phlebectomy Location", type: FIELD_TYPES.SELECT },
+  { code: "laser_incisions", label: "# of incisions", type: FIELD_TYPES.SELECT },
+  { code: "laser_phlebectomy_using", label: "using", type: FIELD_TYPES.SELECT },
+  { code: "laser_anesthesia", label: "Anesthesia", type: FIELD_TYPES.SELECT },
+  { code: "laser_cleansed_with", label: "Cleansed with", type: FIELD_TYPES.SELECT },
+  ...[1, 2, 3].flatMap((i): FieldDefinitionSeed[] => [
+    { code: `laser_agent_${i}_amount`, label: `Agent ${i} amount`, type: FIELD_TYPES.SELECT, optionList: "laser_agent_amount" },
+    { code: `laser_agent_${i}`, label: `Agent ${i}`, type: FIELD_TYPES.SELECT, optionList: "laser_agent" },
+  ]),
+  { code: "laser_entry_point", label: "Entry point", type: FIELD_TYPES.SELECT },
+  { code: "laser_pass1_to", label: "to the (single pass)", type: FIELD_TYPES.SELECT, optionList: "laser_pass_end" },
+  { code: "laser_pass2_from", label: "then from the", type: FIELD_TYPES.SELECT },
+  { code: "laser_pass2_to", label: "to the (2nd pass)", type: FIELD_TYPES.SELECT, optionList: "laser_pass_end" },
+  { code: "laser_parameters", label: "Treatment Parameters", type: FIELD_TYPES.SELECT },
+  { code: "laser_changed_at", label: "Treatment was CHANGED at the", type: FIELD_TYPES.SELECT },
+  { code: "laser_changed_to", label: "Treatment changed to", type: FIELD_TYPES.SELECT },
+  { code: "laser_changed_value", label: "Changed value", type: FIELD_TYPES.TEXT },
+  { code: "laser_energy_joules", label: "Total laser energy used was (joules)", type: FIELD_TYPES.SELECT },
+  { code: "laser_seconds", label: "seconds", type: FIELD_TYPES.SELECT },
+  { code: "laser_length_treated", label: "Total length of vein treated", type: FIELD_TYPES.SELECT },
+  { code: "laser_avg_diameter", label: "Average Dia.of Vein", type: FIELD_TYPES.TEXT },
+  { code: "laser_optional", label: "OPTIONAL", type: FIELD_TYPES.SELECT },
+  { code: "laser_optional_value", label: "OPTIONAL value", type: FIELD_TYPES.TEXT },
+  { code: "laser_fluence", label: "Fluence", type: FIELD_TYPES.TEXT },
+  { code: "laser_surgical_comments", label: "Add'l Surgical Comments", type: FIELD_TYPES.SELECT },
+  { code: "laser_final_comments", label: "Final Comments", type: FIELD_TYPES.SELECT },
+  { code: "laser_machine", label: "Laser Machine", type: FIELD_TYPES.SELECT },
+
+  // --- Follow Up Office Visit (R3, ADR-031). Each follow-up is its own visit. ---
+  { code: "followup_patient_feels", label: "Patient feels", type: FIELD_TYPES.CHOICE },
+  { code: "followup_subjective_statement", label: "Subjective statement", type: FIELD_TYPES.SELECT },
+  { code: "followup_subjective", label: "Subjective", type: FIELD_TYPES.SELECT },
+  { code: "followup_objective", label: "Objective Findings", type: FIELD_TYPES.SELECT },
+  ...rowFields("followup_assessment", "Assessment", "followup_assessment", 3),
+  ...rowFields("followup_plan", "Plan", "followup_plan", 2),
+
+  // --- Post EVLT Comp Follow Up (R3b, ADR-032). Vitals, exam, ultrasound and CEAP/VCSS
+  // are global concepts other tabs (Add Vitals, Physical Exam, CEAP VCSS) will reuse. ---
+  { code: "vital_height", label: "Height", type: FIELD_TYPES.TEXT },
+  { code: "vital_weight", label: "Weight", type: FIELD_TYPES.TEXT },
+  { code: "vital_pulse", label: "Pulse", type: FIELD_TYPES.TEXT },
+  { code: "vital_bp", label: "Bp", type: FIELD_TYPES.TEXT },
+  { code: "vital_rhythm", label: "Rhythm", type: FIELD_TYPES.SELECT },
+  { code: "vital_temp", label: "Temp", type: FIELD_TYPES.TEXT },
+  { code: "vital_respiratory_rate", label: "Respiratory Rate", type: FIELD_TYPES.TEXT },
+  { code: "vital_bmi", label: "BMI", type: FIELD_TYPES.TEXT },
+  { code: "post_subjective", label: "Subjective", type: FIELD_TYPES.SELECT, optionList: "followup_subjective" },
+  { code: "post_objective", label: "Objective Findings", type: FIELD_TYPES.SELECT, optionList: "followup_objective" },
+  { code: "social_history", label: "Social Hx", type: FIELD_TYPES.SELECT },
+  { code: "exam_constitution", label: "Constitution", type: FIELD_TYPES.SELECT },
+  { code: "exam_eyes", label: "Eyes", type: FIELD_TYPES.SELECT },
+  { code: "exam_enmt", label: "ENMT", type: FIELD_TYPES.SELECT },
+  { code: "exam_neck", label: "Neck", type: FIELD_TYPES.SELECT },
+  { code: "exam_lungs", label: "Lungs", type: FIELD_TYPES.SELECT },
+  { code: "exam_cardio", label: "Cardio", type: FIELD_TYPES.SELECT },
+  { code: "us_indications", label: "Indications", type: FIELD_TYPES.SELECT },
+  { code: "us_findings", label: "Findings", type: FIELD_TYPES.SELECT },
+  { code: "us_impression", label: "Ultrasound Impression", type: FIELD_TYPES.SELECT },
+  { code: "ceap", label: "CEAP", type: FIELD_TYPES.TEXT },
+  { code: "vcss_right", label: "VCSS Right", type: FIELD_TYPES.TEXT },
+  { code: "vcss_left", label: "VCSS Left", type: FIELD_TYPES.TEXT },
+
+  // --- Treatment Plan (R2, ADR-030): the columns of the patient's plan table.
+  // Placed in no tab: their values live in treatment_plan_entries, per plan row. ---
+  { code: "treatment_scheduled", label: "Scheduled", type: FIELD_TYPES.DATE },
+  { code: "treatment_completed", label: "Completed", type: FIELD_TYPES.DATE },
+  {
+    code: "treatment_procedure",
+    label: "Recommended Treatment/Procedures in the order to be received",
+    type: FIELD_TYPES.SELECT,
+  },
+  { code: "treatment_status", label: "Approval/Status/Comments", type: FIELD_TYPES.SELECT },
+  { code: "treatment_cancelled", label: "Cancelled", type: FIELD_TYPES.CHECKBOX },
 ];
 
 /**
@@ -327,6 +409,85 @@ export const ASSESSMENT_PLAN_FIELD_CODES = [
   "assessment_additional_comments",
 ];
 
+export const LASER_ABLATION_FIELD_CODES = [
+  "laser_side",
+  "laser_vessel",
+  "laser_start_cm",
+  "laser_terminated_at",
+  "laser_phlebectomy_location",
+  "laser_incisions",
+  "laser_phlebectomy_using",
+  "laser_anesthesia",
+  "laser_cleansed_with",
+  ...[1, 2, 3].flatMap((i) => [`laser_agent_${i}_amount`, `laser_agent_${i}`]),
+  "laser_entry_point",
+  "laser_pass1_to",
+  "laser_pass2_from",
+  "laser_pass2_to",
+  "laser_parameters",
+  "laser_changed_at",
+  "laser_changed_to",
+  "laser_changed_value",
+  "laser_energy_joules",
+  "laser_seconds",
+  "laser_length_treated",
+  "laser_avg_diameter",
+  "laser_optional",
+  "laser_optional_value",
+  "laser_fluence",
+  "laser_surgical_comments",
+  "laser_final_comments",
+  "laser_machine",
+];
+
+export const FOLLOW_UP_FIELD_CODES = [
+  "followup_patient_feels",
+  "followup_subjective_statement",
+  "followup_subjective",
+  "followup_objective",
+  ...rowCodes("followup_assessment", 3),
+  ...rowCodes("followup_plan", 2),
+];
+
+/**
+ * Post EVLT Comp Follow Up (R3b, ADR-032). Past Medical Hx, Current Meds,
+ * Allergies, Impression 1-4, Bullets/Numbers, Impr for Init Venous Interp and
+ * Recommendations 1-5 are the SAME global fields as the Workup tabs: one value
+ * per visit, whichever tab shows it (ADR-026).
+ */
+export const POST_EVLT_FIELD_CODES = [
+  "vital_height",
+  "vital_weight",
+  "vital_pulse",
+  "vital_bp",
+  "vital_rhythm",
+  "vital_temp",
+  "vital_respiratory_rate",
+  "vital_bmi",
+  "post_subjective",
+  "post_objective",
+  "past_medical_history",
+  "current_meds",
+  "allergies",
+  "social_history",
+  "exam_constitution",
+  "exam_eyes",
+  "exam_enmt",
+  "exam_neck",
+  "exam_lungs",
+  "exam_cardio",
+  "us_indications",
+  "us_findings",
+  "us_impression",
+  "ceap",
+  "vcss_right",
+  "vcss_left",
+  "impression_list_style",
+  ...rowCodes("impression", 4),
+  "impr_for_init_venous_interp",
+  ...rowCodes("recommendation", 5),
+];
+
 export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
   {
     code: SUBJ_COMPLAINTS_HABITS_SECTION_CODE,
@@ -347,6 +508,23 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     sortOrder: 3,
     fieldCodes: ASSESSMENT_PLAN_FIELD_CODES,
   },
+  {
+    // The patient's Treatment Plan table (R2, ADR-030). No placed fields: its
+    // columns are TREATMENT_PLAN_COLUMN_CODES and its rows are plan items.
+    code: TREATMENT_PLAN_SECTION_CODE,
+    name: "Treatment Plan",
+    sortOrder: 4,
+    fieldCodes: [],
+  },
+  // SonoSoft's Treatment set order: Treatment Plan, Laser Ablation, ..., Follow Up Office Visit.
+  { code: "laser_ablation", name: "Laser Ablation", sortOrder: 5, fieldCodes: LASER_ABLATION_FIELD_CODES },
+  { code: "follow_up_office_visit", name: "Follow Up Office Visit", sortOrder: 6, fieldCodes: FOLLOW_UP_FIELD_CODES },
+  {
+    code: "post_evlt_follow_up",
+    name: "Post EVLT Comp Follow Up",
+    sortOrder: 7,
+    fieldCodes: POST_EVLT_FIELD_CODES,
+  },
 ];
 
 /**
@@ -365,6 +543,24 @@ export const FIELD_EXCLUSION_RULES: ExclusionRule[] = [
  * The UI keeps them in their SonoSoft position but disabled otherwise; the
  * server refuses a non-empty value (P2, ADR-029). Clearing is always allowed.
  */
+/**
+ * Treatment Plan (R2, ADR-030): one table per PATIENT, shared by all visits.
+ * Each row is a treatment_plan_items row; each cell is versioned in
+ * treatment_plan_entries under one of these column fields. The columns never
+ * take per-visit clinical entries.
+ */
+export const TREATMENT_PLAN_COLUMN_CODES = [
+  "treatment_scheduled",
+  "treatment_completed",
+  "treatment_procedure",
+  "treatment_status",
+  "treatment_cancelled",
+] as const;
+
+/** SonoSoft shows 25 rows; at least this many empty rows follow the filled ones. */
+export const TREATMENT_PLAN_MIN_ROWS = 25;
+export const TREATMENT_PLAN_MIN_EMPTY_ROWS = 5;
+
 export const FEMALE_ONLY_FIELD_CODES: readonly string[] = ["female_statement"];
 
 export interface NumericFieldRule {
@@ -389,6 +585,12 @@ export const NUMERIC_FIELD_RULES: Record<string, NumericFieldRule> = {
 
 /** Fixed values of `choice` fields (presentation only, never clinical options). */
 export const FIXED_CHOICES: Record<string, readonly { value: string; label: string }[]> = {
+  // Fixed by the requirements (§6.5) and SonoSoft's three radio buttons.
+  followup_patient_feels: [
+    { value: "better", label: "Better" },
+    { value: "worse", label: "Worse" },
+    { value: "same", label: "Same as last visit" },
+  ],
   impression_list_style: [
     { value: "bullets", label: "Bullets" },
     { value: "numbers", label: "Numbers" },
@@ -408,6 +610,11 @@ export function assertFieldRulesConsistent(defs: ClinicalDefinitions): void {
   }
   for (const code of [...Object.keys(NUMERIC_FIELD_RULES), ...Object.keys(FIXED_CHOICES), ...FEMALE_ONLY_FIELD_CODES]) {
     if (!byCode.has(code)) throw new Error(`Field rule names unknown field "${code}".`);
+  }
+  const placed = new Set(defs.sections.flatMap((s) => s.fieldCodes));
+  for (const code of TREATMENT_PLAN_COLUMN_CODES) {
+    if (!byCode.has(code)) throw new Error(`Treatment Plan column "${code}" is not defined.`);
+    if (placed.has(code)) throw new Error(`Treatment Plan column "${code}" must not be placed in a tab.`);
   }
 }
 

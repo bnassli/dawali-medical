@@ -12,6 +12,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "./core";
+import { patients } from "./patients";
 import { visits } from "./visits";
 
 /**
@@ -160,5 +161,64 @@ export const clinicalEntries = pgTable(
       .on(table.clientMutationId)
       .where(sql`${table.clientMutationId} IS NOT NULL`),
     index("clinical_entries_visit_id_idx").on(table.visitId),
+  ],
+);
+
+/**
+ * Treatment Plan (R2, ADR-030): one plan per PATIENT, shared by every visit.
+ * A row of the plan. Insert-only (trigger in drizzle/0008): its order and
+ * owner never change; a wrong row is marked Cancelled, never deleted. The
+ * client chooses the id of a new row; the first saved cell creates it.
+ */
+export const treatmentPlanItems = pgTable(
+  "treatment_plan_items",
+  {
+    id: uuid("id").primaryKey(),
+    patientId: uuid("patient_id")
+      .notNull()
+      .references(() => patients.id, { onDelete: "restrict" }),
+    // Order the row was added in (1, 2, 3...), assigned under the patient row lock.
+    position: integer("position").notNull(),
+    createdInVisitId: uuid("created_in_visit_id")
+      .notNull()
+      .references(() => visits.id, { onDelete: "restrict" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("treatment_plan_items_patient_position_idx").on(table.patientId, table.position)],
+);
+
+/**
+ * Append-only versions of one cell of a plan row (same value shape and rules
+ * as clinical_entries). `visit_id` is the visit the change was made from.
+ * UPDATE/DELETE are rejected by a trigger (drizzle/0008).
+ */
+export const treatmentPlanEntries = pgTable(
+  "treatment_plan_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => treatmentPlanItems.id, { onDelete: "restrict" }),
+    fieldDefinitionId: uuid("field_definition_id")
+      .notNull()
+      .references(() => clinicalFieldDefinitions.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    value: jsonb("value").$type<ClinicalEntryValue>().notNull(),
+    visitId: uuid("visit_id")
+      .notNull()
+      .references(() => visits.id, { onDelete: "restrict" }),
+    clientMutationId: uuid("client_mutation_id").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("treatment_plan_entries_item_field_version_idx").on(
+      table.itemId,
+      table.fieldDefinitionId,
+      table.version,
+    ),
+    uniqueIndex("treatment_plan_entries_client_mutation_id_idx").on(table.clientMutationId),
+    index("treatment_plan_entries_item_id_idx").on(table.itemId),
   ],
 );

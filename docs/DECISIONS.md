@@ -576,3 +576,207 @@ Patient Record" (with SonoSoft's sentence) are below. Birthdate is typed day/mon
 ("E.G. 01/01/1925") and converted to ISO in the browser; criteria still go by POST only.
 
 *Not in R1b:* S2/S4/S7/S11/AP6/AP7 (open questions), pixel-exact fidelity, Treatment Plan.
+
+ADR-030: R2 — Treatment Plan. Source: `PROMPT_R2.md`, the SonoSoft screen
+`docs/reference/sonosoft/tabs/treatment-01-treatment-plan.jpg` and the Product Owner
+decisions of 2026-09-25. Answers the Sprint 3B questions of ADR-027 "Deferred".
+
+*Scope: one plan per patient.* The plan is not a visit entry: every visit of the patient
+shows the same table and can add to it or complete it (the SonoSoft screen shows rows from
+2022 to 2026). Each change records the visit it was made from.
+
+*Who edits:* `clinical.write` (Doctor, Nurse/Assistant); Admin reads only; Reception has
+no access. No new permission.
+
+*Order and removal:* rows keep the order they were first saved in (`position` = max + 1
+under the patient row lock); there is no reordering. Nothing is deleted: a wrong row is
+marked with the "Cancelled" tick box (not in SonoSoft; PO decision) and stays, with its
+history. Both tables are insert-only (triggers).
+
+*Model:* `treatment_plan_items` (row identity, patient, position, created-in visit) and
+`treatment_plan_entries` (append-only versions of one cell, same value shape as
+`clinical_entries`, plus `visit_id`). The columns are ordinary global field definitions
+placed in no tab — `treatment_scheduled`, `treatment_completed` (new type `date`, ISO in
+`freeText`, typed day/month/year), `treatment_procedure`, `treatment_status` (select with
+free text and "+ Add New", own lists) and `treatment_cancelled` (checkbox) — so option
+lists, validation, retirement and "+ Add New" are the existing clinical code. They are
+refused as visit entries.
+
+*New rows:* the screen shows saved rows then empty rows (SonoSoft's 25, at least 5 empty),
+each with a fresh random id. The first non-empty save of a cell on an unknown id creates
+the row for the visit's patient; an id belonging to another patient is answered as not
+found. An empty save creates nothing.
+
+*Same guarantees as clinical entries:* per-cell optimistic concurrency (409 with Keep
+mine / Use theirs), clientMutationId replay and reuse refusal, visit must be open (423),
+expectedUserId binding, same-origin, audit (`treatment_plan_item.create`,
+`treatment_plan_entry.create/update` with patient and visit), unsaved-navigation guard.
+An impossible date is sent as typed so the server refuses it and it shows "Not saved"
+instead of being dropped.
+
+*Screen:* each cell is presented to the SonoSoft form as a field
+(`${column}__${row}`), drawn at the screenshot's pixel positions (`treatmentPlanLayout`),
+so autosave and the guard are the tabs' code. An option added on one row is offered on
+every row at once. The tab is added after Assessment Plan+ (SonoSoft's Workup /
+Treatment switch is not reproduced).
+
+*Not in R2:* reordering, printing / report binding (R5), inventory linkage (future: a
+nullable link on the row, no change to the doctor's workflow).
+
+ADR-031: R3 — Laser Ablation and Follow Up Office Visit. Source: the SonoSoft screens
+`treatment-02-laser-ablation.jpg` and `treatment-09-follow-up-office-visit.jpg`,
+`docs/FINAL_V1_REQUIREMENTS_RECONCILIATION.md` §6.5, and ADR-029 (pixel layouts).
+
+*Two ordinary per-visit tabs* (a follow-up is its own visit): `laser_ablation` (sort 5)
+and `follow_up_office_visit` (sort 6), after Treatment Plan, in SonoSoft's Treatment order.
+No migration: fields, lists and placements are seeded; every list starts empty (rule #10).
+
+*Laser Ablation:* every SonoSoft combo box is a select with free text (side, vessel,
+terminated at, phlebectomy location / incisions / using, anesthesia, cleansed with, three
+agent amount + agent pairs sharing two lists, entry point and passes (both "to the" share
+one list), parameters, changed at / to, energy, seconds, length treated, optional,
+surgical and final comments, laser machine). The white boxes (beginning at cm, changed
+value, average diameter, optional value, fluence) are plain text: their units and ranges
+are not known yet, so no numeric rule is invented. "Ambulatory Phlebectomy?" is a caption,
+as in SonoSoft. Not drawn: Add Charge, Registry Data; the machine is not defaulted.
+
+*Follow Up Office Visit:* Patient feels = `choice` Better / Worse / Same as last visit
+(fixed by §6.5; stored "better" / "worse" / "same"), Subjective statement, Subjective,
+Objective Findings, Assessment 1–3 (one shared list) and Plan 1–2 (one shared list) with
+SonoSoft's "Select" filling the next empty Plan row.
+
+*Not in R3 (next phase):* Post EVLT Comp Follow Up (vitals, cardio, ultrasound sections)
+and the Comprehensive / General Clinical Exam.
+
+ADR-032: R3b — Post EVLT Comp Follow Up. Source: `treatment-10-post-evlt-comp-follow-up-part1.jpg`
+and `-part2.jpg`, ADR-029 (pixel layouts), ADR-026 (one global field per concept).
+
+*Per-visit tab* `post_evlt_follow_up` (sort 7), no migration. New global fields: vitals
+(`vital_height`, `vital_weight`, `vital_pulse`, `vital_bp`, `vital_temp`,
+`vital_respiratory_rate`, `vital_bmi` as text — units unknown, no rule invented;
+`vital_rhythm` select), `post_subjective` / `post_objective` (share Follow Up's lists),
+`social_history`, physical exam `exam_constitution/eyes/enmt/neck/lungs/cardio`,
+ultrasound `us_indications/findings/impression`, `ceap`, `vcss_right`, `vcss_left` (text).
+These are named as concepts so the future Add Vitals, Physical Exam and CEAP VCSS tabs
+reuse them instead of creating second copies.
+
+*Shared with the Workup tabs (same field, same value per visit):* Past Medical Hx, Current
+Meds, Allergies, Impression 1–4, Bullets/Numbers, Impr for Init Venous Interp,
+Recommendations 1–5. "Add Impression" / "Add Recomendations" fill the next empty row;
+the new "Clear" button empties a row by saving a new, audited version.
+
+*Not drawn / not built:* the fields between Cardio and Indications (not visible on either
+screenshot — needs one more screenshot; the rest of the form is drawn that much higher),
+the green "Copy from Workup" (+!) buttons (copying from an earlier visit needs a rule for
+which visit — PO question), Add Charge.
+
+ADR-033: R4 — Diagram engine and private patient files. Source: FINAL_V1 §7–§8,
+`docs/DIAGRAMS.md`, CLAUDE.md #9 and the medical-history rules.
+
+*Two independent actions* on every visit ("Diagrams" panel): Create Leg Diagram, Create
+Vein Diagram. Each opens an in-app editor (pen, 4 colours, 3 thicknesses, eraser, undo,
+redo, clear, save) over the type's IMMUTABLE base template (`public/diagram-templates/`,
+not patient data). A new diagram gets a fresh id; nothing is stored until the doctor draws
+and saves, so an untouched template is never filed.
+
+*Versions, never overwrite:* `diagrams` (visit, patient, type) and `diagram_versions`
+(v1, v2, ...: the editable strokes in template coordinates + the rendered PNG). Reopening
+continues from the latest version; every save is the next version. Optimistic concurrency
+(409, nothing written), clientMutationId replay/reuse refusal, open visit (423),
+expectedUserId, same-origin, audit (`diagram.create`, `diagram_version.create`). A diagram
+belongs to its visit: another visit cannot write to it. Tables are insert-only (triggers).
+
+*Private files:* PNG bytes are stored outside PostgreSQL and outside the web root in
+`FILE_STORAGE_DIR` (default `var/files`, git-ignored), write-once, under
+`patients/{patientId}/diagrams/{fileId}.png`; `patient_files` holds the metadata (name,
+type, size, SHA-256, patient, visit, user). They are served only by `GET /api/files/{id}`
+to signed-in users with `clinical.read`, `private, no-store`, and every read is audited
+(`patient_file.read`). Names follow §8.3: `2026-09-24_1030_LegDiagram_v01.png` (clinic
+time zone). The storage sits behind an interface so S3-compatible storage can replace it.
+
+*Placeholder templates:* the clinic's Leg (Front/Back) and Vein (Right Posterior, Central,
+Left Posterior) base images have not been supplied; the shipped SVGs are simple outlines
+labelled PLACEHOLDER. Replacing them means replacing the two files (same size) — earlier
+versions keep their own rendered PNGs.
+
+*Permissions:* draw/save = `clinical.write` (Doctor, Nurse/Assistant); view and open files =
+`clinical.read` (Admin read-only); Reception none.
+
+*Not in R4:* report insertion (R5 uses the latest saved Leg Diagram of the visit),
+external-editor round trip, S3 storage, backups of `FILE_STORAGE_DIR` (deployment, R6).
+
+ADR-034: R5 — Report engine (.docx). Source: FINAL_V1 §9, `docs/REPORTS.md`, the report
+samples in `docs/reference/sonosoft/report-samples/` and their README notes.
+
+*Templates are data* (`src/modules/report-engine/templates.ts` (not "reports/": that folder name is git-ignored to keep real reports out of the repo)): ordered sections (heading,
+text or list, page break, diagram after). Template 1 (short procedure: narrative + Leg
+Diagram) and Template 2 (HISTORY, PAST MEDICAL HISTORY, PHYSICAL EXAMINATION + Leg
+Diagram; page 2: ULTRASOUND FINDINGS + Vein Diagram, IMPRESSION, RECOMMENDATIONS). A new
+doctor-specific template is a new entry; the composer, preview and .docx writer are shared.
+
+*No retyping, no broken text:* the first draft of every section is composed from the
+visit's chart (`compose.ts`): patient name, age at the visit date and sex from the patient
+record (never a separate title field), chief complaints, meds (or "takes no
+medications"), past history / allergies ("no known allergy"), exam, ultrasound, CEAP/VCSS,
+Impression and Recommendation rows, and for Template 1 the Treatment Plan procedures
+completed on the visit date. Only recorded values are used, joined with spaces and
+punctuation; empty sections print nothing (no empty heading or bullet). Dates are
+dd/mm/yyyy. Bullets or numbers follow the visit's Bullets / Numbers choice.
+
+*Lifecycle (append-only):* `reports` (visit, template) and `report_versions`
+(draft → final → amended; DB checks: only draft has no file). Drafts save the edited text
+and chosen diagrams; Finalize writes a .docx (Times New Roman, clinic header, Patient /
+File Number / Date, sections, diagrams, "Dr. <name>") as a private patient file
+(`YYYY-MM-DD_Report_Template2_v02.docx`); after that, changes are saved only as amended
+versions, each with its own .docx. Nothing is overwritten. Concurrency, replay, open
+visit, same-origin, expectedUserId and audit (`report.create`,
+`report_version.draft/finalize/amend`) as elsewhere.
+
+*Diagrams:* default = the latest saved diagram of each type on the visit; the doctor can
+pick another saved version. A template's diagram is required to finalize: without one the
+editor shows a warning with a link to create it; a base template is never substituted;
+another visit's diagram is refused.
+
+*Who:* drafts `clinical.write` (Doctor, Nurse/Assistant); Finalize / amend — new
+permission `report.finalize`, Doctor only (the .docx is signed with the finalizer's name).
+Admin reads. The .docx downloads through the private file route.
+
+*Pending from the clinic:* the logo image (the header prints "Dawali Clinic" /
+"عيادات دوالي" as text until then) and the doctors' signature/initials images.
+
+ADR-035: I1 — Inventory (Operations store first). Product Owner request of 2026-09-25:
+two stores (Operations, Clinic), the Operations store is the priority; purchase invoices are
+scanned and read by AI; the nurse records the materials used on a visit against the
+patient AND the doctor, and they are taken off the store. Sample invoices reviewed
+(Specialized Distributor tax invoices, 2 pages, "box of 5", VAT 15%, no lot/expiry
+printed; a statement of account).
+
+*Ledger, not counters:* the balance of a batch in a store is the SUM of append-only
+`stock_movements` (receipt, transfer_out/in, consumption, adjustment); nothing is ever
+overwritten; a mistake is corrected by an adjustment with a reason. Stock can never go
+below zero (checked under a per-store-per-batch advisory lock). Expiry belongs to the
+batch (`inventory_batches`: product + lot + expiry); lists are earliest-expiry first (FEFO).
+
+*Receiving (scan → AI → review → confirm):* the scan (JPG/PNG/WEBP/PDF, ≤10 MB) is kept
+privately (`invoice_scans`, file storage `inventory/invoices/`), then read by Claude
+(`ANTHROPIC_API_KEY`, `INVOICE_AI_MODEL`, default `claude-sonnet-5`) into a DRAFT: supplier,
+invoice number and date, lines with product, packs, units per pack, pack price before VAT,
+lot/expiry if printed. Nothing reaches the stock until a person reviews every value, adds
+lot/expiry from the boxes and confirms. A statement of account (or any non-invoice) is
+flagged and cannot be received. Without an AI key the scan is still stored and the invoice
+is typed in. Stock is counted in units: 10 "box of 5" = 50. The same invoice number of the
+same supplier cannot be received twice; a scan can be received once. Invoices are supplier
+documents (no patient data) sent to the AI.
+
+*Materials used (visit page):* store + batch (FEFO, with what is left), quantity, and the
+treating doctor (Doctor-role users; a doctor defaults to himself). The row carries the
+visit, patient and doctor; the visit must be open. The Inventory page shows the last 30
+days per doctor, and per patient for users with patient access.
+
+*Permissions:* `inventory.read`, `inventory.manage` (receive, adjust, transfer, products —
+the Inventory role and Admin), `inventory.consume` (Doctor, Nurse/Assistant). The
+Inventory role sees stock only, no patient data.
+
+*Not in I1:* matching the statement of account to received invoices, costs/valuation
+reports, returns to supplier, reorder levels, the Clinic store workflow in detail, and
+billing of materials to the patient (iCare).

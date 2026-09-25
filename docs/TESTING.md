@@ -70,5 +70,42 @@ R1b additions (ADR-029):
   next row, Bullets/Numbers, numeric stockings (cm, invalid value refused), female-only
   field, S1, Unknown/None/No known, recent list + live search + birthdate format.
 
+R2 additions (ADR-030):
+- Vitest `test/treatment-plan.test.ts` (real PostgreSQL): columns placed in no tab and the
+  tab after Assessment Plan+, 25 empty rows, row creation on the first non-empty save and
+  ordering, one plan per patient (other visits see it, other patients never do, their rows
+  answer not found), per-cell append-only history and triggers on both tables, conflicts,
+  mutation-id replay/reuse, date/option/checkbox validation, Cancelled keeps the row,
+  closed visit, columns refused as visit entries, permissions per role, audit rows, Route
+  Handler status mapping.
+- `test/autosave-client.test.ts`: a cell saves to its own URL.
+- Playwright `e2e/treatment-plan.spec.ts`: SonoSoft headings, a typed row across reload
+  and the next visit, shared "+ Add New" list, impossible date refused and flagged,
+  Cancelled, nurse/admin/reception access.
+
+R3 additions (ADR-031): Vitest `test/r3.test.ts` (tab order, placements = layout, Patient
+feels values, shared row lists); Playwright `e2e/r3.spec.ts` (Laser combos/text across
+reload, Patient feels, Assessment rows, Plan "Select"; R3b: Post EVLT vitals, Impression
+shared with Assessment Plan+, "Clear" keeps history).
+
+R4 additions (ADR-033): Vitest `test/diagrams.test.ts` (file naming, versions and files,
+conflict, replay/reuse, image/drawing validation, visit/type ownership, closed visit,
+permissions, append-only triggers, audit, Route Handlers, storage key safety and
+write-once); Playwright `e2e/diagrams.spec.ts` (create, draw, undo/redo, save v1, reopen,
+save v2, private file served, reception refused, Vein separate).
+
+R5 additions (ADR-034): Vitest `test/reports.test.ts` (composer never leaves broken text,
+first draft from the chart + latest diagrams, draft → final (.docx content, images, empty
+section omitted) → amended, conflict, nurse cannot finalize, draft refused after final,
+append-only, missing/foreign diagram refused); Playwright `e2e/reports.spec.ts` (warning
+without a diagram, preview, draft, finalize download, amended version, nurse view).
+
+I1 additions (ADR-035): Vitest `test/inventory.test.ts` (stores, scan stored + AI draft,
+AI answer parsing and API request, packs to units, statement refused, receipt once and
+duplicate invoice refused, FEFO order, consumption on patient + doctor, no negative stock,
+closed visit, opening balance, transfer, append-only ledger, permissions); Playwright
+`e2e/inventory.spec.ts` (scan → review → confirm, nurse records usage, stock and
+per-doctor totals).
+
 Core target smoke flow:
 Login → Search/Create Patient → Open/Create Visit → Patient Chart → Save clinical data → Create Diagram → Generate Report → Logout.
