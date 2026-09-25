@@ -576,3 +576,49 @@ Patient Record" (with SonoSoft's sentence) are below. Birthdate is typed day/mon
 ("E.G. 01/01/1925") and converted to ISO in the browser; criteria still go by POST only.
 
 *Not in R1b:* S2/S4/S7/S11/AP6/AP7 (open questions), pixel-exact fidelity, Treatment Plan.
+
+ADR-030: R2 — Treatment Plan. Source: `PROMPT_R2.md`, the SonoSoft screen
+`docs/reference/sonosoft/tabs/treatment-01-treatment-plan.jpg` and the Product Owner
+decisions of 2026-09-25. Answers the Sprint 3B questions of ADR-027 "Deferred".
+
+*Scope: one plan per patient.* The plan is not a visit entry: every visit of the patient
+shows the same table and can add to it or complete it (the SonoSoft screen shows rows from
+2022 to 2026). Each change records the visit it was made from.
+
+*Who edits:* `clinical.write` (Doctor, Nurse/Assistant); Admin reads only; Reception has
+no access. No new permission.
+
+*Order and removal:* rows keep the order they were first saved in (`position` = max + 1
+under the patient row lock); there is no reordering. Nothing is deleted: a wrong row is
+marked with the "Cancelled" tick box (not in SonoSoft; PO decision) and stays, with its
+history. Both tables are insert-only (triggers).
+
+*Model:* `treatment_plan_items` (row identity, patient, position, created-in visit) and
+`treatment_plan_entries` (append-only versions of one cell, same value shape as
+`clinical_entries`, plus `visit_id`). The columns are ordinary global field definitions
+placed in no tab — `treatment_scheduled`, `treatment_completed` (new type `date`, ISO in
+`freeText`, typed day/month/year), `treatment_procedure`, `treatment_status` (select with
+free text and "+ Add New", own lists) and `treatment_cancelled` (checkbox) — so option
+lists, validation, retirement and "+ Add New" are the existing clinical code. They are
+refused as visit entries.
+
+*New rows:* the screen shows saved rows then empty rows (SonoSoft's 25, at least 5 empty),
+each with a fresh random id. The first non-empty save of a cell on an unknown id creates
+the row for the visit's patient; an id belonging to another patient is answered as not
+found. An empty save creates nothing.
+
+*Same guarantees as clinical entries:* per-cell optimistic concurrency (409 with Keep
+mine / Use theirs), clientMutationId replay and reuse refusal, visit must be open (423),
+expectedUserId binding, same-origin, audit (`treatment_plan_item.create`,
+`treatment_plan_entry.create/update` with patient and visit), unsaved-navigation guard.
+An impossible date is sent as typed so the server refuses it and it shows "Not saved"
+instead of being dropped.
+
+*Screen:* each cell is presented to the SonoSoft form as a field
+(`${column}__${row}`), drawn at the screenshot's pixel positions (`treatmentPlanLayout`),
+so autosave and the guard are the tabs' code. An option added on one row is offered on
+every row at once. The tab is added after Assessment Plan+ (SonoSoft's Workup /
+Treatment switch is not reproduced).
+
+*Not in R2:* reordering, printing / report binding (R5), inventory linkage (future: a
+nullable link on the row, no change to the doctor's workflow).

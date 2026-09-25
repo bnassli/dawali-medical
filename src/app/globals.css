@@ -574,6 +574,12 @@ output.derived {
   border-color: #bfbfbf;
 }
 
+/* A date SonoSoft would not accept (R2): outlined, kept on screen, not saved. */
+.sono-field > input.invalid {
+  outline: 1px solid #c62828;
+  outline-offset: -1px;
+}
+
 .sono-field > textarea {
   resize: none;
   line-height: 1.3;

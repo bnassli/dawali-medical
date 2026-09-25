@@ -7,6 +7,8 @@ import {
   getVisitReasons,
   listClinicalSections,
 } from "@/modules/clinical/service";
+import { TREATMENT_PLAN_SECTION_CODE } from "@/modules/clinical/definitions";
+import { getTreatmentPlanForVisit } from "@/modules/clinical/treatment-plan";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { getVisitById } from "@/modules/visits/service";
 import { loadPatient } from "../../../page-data";
@@ -42,9 +44,21 @@ export default async function VisitChartPage({
   const activeTab = requestedTab ? tabs.find((t) => t.code === requestedTab) : tabs[0];
   if (canRead && requestedTab && !activeTab) notFound();
 
-  const section = activeTab
-    ? await getClinicalSectionForVisit(getDb(), actor, visit.id, activeTab.code)
-    : null;
+  // The Treatment Plan tab shows the patient's plan: its "fields" are the plan's
+  // cells (ADR-030). Every other tab shows the visit's clinical entries.
+  const section = !activeTab
+    ? null
+    : activeTab.code === TREATMENT_PLAN_SECTION_CODE
+      ? {
+          code: activeTab.code,
+          fields: (await getTreatmentPlanForVisit(getDb(), actor, visit.id)).fields,
+          patientSex: patient.sex ?? null,
+        }
+      : await getClinicalSectionForVisit(getDb(), actor, visit.id, activeTab.code).then((v) => ({
+          code: v.section.code,
+          fields: v.fields,
+          patientSex: v.visit.patientSex,
+        }));
 
   const reason = canRead
     ? ((await getVisitReasons(getDb(), actor, [visit.id])).get(visit.id) ?? null)
@@ -95,15 +109,15 @@ export default async function VisitChartPage({
               </p>
             ) : null}
             <ClinicalSectionForm
-              key={`${visit.id}:${section.section.code}`}
+              key={`${visit.id}:${section.code}`}
               visitId={visit.id}
               actorId={actor.userId}
-              sectionCode={section.section.code}
+              sectionCode={section.code}
               fields={section.fields}
               readOnly={!canWrite || !visitOpen}
               canWrite={canWrite}
               canAddOption={canAddOption}
-              patientSex={section.visit.patientSex}
+              patientSex={section.patientSex}
             />
           </>
         ) : (

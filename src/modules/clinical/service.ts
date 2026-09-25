@@ -22,6 +22,7 @@ import {
   FIXED_CHOICES,
   isSelectType,
   NUMERIC_FIELD_RULES,
+  TREATMENT_PLAN_COLUMN_CODES,
   type NumericFieldRule,
 } from "./definitions";
 import {
@@ -126,7 +127,7 @@ export class DuplicateOptionError extends Error {
   }
 }
 
-function pgErrorField(err: unknown, field: "code" | "constraint"): unknown {
+export function pgErrorField(err: unknown, field: "code" | "constraint"): unknown {
   const read = (e: unknown): unknown =>
     typeof e === "object" && e !== null && field in e
       ? (e as Record<string, unknown>)[field]
@@ -138,7 +139,7 @@ function pgErrorField(err: unknown, field: "code" | "constraint"): unknown {
   return read(err) ?? read(cause);
 }
 
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   return pgErrorField(err, "code") === "23505";
 }
 
@@ -164,6 +165,14 @@ export interface ClinicalFieldView {
   options: ClinicalOptionView[];
   version: number;
   value: ClinicalEntryValue;
+  /** The option list, so fields sharing it see an option added from any of them. */
+  optionListId?: string | null;
+  /**
+   * Treatment Plan cells (ADR-030) are not visit entries: they save to their own
+   * URL and add options through their column field. Absent for ordinary fields.
+   */
+  saveUrl?: string;
+  optionFieldId?: string;
 }
 
 export interface ClinicalSectionView {
@@ -182,13 +191,13 @@ export interface ClinicalEntryRecord {
   createdAt: Date;
 }
 
-const EMPTY_VALUE: ClinicalEntryValue = { optionIds: [], freeText: "" };
+export const EMPTY_VALUE: ClinicalEntryValue = { optionIds: [], freeText: "" };
 
 function isEmptyValue(v: ClinicalEntryValue): boolean {
   return v.optionIds.length === 0 && v.freeText === "" && v.checked !== true;
 }
 
-function valuesEqual(a: ClinicalEntryValue, b: ClinicalEntryValue): boolean {
+export function valuesEqual(a: ClinicalEntryValue, b: ClinicalEntryValue): boolean {
   return (
     a.freeText === b.freeText &&
     (a.checked ?? false) === (b.checked ?? false) &&
@@ -297,6 +306,7 @@ export async function getClinicalSectionForVisit(
       options,
       version: entry?.version ?? 0,
       value,
+      optionListId: field.optionListId,
     };
   });
 
@@ -443,7 +453,8 @@ async function saveInTransaction(
       ),
     )
     .limit(1);
-  if (!field) throw new ClinicalFieldNotFoundError(input.fieldId);
+  // Treatment Plan columns are saved per plan row, never as visit entries (ADR-030).
+  if (!field || isTreatmentPlanColumn(field.code)) throw new ClinicalFieldNotFoundError(input.fieldId);
 
   const [current] = await tx
     .select()
@@ -527,7 +538,7 @@ async function saveInTransaction(
 }
 
 /** Options of a field's list; retired ones only when the given value selects them. */
-async function loadFieldOptions(
+export async function loadFieldOptions(
   db: Database,
   field: typeof clinicalFieldDefinitions.$inferSelect,
   value: ClinicalEntryValue,
@@ -751,7 +762,31 @@ export function normalizeNumber(raw: string, rule: NumericFieldRule, label: stri
   return String(n);
 }
 
-async function normalizeValue(
+export function isTreatmentPlanColumn(code: string): boolean {
+  return (TREATMENT_PLAN_COLUMN_CODES as readonly string[]).includes(code);
+}
+
+/** A `date` field value: "" or a real calendar date as ISO YYYY-MM-DD (years 1900-2100). */
+export function normalizeIsoDate(raw: string, label: string): string {
+  const text = raw.trim();
+  if (text === "") return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  const [y, mo, d] = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [0, 0, 0];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (
+    !m ||
+    y < 1900 ||
+    y > 2100 ||
+    date.getUTCFullYear() !== y ||
+    date.getUTCMonth() !== mo - 1 ||
+    date.getUTCDate() !== d
+  ) {
+    throw new InvalidClinicalValueError(`"${label}" must be a real date (day/month/year).`);
+  }
+  return text;
+}
+
+export async function normalizeValue(
   tx: Database,
   field: typeof clinicalFieldDefinitions.$inferSelect,
   input: SaveClinicalEntryInput,
@@ -792,6 +827,13 @@ async function normalizeValue(
       );
     }
     return { optionIds: [], freeText };
+  }
+
+  if (field.fieldType === FIELD_TYPES.DATE) {
+    if (optionIds.length > 0) {
+      throw new InvalidClinicalValueError(`Field "${field.label}" does not take options.`);
+    }
+    return { optionIds: [], freeText: normalizeIsoDate(freeText, field.label) };
   }
 
   if (field.fieldType === FIELD_TYPES.TEXT || field.fieldType === FIELD_TYPES.TEXTAREA) {

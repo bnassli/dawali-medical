@@ -34,6 +34,7 @@ import type {
   TextColor,
 } from "@/modules/clinical/layouts";
 import { comboText, parseComboText } from "@/modules/clinical/combo-text";
+import { isoToDayMonthYear, parseDayMonthYear } from "@/lib/day-month-year";
 import type { ClinicalFieldView } from "@/modules/clinical/service";
 import { describe, hasValue, statusText, useExclusionBlock, useSaver, type Exclusion } from "./clinical-field-helpers";
 
@@ -45,6 +46,8 @@ export interface SonoFieldContext {
   saver: FieldSaver;
   exclusion: Exclusion | null;
   lockedReason: string | null;
+  /** Adds a new option to every field that shares this field's list (rows of one concept). */
+  shareOption?: (option: OptionView) => void;
 }
 
 interface SonoFormProps {
@@ -405,6 +408,7 @@ function SonoField({
     .join(" ");
 
   const [draft, setDraft] = useState<string | null>(null);
+  const [dateDraft, setDateDraft] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [adding, setAdding] = useState(false);
   const [addMessage, setAddMessage] = useState<{ ok: boolean; text: string; expired?: boolean } | null>(null);
@@ -445,13 +449,14 @@ function SonoField({
     if (!label) return;
     setAdding(true);
     setAddMessage(null);
-    const result = await postNewOption(field.id, label, actorId);
+    const result = await postNewOption(field.optionFieldId ?? field.id, label, actorId);
     setAdding(false);
     if (!result.ok) {
       setAddMessage({ ok: false, text: result.message, expired: result.sessionExpired });
       return;
     }
-    saver.addOptionToList(result.option);
+    if (ctx.shareOption) ctx.shareOption(result.option);
+    else saver.addOptionToList(result.option);
     setNewLabel("");
     if (canWrite && !disabled) {
       if (isMulti) saver.edit({ optionIds: [...optionIds, result.option.id], freeText }, CHOICE_DEBOUNCE_MS);
@@ -680,6 +685,36 @@ function SonoField({
         disabled={disabled}
         onChange={(e) => saver.edit({ optionIds, freeText: e.target.value }, TYPING_DEBOUNCE_MS)}
         onBlur={() => void saver.flush()}
+      />
+    );
+  } else if (type === "date") {
+    // SonoSoft dates are typed day/month/year; stored as ISO (ADR-030). An
+    // impossible date is kept on screen, marked, and sent as typed so the
+    // server refuses it: the field shows "Not saved" and leaving the page asks
+    // first, exactly like any other text that could not be saved.
+    const shown = dateDraft ?? isoToDayMonthYear(freeText);
+    const invalid = dateDraft !== null && parseDayMonthYear(dateDraft) === null;
+    control = (
+      <input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        aria-label={field.label}
+        aria-invalid={invalid || undefined}
+        className={invalid ? "invalid" : undefined}
+        title="Type the date as day/month/year, e.g. 17/08/2022."
+        value={shown}
+        disabled={disabled}
+        onChange={(e) => {
+          const text = e.target.value;
+          setDateDraft(text);
+          const iso = parseDayMonthYear(text);
+          saver.edit({ optionIds: [], freeText: iso ?? text }, TYPING_DEBOUNCE_MS);
+        }}
+        onBlur={() => {
+          if (dateDraft !== null && parseDayMonthYear(dateDraft) !== null) setDateDraft(null);
+          void saver.flush();
+        }}
       />
     );
   } else if (type === "text" || type === "number") {

@@ -6,6 +6,7 @@ Sprint 2: dynamic option lists, +Add, free text, auto-save, audit, Subj Complain
 Sprint 3A: Past Medical Hx, Assessment Plan+ (data-driven clinical tabs; ADR-027; PROMPT_SPRINT_3A.md).
 R1a: Persistent Patient Header, Patient Search, V1 Create/Edit Patient, Inactive patients (ADR-028).
 R1b: Clinical tabs and Patient Search matched to the SonoSoft screens (ADR-029; PROMPT_R1B.md).
+R2: Treatment Plan — one plan per patient, SonoSoft layout, rows cancelled not deleted (ADR-030; PROMPT_R2.md).
 
 ## V1 reconciliation (current plan)
 Source: `docs/FINAL_V1_REQUIREMENTS_RECONCILIATION.md` §15. It supersedes the former

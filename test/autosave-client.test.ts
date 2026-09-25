@@ -76,6 +76,26 @@ describe("FieldSaver (client autosave engine)", () => {
     vi.useRealTimers();
   });
 
+  it("a Treatment Plan cell saves to its own URL with the same body (ADR-030)", async () => {
+    const { calls, fetchImpl } = makeFetch([ok(1, text("EVLA"))]);
+    const saver = new FieldSaver({
+      visitId: "visit-1",
+      fieldId: "item-1:field-1",
+      actorId: "user-1",
+      initialVersion: 0,
+      initialValue: EMPTY,
+      initialOptions: [],
+      url: "/api/visits/visit-1/treatment-plan/item-1/field-1",
+      fetchImpl,
+      newId: () => "mutation-1",
+    });
+    saver.edit(text("EVLA"), CHOICE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(CHOICE_DEBOUNCE_MS);
+    expect(calls[0]?.url).toBe("/api/visits/visit-1/treatment-plan/item-1/field-1");
+    expect(calls[0]?.body).toMatchObject({ expectedUserId: "user-1", expectedVersion: 0, freeText: "EVLA" });
+    expect(saver.getSnapshot()).toMatchObject({ status: "saved", baseVersion: 1 });
+  });
+
   it("debounces typing into one save carrying expectedVersion and a clientMutationId", async () => {
     const { calls, fetchImpl } = makeFetch([ok(1, text("abc"))]);
     const saver = makeSaver(fetchImpl);

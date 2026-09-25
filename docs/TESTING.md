@@ -70,5 +70,18 @@ R1b additions (ADR-029):
   next row, Bullets/Numbers, numeric stockings (cm, invalid value refused), female-only
   field, S1, Unknown/None/No known, recent list + live search + birthdate format.
 
+R2 additions (ADR-030):
+- Vitest `test/treatment-plan.test.ts` (real PostgreSQL): columns placed in no tab and the
+  tab after Assessment Plan+, 25 empty rows, row creation on the first non-empty save and
+  ordering, one plan per patient (other visits see it, other patients never do, their rows
+  answer not found), per-cell append-only history and triggers on both tables, conflicts,
+  mutation-id replay/reuse, date/option/checkbox validation, Cancelled keeps the row,
+  closed visit, columns refused as visit entries, permissions per role, audit rows, Route
+  Handler status mapping.
+- `test/autosave-client.test.ts`: a cell saves to its own URL.
+- Playwright `e2e/treatment-plan.spec.ts`: SonoSoft headings, a typed row across reload
+  and the next visit, shared "+ Add New" list, impossible date refused and flagged,
+  Cancelled, nurse/admin/reception access.
+
 Core target smoke flow:
 Login → Search/Create Patient → Open/Create Visit → Patient Chart → Save clinical data → Create Diagram → Generate Report → Logout.

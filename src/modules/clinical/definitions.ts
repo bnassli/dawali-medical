@@ -16,6 +16,8 @@ export const FIELD_TYPES = {
    * not from an option list: they are not clinical dropdown options (rule #10).
    */
   CHOICE: "choice",
+  /** A calendar date stored as ISO `YYYY-MM-DD` in `freeText`, typed day/month/year (R2). */
+  DATE: "date",
 } as const;
 
 export type FieldType = (typeof FIELD_TYPES)[keyof typeof FIELD_TYPES];
@@ -142,6 +144,7 @@ export function assertExclusionRulesConsistent(
 export const SUBJ_COMPLAINTS_HABITS_SECTION_CODE = "subj_complaints_habits";
 export const PAST_MEDICAL_HX_SECTION_CODE = "past_medical_hx";
 export const ASSESSMENT_PLAN_SECTION_CODE = "assessment_plan";
+export const TREATMENT_PLAN_SECTION_CODE = "treatment_plan";
 
 /** Assessment Plan+ shows 8 ordered Impression rows and 8 Recommendation rows (AP1/AP2). */
 export const IMPRESSION_ROWS = 8;
@@ -253,6 +256,18 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
     label: "Additional Comments",
     type: FIELD_TYPES.TEXTAREA,
   },
+
+  // --- Treatment Plan (R2, ADR-030): the columns of the patient's plan table.
+  // Placed in no tab: their values live in treatment_plan_entries, per plan row. ---
+  { code: "treatment_scheduled", label: "Scheduled", type: FIELD_TYPES.DATE },
+  { code: "treatment_completed", label: "Completed", type: FIELD_TYPES.DATE },
+  {
+    code: "treatment_procedure",
+    label: "Recommended Treatment/Procedures in the order to be received",
+    type: FIELD_TYPES.SELECT,
+  },
+  { code: "treatment_status", label: "Approval/Status/Comments", type: FIELD_TYPES.SELECT },
+  { code: "treatment_cancelled", label: "Cancelled", type: FIELD_TYPES.CHECKBOX },
 ];
 
 /**
@@ -347,6 +362,14 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     sortOrder: 3,
     fieldCodes: ASSESSMENT_PLAN_FIELD_CODES,
   },
+  {
+    // The patient's Treatment Plan table (R2, ADR-030). No placed fields: its
+    // columns are TREATMENT_PLAN_COLUMN_CODES and its rows are plan items.
+    code: TREATMENT_PLAN_SECTION_CODE,
+    name: "Treatment Plan",
+    sortOrder: 4,
+    fieldCodes: [],
+  },
 ];
 
 /**
@@ -365,6 +388,24 @@ export const FIELD_EXCLUSION_RULES: ExclusionRule[] = [
  * The UI keeps them in their SonoSoft position but disabled otherwise; the
  * server refuses a non-empty value (P2, ADR-029). Clearing is always allowed.
  */
+/**
+ * Treatment Plan (R2, ADR-030): one table per PATIENT, shared by all visits.
+ * Each row is a treatment_plan_items row; each cell is versioned in
+ * treatment_plan_entries under one of these column fields. The columns never
+ * take per-visit clinical entries.
+ */
+export const TREATMENT_PLAN_COLUMN_CODES = [
+  "treatment_scheduled",
+  "treatment_completed",
+  "treatment_procedure",
+  "treatment_status",
+  "treatment_cancelled",
+] as const;
+
+/** SonoSoft shows 25 rows; at least this many empty rows follow the filled ones. */
+export const TREATMENT_PLAN_MIN_ROWS = 25;
+export const TREATMENT_PLAN_MIN_EMPTY_ROWS = 5;
+
 export const FEMALE_ONLY_FIELD_CODES: readonly string[] = ["female_statement"];
 
 export interface NumericFieldRule {
@@ -408,6 +449,11 @@ export function assertFieldRulesConsistent(defs: ClinicalDefinitions): void {
   }
   for (const code of [...Object.keys(NUMERIC_FIELD_RULES), ...Object.keys(FIXED_CHOICES), ...FEMALE_ONLY_FIELD_CODES]) {
     if (!byCode.has(code)) throw new Error(`Field rule names unknown field "${code}".`);
+  }
+  const placed = new Set(defs.sections.flatMap((s) => s.fieldCodes));
+  for (const code of TREATMENT_PLAN_COLUMN_CODES) {
+    if (!byCode.has(code)) throw new Error(`Treatment Plan column "${code}" is not defined.`);
+    if (placed.has(code)) throw new Error(`Treatment Plan column "${code}" must not be placed in a tab.`);
   }
 }
 

@@ -184,3 +184,22 @@ that have R1b entries show them read-only, nothing is lost (the old UI does not 
 `number`/`choice` types, so those values stay in the database but are not displayed). If
 Additional Comments entries were saved with list options after 0007, their option ids stay in
 history but the textarea shows only their free text.
+
+## R2 additions (ADR-030) — migration `0008_r2_treatment_plan.sql`
+
+| Table | Columns | Notes |
+|---|---|---|
+| `treatment_plan_items` | `id` (client-chosen uuid), `patient_id`, `position`, `created_in_visit_id`, `created_by`, `created_at` | One row of a patient's plan. Unique (`patient_id`, `position`). Insert-only (trigger). |
+| `treatment_plan_entries` | `id`, `item_id`, `field_definition_id`, `version`, `value` (jsonb, clinical value shape), `visit_id`, `client_mutation_id` (unique), `created_by`, `created_at` | Append-only versions of one cell. Unique (`item_id`, `field_definition_id`, `version`). Update/Delete rejected by trigger. |
+
+Seeded (not migrated): column fields `treatment_scheduled`, `treatment_completed` (type
+`date`), `treatment_procedure`, `treatment_status` (select, own option lists),
+`treatment_cancelled` (checkbox), and the section `treatment_plan` (sort 4, no placed
+fields).
+
+Rollback: see the header of the migration file. Dropping the two tables DESTROYS every
+Treatment Plan row, so it is only for a database with no plan data to keep, or after a
+verified backup. The seeded fields and section can stay unused or be retired.
+
+Audit actions added: `treatment_plan_item.create`, `treatment_plan_entry.create`,
+`treatment_plan_entry.update`.

@@ -303,6 +303,43 @@ const ASSESSMENT_PLAN: SectionLayout = {
   ],
 };
 
+/**
+ * docs/reference/sonosoft/tabs/treatment-01-treatment-plan.jpg (R2, ADR-030).
+ * One line per plan row, 20 px apart; `rows` = saved rows + empty rows. The
+ * cell codes are `${column}__${row}` (see treatment-plan.ts). "Cancelled" is
+ * not in SonoSoft (PO decision: rows are cancelled, never deleted).
+ */
+export function treatmentPlanLayout(rows: number): SectionLayout {
+  const items: LayoutItem[] = [
+    l("Scheduled", 14, 309, { bold: true, underline: true, size: 10 }),
+    l("Completed", 88, 309, { bold: true, underline: true, size: 10 }),
+    l("Recommended Treatment/Procedures in the order to be received", 166, 309, {
+      bold: true,
+      underline: true,
+      size: 10,
+    }),
+    l("Approval/Status/Comments", 577, 309, { bold: true, underline: true, size: 10, color: "navy" }),
+    l("Cancelled", 786, 309, { bold: true, underline: true, size: 9 }),
+  ];
+  for (let i = 1; i <= rows; i++) {
+    const y = 336 + (i - 1) * 20;
+    items.push(
+      f(`treatment_scheduled__${i}`, r(12, y, 58, 16), { bold: true, size: 9.5 }),
+      f(`treatment_completed__${i}`, r(89, y, 57, 16), { bold: true, size: 9.5 }),
+      f(`treatment_procedure__${i}`, r(165, y, 347, 16), { bold: true, size: 9.5 }),
+      f(`treatment_status__${i}`, r(519, y, 261, 16), { bold: true, size: 9.5 }),
+      f(`treatment_cancelled__${i}`, r(806, y + 2, 11, 11)),
+    );
+  }
+  return {
+    width: 840,
+    height: 336 + rows * 20 - 292 + 12,
+    origin: { x: 0, y: 292 },
+    background: "#f0f0f0",
+    items,
+  };
+}
+
 export const SECTION_LAYOUTS: Record<string, SectionLayout> = {
   subj_complaints_habits: SUBJ,
   past_medical_hx: PAST_MEDICAL_HX,

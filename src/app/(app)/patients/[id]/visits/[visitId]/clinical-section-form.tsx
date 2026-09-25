@@ -14,8 +14,10 @@ import {
   FIELD_EXCLUSION_RULES,
   FIXED_CHOICES,
   NUMERIC_FIELD_RULES,
+  TREATMENT_PLAN_COLUMN_CODES,
+  TREATMENT_PLAN_SECTION_CODE,
 } from "@/modules/clinical/definitions";
-import { layoutFieldCodes, SECTION_LAYOUTS } from "@/modules/clinical/layouts";
+import { layoutFieldCodes, SECTION_LAYOUTS, treatmentPlanLayout } from "@/modules/clinical/layouts";
 import { isGuardedLinkClick } from "@/modules/clinical/navigation-guard";
 import {
   describe,
@@ -452,6 +454,7 @@ function ClinicalSectionFormInner({
           initialVersion: f.version,
           initialValue: f.value,
           initialOptions: f.options,
+          url: f.saveUrl,
         }),
       );
     }
@@ -636,7 +639,10 @@ function ClinicalSectionFormInner({
     };
   }, [group, fields]);
 
-  const layout = SECTION_LAYOUTS[sectionCode] ?? null;
+  const layout =
+    sectionCode === TREATMENT_PLAN_SECTION_CODE
+      ? treatmentPlanLayout(Math.ceil(fields.length / TREATMENT_PLAN_COLUMN_CODES.length))
+      : (SECTION_LAYOUTS[sectionCode] ?? null);
   const byCode = new Map(fields.map((f) => [f.code, f]));
   const placedCodes = new Set(layout ? layoutFieldCodes(layout) : []);
   const unplaced = layout ? fields.filter((f) => !placedCodes.has(f.code)) : [];
@@ -669,7 +675,19 @@ function ClinicalSectionFormInner({
     const field = byCode.get(code);
     const saver = field ? group.get(field.id) : undefined;
     if (!field || !saver) return null;
-    return { field, saver, exclusion: exclusions.get(field.id) ?? null, lockedReason: lockedReasonFor(field) };
+    return {
+      field,
+      saver,
+      exclusion: exclusions.get(field.id) ?? null,
+      lockedReason: lockedReasonFor(field),
+      shareOption: field.optionListId
+        ? (option) => {
+            for (const f of fields) {
+              if (f.optionListId === field.optionListId) group.get(f.id)?.addOptionToList(option);
+            }
+          }
+        : undefined,
+    };
   }
 
   function stay() {
