@@ -747,7 +747,12 @@ function SonoField({
     );
   } else if (type === "choice") {
     control = (
-      <div className="sono-radios" role="radiogroup" aria-label={field.label} id={id}>
+      <div
+        className={item.inline ? "sono-radios inline" : "sono-radios"}
+        role="radiogroup"
+        aria-label={field.label}
+        id={id}
+      >
         {(FIXED_CHOICES[field.code] ?? []).map((c) => (
           <label key={c.value}>
             <input

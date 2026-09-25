@@ -622,3 +622,28 @@ Treatment switch is not reproduced).
 
 *Not in R2:* reordering, printing / report binding (R5), inventory linkage (future: a
 nullable link on the row, no change to the doctor's workflow).
+
+ADR-031: R3 — Laser Ablation and Follow Up Office Visit. Source: the SonoSoft screens
+`treatment-02-laser-ablation.jpg` and `treatment-09-follow-up-office-visit.jpg`,
+`docs/FINAL_V1_REQUIREMENTS_RECONCILIATION.md` §6.5, and ADR-029 (pixel layouts).
+
+*Two ordinary per-visit tabs* (a follow-up is its own visit): `laser_ablation` (sort 5)
+and `follow_up_office_visit` (sort 6), after Treatment Plan, in SonoSoft's Treatment order.
+No migration: fields, lists and placements are seeded; every list starts empty (rule #10).
+
+*Laser Ablation:* every SonoSoft combo box is a select with free text (side, vessel,
+terminated at, phlebectomy location / incisions / using, anesthesia, cleansed with, three
+agent amount + agent pairs sharing two lists, entry point and passes (both "to the" share
+one list), parameters, changed at / to, energy, seconds, length treated, optional,
+surgical and final comments, laser machine). The white boxes (beginning at cm, changed
+value, average diameter, optional value, fluence) are plain text: their units and ranges
+are not known yet, so no numeric rule is invented. "Ambulatory Phlebectomy?" is a caption,
+as in SonoSoft. Not drawn: Add Charge, Registry Data; the machine is not defaulted.
+
+*Follow Up Office Visit:* Patient feels = `choice` Better / Worse / Same as last visit
+(fixed by §6.5; stored "better" / "worse" / "same"), Subjective statement, Subjective,
+Objective Findings, Assessment 1–3 (one shared list) and Plan 1–2 (one shared list) with
+SonoSoft's "Select" filling the next empty Plan row.
+
+*Not in R3 (next phase):* Post EVLT Comp Follow Up (vitals, cardio, ultrasound sections)
+and the Comprehensive / General Clinical Exam.

@@ -257,6 +257,47 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
     type: FIELD_TYPES.TEXTAREA,
   },
 
+  // --- Laser Ablation (R3, ADR-031): SonoSoft's labels; every list starts empty. ---
+  { code: "laser_side", label: "Treated Vessel side", type: FIELD_TYPES.SELECT },
+  { code: "laser_vessel", label: "Treated Vessel", type: FIELD_TYPES.SELECT },
+  { code: "laser_start_cm", label: "beginning at (cm from the junction)", type: FIELD_TYPES.TEXT },
+  { code: "laser_terminated_at", label: "terminated at the", type: FIELD_TYPES.SELECT },
+  { code: "laser_phlebectomy_location", label: "Ambulatory Phlebectomy Location", type: FIELD_TYPES.SELECT },
+  { code: "laser_incisions", label: "# of incisions", type: FIELD_TYPES.SELECT },
+  { code: "laser_phlebectomy_using", label: "using", type: FIELD_TYPES.SELECT },
+  { code: "laser_anesthesia", label: "Anesthesia", type: FIELD_TYPES.SELECT },
+  { code: "laser_cleansed_with", label: "Cleansed with", type: FIELD_TYPES.SELECT },
+  ...[1, 2, 3].flatMap((i): FieldDefinitionSeed[] => [
+    { code: `laser_agent_${i}_amount`, label: `Agent ${i} amount`, type: FIELD_TYPES.SELECT, optionList: "laser_agent_amount" },
+    { code: `laser_agent_${i}`, label: `Agent ${i}`, type: FIELD_TYPES.SELECT, optionList: "laser_agent" },
+  ]),
+  { code: "laser_entry_point", label: "Entry point", type: FIELD_TYPES.SELECT },
+  { code: "laser_pass1_to", label: "to the (single pass)", type: FIELD_TYPES.SELECT, optionList: "laser_pass_end" },
+  { code: "laser_pass2_from", label: "then from the", type: FIELD_TYPES.SELECT },
+  { code: "laser_pass2_to", label: "to the (2nd pass)", type: FIELD_TYPES.SELECT, optionList: "laser_pass_end" },
+  { code: "laser_parameters", label: "Treatment Parameters", type: FIELD_TYPES.SELECT },
+  { code: "laser_changed_at", label: "Treatment was CHANGED at the", type: FIELD_TYPES.SELECT },
+  { code: "laser_changed_to", label: "Treatment changed to", type: FIELD_TYPES.SELECT },
+  { code: "laser_changed_value", label: "Changed value", type: FIELD_TYPES.TEXT },
+  { code: "laser_energy_joules", label: "Total laser energy used was (joules)", type: FIELD_TYPES.SELECT },
+  { code: "laser_seconds", label: "seconds", type: FIELD_TYPES.SELECT },
+  { code: "laser_length_treated", label: "Total length of vein treated", type: FIELD_TYPES.SELECT },
+  { code: "laser_avg_diameter", label: "Average Dia.of Vein", type: FIELD_TYPES.TEXT },
+  { code: "laser_optional", label: "OPTIONAL", type: FIELD_TYPES.SELECT },
+  { code: "laser_optional_value", label: "OPTIONAL value", type: FIELD_TYPES.TEXT },
+  { code: "laser_fluence", label: "Fluence", type: FIELD_TYPES.TEXT },
+  { code: "laser_surgical_comments", label: "Add'l Surgical Comments", type: FIELD_TYPES.SELECT },
+  { code: "laser_final_comments", label: "Final Comments", type: FIELD_TYPES.SELECT },
+  { code: "laser_machine", label: "Laser Machine", type: FIELD_TYPES.SELECT },
+
+  // --- Follow Up Office Visit (R3, ADR-031). Each follow-up is its own visit. ---
+  { code: "followup_patient_feels", label: "Patient feels", type: FIELD_TYPES.CHOICE },
+  { code: "followup_subjective_statement", label: "Subjective statement", type: FIELD_TYPES.SELECT },
+  { code: "followup_subjective", label: "Subjective", type: FIELD_TYPES.SELECT },
+  { code: "followup_objective", label: "Objective Findings", type: FIELD_TYPES.SELECT },
+  ...rowFields("followup_assessment", "Assessment", "followup_assessment", 3),
+  ...rowFields("followup_plan", "Plan", "followup_plan", 2),
+
   // --- Treatment Plan (R2, ADR-030): the columns of the patient's plan table.
   // Placed in no tab: their values live in treatment_plan_entries, per plan row. ---
   { code: "treatment_scheduled", label: "Scheduled", type: FIELD_TYPES.DATE },
@@ -342,6 +383,46 @@ export const ASSESSMENT_PLAN_FIELD_CODES = [
   "assessment_additional_comments",
 ];
 
+export const LASER_ABLATION_FIELD_CODES = [
+  "laser_side",
+  "laser_vessel",
+  "laser_start_cm",
+  "laser_terminated_at",
+  "laser_phlebectomy_location",
+  "laser_incisions",
+  "laser_phlebectomy_using",
+  "laser_anesthesia",
+  "laser_cleansed_with",
+  ...[1, 2, 3].flatMap((i) => [`laser_agent_${i}_amount`, `laser_agent_${i}`]),
+  "laser_entry_point",
+  "laser_pass1_to",
+  "laser_pass2_from",
+  "laser_pass2_to",
+  "laser_parameters",
+  "laser_changed_at",
+  "laser_changed_to",
+  "laser_changed_value",
+  "laser_energy_joules",
+  "laser_seconds",
+  "laser_length_treated",
+  "laser_avg_diameter",
+  "laser_optional",
+  "laser_optional_value",
+  "laser_fluence",
+  "laser_surgical_comments",
+  "laser_final_comments",
+  "laser_machine",
+];
+
+export const FOLLOW_UP_FIELD_CODES = [
+  "followup_patient_feels",
+  "followup_subjective_statement",
+  "followup_subjective",
+  "followup_objective",
+  ...rowCodes("followup_assessment", 3),
+  ...rowCodes("followup_plan", 2),
+];
+
 export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
   {
     code: SUBJ_COMPLAINTS_HABITS_SECTION_CODE,
@@ -370,6 +451,9 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     sortOrder: 4,
     fieldCodes: [],
   },
+  // SonoSoft's Treatment set order: Treatment Plan, Laser Ablation, ..., Follow Up Office Visit.
+  { code: "laser_ablation", name: "Laser Ablation", sortOrder: 5, fieldCodes: LASER_ABLATION_FIELD_CODES },
+  { code: "follow_up_office_visit", name: "Follow Up Office Visit", sortOrder: 6, fieldCodes: FOLLOW_UP_FIELD_CODES },
 ];
 
 /**
@@ -430,6 +514,12 @@ export const NUMERIC_FIELD_RULES: Record<string, NumericFieldRule> = {
 
 /** Fixed values of `choice` fields (presentation only, never clinical options). */
 export const FIXED_CHOICES: Record<string, readonly { value: string; label: string }[]> = {
+  // Fixed by the requirements (§6.5) and SonoSoft's three radio buttons.
+  followup_patient_feels: [
+    { value: "better", label: "Better" },
+    { value: "worse", label: "Worse" },
+    { value: "same", label: "Same as last visit" },
+  ],
   impression_list_style: [
     { value: "bullets", label: "Bullets" },
     { value: "numbers", label: "Numbers" },

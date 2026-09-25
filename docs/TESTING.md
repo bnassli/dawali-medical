@@ -83,5 +83,9 @@ R2 additions (ADR-030):
   and the next visit, shared "+ Add New" list, impossible date refused and flagged,
   Cancelled, nurse/admin/reception access.
 
+R3 additions (ADR-031): Vitest `test/r3.test.ts` (tab order, placements = layout, Patient
+feels values, shared row lists); Playwright `e2e/r3.spec.ts` (Laser combos/text across
+reload, Patient feels, Assessment rows, Plan "Select").
+
 Core target smoke flow:
 Login → Search/Create Patient → Open/Create Visit → Patient Chart → Save clinical data → Create Diagram → Generate Report → Logout.
