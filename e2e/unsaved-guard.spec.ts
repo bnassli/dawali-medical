@@ -9,6 +9,7 @@ import {
   entryHistory,
   field,
   loginAs,
+  newOptionInput,
   revokeSessions,
   seedEntry,
   setFieldActive,
@@ -48,7 +49,7 @@ test.describe("no silent loss on in-app navigation or Logout", () => {
     await back.click();
     const dialog = discardDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("Comments");
+    await expect(dialog).toContainText("Comment —");
     await expect(dialog).toContainText("Session expired");
     await expect(page).toHaveURL(visitUrl(visit));
 
@@ -328,7 +329,7 @@ test.describe("autosave is bound to the user the page was rendered for", () => {
 
     const label = `Should not exist ${uniq()}`;
     const allergies = field(page, "allergies");
-    await allergies.getByLabel("New Allergies option").fill(label);
+    await (await newOptionInput(page, "allergies", "Allergies")).fill(label);
     await allergies.getByRole("button", { name: "+ Add New" }).click();
     await expect(allergies).toContainText("different user");
     await expect(allergies.getByRole("checkbox", { name: label })).toHaveCount(0);
@@ -447,7 +448,7 @@ test.describe("intake Reason for Visit length", () => {
     await page.getByLabel("Reason for new visit").fill("y".repeat(5000));
     await page.getByRole("button", { name: "New visit" }).click();
     await page.waitForURL(/\/visits\//);
-    await expect(page.getByLabel("Reason for Visit — visit-only free text")).toHaveValue("y".repeat(5000));
+    await expect(page.getByLabel("Reason for visit — visit-only free text")).toHaveValue("y".repeat(5000));
   });
 });
 
@@ -466,14 +467,16 @@ test.describe("retired fields keep history visible", () => {
       await expect(tobacco).toBeVisible();
       await expect(tobacco).toHaveAttribute("data-field-active", "false");
       await expect(tobacco).toContainText("retired field, read-only");
-      await expect(tobacco.getByLabel("Tobacco — visit-only free text")).toHaveValue("quit in 2019");
-      await expect(tobacco.getByLabel("Tobacco — visit-only free text")).toBeDisabled();
+      await expect(tobacco.getByLabel("Tobacco use — visit-only free text")).toHaveValue("quit in 2019");
+      await expect(tobacco.getByLabel("Tobacco use — visit-only free text")).toBeDisabled();
       await expect(tobacco.getByRole("combobox")).toBeDisabled();
-      await expect(tobacco.getByRole("button", { name: "+ Add New" })).toHaveCount(0);
-      // Field order is unchanged around it.
-      const labels = await page.locator(".clinical-field .field-head label").allTextContents();
-      expect(labels.indexOf("Alcohol")).toBeGreaterThanOrEqual(0);
-      expect(labels[labels.indexOf("Exercise") + 1]?.startsWith("Tobacco")).toBe(true);
+      await expect(tobacco.getByRole("button", { name: /Add New|Add option to/ })).toHaveCount(0);
+      // Field order is unchanged around it: still in its SonoSoft place in Habits.
+      const codes = await page
+        .locator("[data-field]")
+        .evaluateAll((els) => els.map((e) => e.getAttribute("data-field")));
+      expect(codes.indexOf("alcohol")).toBeGreaterThanOrEqual(0);
+      expect(codes[codes.indexOf("exercise") + 1]).toBe("tobacco");
 
       await page.goto(visitUrl(without));
       await expect(field(page, "tobacco")).toHaveCount(0);

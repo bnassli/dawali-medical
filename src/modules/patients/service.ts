@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/client";
 import { demographicOptions, patientExternalIds, patients } from "@/db/schema";
@@ -582,11 +582,26 @@ export async function searchPatients(
     );
   }
 
+  // Only the active-flag filter (or nothing) = the "recent patients" list that
+  // opens the search window (PS1): newest changes first. Otherwise by name.
+  const hasCriteria = Boolean(
+    criteria.name ||
+      criteria.firstName ||
+      criteria.lastName ||
+      criteria.phone ||
+      criteria.insuranceId ||
+      criteria.dateOfBirth ||
+      criteria.externalId,
+  );
   const rows = await db
     .select()
     .from(patients)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(patients.lastName, patients.firstName)
+    .orderBy(
+      ...(hasCriteria
+        ? [patients.lastName, patients.firstName]
+        : [desc(patients.updatedAt), patients.lastName]),
+    )
     .limit(SEARCH_RESULT_LIMIT);
 
   return toRecords(db, rows);

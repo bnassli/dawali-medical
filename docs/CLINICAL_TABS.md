@@ -7,23 +7,27 @@ Visual reference: redacted SonoSoft screenshots of each tab and of the reports a
 ## Subj Complaints Habits
 Reason for visit; Problem List; Chief Complaints; characteristics; duration; progression; daily-activity impact; chest comments; comments; aggravating factors; relieving factors; previous conservative therapy + duration; family history; alcohol/exercise/tobacco; pain meds; current meds; allergies.
 
+Implemented (R1b, ADR-029), SonoSoft labels and boxes (`workup-01-subj-complaints-habits.jpg`):
+Reason for visit, Problem List | box "Add Chief Complaints with characteristics and Associated conditions": Chief Complaints, associated with, How long?, Symptoms getting worse over time? (checkbox), Progression, Affects daily living activities?, Chest comments, Comment | red box: Aggravating Factors, Relieving Factors | blue box: Previous conservative therapy, How long?, Family history of VV? | Habits: Alcohol, Exercise, Tobacco use | Pain Meds for CC, Current Meds + None, Allergies + No known.
+None / No known exclude Current Meds / Allergies. The general family history is no longer on this tab (S1): it is "Family Medical Hx" in Past Medical Hx.
+
 ## Past Medical Hx
 Past Medical Hx; Family Medical Hx; Unknown; Prior Test Results; Additional Comments; Surgical Hx; female-specific option/field from reference screen.
 
-Implemented (Sprint 3A, ADR-027), in this order:
+Implemented (Sprint 3A, ADR-027; reconciled by R1b, ADR-029), in this order:
 1. Past Medical Hx — multiselect, dynamic options + visit-only free text (`past_medical_history`).
-2. Family Medical Hx — the EXISTING global `family_history` (same field, same history as Subj "Family History"), shown under the SonoSoft label through a placement label.
-3. Unknown — checkbox (`past_medical_unknown`). Means the past medical history is unknown; it cannot coexist with any Past Medical Hx option or free text (server-enforced, the UI mirrors it; only Past Medical Hx is affected).
+2. Family Medical Hx — the global `family_history`, shown under the SonoSoft label.
+3. Unknown — checkbox under Family Medical Hx (`family_history_unknown`); excludes Family Medical Hx (server-enforced, the UI mirrors it). The Sprint 3A `past_medical_unknown` is retired (history read-only).
 4. Prior Test Results — textarea (`prior_test_results`).
-5. Additional Comments — textarea (`past_medical_additional_comments`, distinct from the Assessment one).
-6. Surgical Hx — multiselect, dynamic options + free text (`surgical_history`).
-7. Female-specific field — **deferred** until a SonoSoft reference screen is supplied (no field, no conditional visibility). It is last in this tab, so adding it later is a seed-only addition that does not disturb the order above.
+5. Additional Comments — dropdown + free text (`past_medical_additional_comments`, own list, distinct from the Assessment one).
+6. Surgical Hx — multiselect + free text (`surgical_history`), in the blue box.
+7. If FEMALE select the appropriate statement; otherwise disregard — select (`female_statement`), usable only when the patient's sex is F (disabled otherwise; server-enforced).
 
 ## Assessment Plan+
 Order: Impression → Recommendations → Stockings detail → Additional Comments.
 Stockings structured: type, compression, gender, color, measurements.
 
-Implemented (Sprint 3A, ADR-027), in this order: Impression (`impression`, multiselect + free text) -> Recommendations (`recommendations`, multiselect + free text) -> Stockings Type / Compression / Gender / Color (`stockings_type`, `stockings_compression`, `stockings_gender`, `stockings_color`; each a single-select with its own dynamic option list) -> Stockings Measurements (`stockings_measurements`, textarea) -> Additional Comments (`assessment_additional_comments`). Each stocking field is independent per visit (own version stream and audit trail); there is no top-level yes/no and nothing is derived from patient demographics. "Gender" is the stocking cut, not the patient's sex.
+Implemented (R1b, ADR-029; `workup-09-assessment-plan-plus.jpg`): Impression box — Bullets / Numbers (`impression_list_style`), rows 1–8 (`impression_1..8`, one shared "impression" list, shown 1–4 | 5–8), "Select Impressions" fills the next empty row, Impr for Init Venous Interp (`impr_for_init_venous_interp`) -> Recommendations box — rows 1–8 (`recommendation_1..8`, shared "recommendations" list), "Select Recomendations" -> Stockings detail — Type, Compression, Gender, Color (single selects, own lists) and SIZE Mid Thigh / Mid Calf / Mid Ankle, DISTANCE Floor To GF / Floor To Knee (numbers, cm, 0–200, one decimal) -> Additional Comments (`assessment_additional_comments`). Retired from Sprint 3A: `impression`, `recommendations`, `stockings_measurements` (history read-only). "Gender" is the stocking cut, not the patient's sex.
 
 ## Treatment Plan
 Scheduled | Completed | Recommended Treatment/Procedures in order | Approval/Status/Comments.

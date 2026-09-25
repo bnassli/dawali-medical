@@ -4,6 +4,8 @@
 Sprint 1: foundation, env, DB/migrations, auth, users/roles foundation, patients, visits, patient search, Patient Chart shell, audit foundation.
 Sprint 2: dynamic option lists, +Add, free text, auto-save, audit, Subj Complaints Habits.
 Sprint 3A: Past Medical Hx, Assessment Plan+ (data-driven clinical tabs; ADR-027; PROMPT_SPRINT_3A.md).
+R1a: Persistent Patient Header, Patient Search, V1 Create/Edit Patient, Inactive patients (ADR-028).
+R1b: Clinical tabs and Patient Search matched to the SonoSoft screens (ADR-029; PROMPT_R1B.md).
 
 ## V1 reconciliation (current plan)
 Source: `docs/FINAL_V1_REQUIREMENTS_RECONCILIATION.md` §15. It supersedes the former

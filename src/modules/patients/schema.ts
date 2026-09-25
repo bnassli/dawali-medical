@@ -106,9 +106,15 @@ export const searchPatientsSchema = z
     phone: optionalTrimmed(),
     dateOfBirth: optionalDate(),
     includeInactive: z.boolean().optional(),
+    /**
+     * No criteria on purpose: list the most recently updated patients, the way
+     * SonoSoft's search window opens with its patient list already filled (PS1).
+     */
+    recent: z.boolean().optional(),
   })
   .refine(
     (v) =>
+      v.recent === true ||
       Boolean(
         v.name ??
           v.firstName ??

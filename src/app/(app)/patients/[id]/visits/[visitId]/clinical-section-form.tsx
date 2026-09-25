@@ -12,7 +12,19 @@ import {
   type FieldSnapshot,
   type OptionView,
 } from "@/modules/clinical/autosave-client";
-import { FIELD_EXCLUSION_RULES } from "@/modules/clinical/definitions";
+import {
+  FEMALE_ONLY_FIELD_CODES,
+  FIELD_EXCLUSION_RULES,
+  FIXED_CHOICES,
+  NUMERIC_FIELD_RULES,
+} from "@/modules/clinical/definitions";
+import {
+  layoutFieldCodes,
+  SECTION_LAYOUTS,
+  type LayoutBox,
+  type LayoutCell,
+  type RowFiller,
+} from "@/modules/clinical/layouts";
 import { isGuardedLinkClick } from "@/modules/clinical/navigation-guard";
 import type { ClinicalFieldView } from "@/modules/clinical/service";
 
@@ -93,6 +105,8 @@ function FieldEditor({
   canWrite,
   canAddOption,
   exclusion,
+  cell,
+  lockedReason,
 }: {
   field: ClinicalFieldView;
   saver: FieldSaver;
@@ -101,12 +115,20 @@ function FieldEditor({
   canWrite: boolean;
   canAddOption: boolean;
   exclusion: Exclusion | null;
+  /** Placement in a SonoSoft-style layout (compact rendering); null = plain vertical form. */
+  cell?: LayoutCell | null;
+  /** Why the field cannot take a new value (e.g. female-only); clearing stays possible. */
+  lockedReason?: string | null;
 }) {
   const snap = useSaver(saver);
+  const compact = Boolean(cell);
+  const visibleLabel = cell?.label ?? field.label;
   const isSelect = field.fieldType === "select";
   const isMulti = field.fieldType === "multiselect";
   const isChoice = isSelect || isMulti;
   const isCheckbox = field.fieldType === "checkbox";
+  const isNumber = field.fieldType === "number";
+  const isFixedChoice = field.fieldType === "choice";
   const inputId = `field-${field.code}`;
   const { optionIds, freeText } = snap.value;
   const options = snap.options;
@@ -114,13 +136,24 @@ function FieldEditor({
   const fieldReadOnly = readOnly || retired;
 
   const [newLabel, setNewLabel] = useState("");
-  const [addMessage, setAddMessage] = useState<{ ok: boolean; text: string; expired?: boolean } | null>(
-    null,
-  );
+  const [addMessage, setAddMessage] = useState<{
+    ok: boolean;
+    text: string;
+    expired?: boolean;
+  } | null>(null);
   const [adding, setAdding] = useState(false);
+  // Compact (SonoSoft) layout keeps "+ Add New" folded behind a small "+" so
+  // each field stays one line, like SonoSoft's combo boxes.
+  const [showAdd, setShowAdd] = useState(false);
 
-  const blocked = useExclusionBlock(exclusion, isCheckbox ? snap.value.checked === true : hasValue(snap.value));
-  const disabled = fieldReadOnly || snap.conflict !== null || blocked;
+  const blocked = useExclusionBlock(
+    exclusion,
+    isCheckbox ? snap.value.checked === true : hasValue(snap.value),
+  );
+  // A locked field (e.g. female-only for a non-female patient) stays editable
+  // while it still holds a value, so that value can be cleared.
+  const locked = Boolean(lockedReason) && !hasValue(snap.value);
+  const disabled = fieldReadOnly || snap.conflict !== null || blocked || locked;
   const blockedText =
     blocked && exclusion
       ? exclusion.role === "flag"
@@ -148,7 +181,11 @@ function FieldEditor({
     const result = await postNewOption(field.id, label, actorId);
     setAdding(false);
     if (!result.ok) {
-      setAddMessage({ ok: false, text: result.message, expired: result.sessionExpired });
+      setAddMessage({
+        ok: false,
+        text: result.message,
+        expired: result.sessionExpired,
+      });
       return;
     }
     saver.addOptionToList(result.option);
@@ -156,185 +193,326 @@ function FieldEditor({
     if (canWrite && !fieldReadOnly && !snap.conflict && !blocked) {
       changeOptions(isMulti ? [...optionIds, result.option.id] : [result.option.id]);
     }
-    setAddMessage({ ok: true, text: `Added "${result.option.label}" to the list.` });
+    setAddMessage({
+      ok: true,
+      text: `Added "${result.option.label}" to the list.`,
+    });
   }
 
+  // The control's accessible name is always the field's own label, even when
+  // the layout shows a shorter one ("1:", "How long?") or none.
+  const controlName = field.label;
+  const canAddOptionHere = isChoice && canAddOption && !retired && !blocked && !locked;
+  const numberRule = isNumber ? NUMERIC_FIELD_RULES[field.code] : undefined;
+  const choices = isFixedChoice ? (FIXED_CHOICES[field.code] ?? []) : [];
+  const classes = [
+    "field",
+    "clinical-field",
+    compact ? "compact" : "",
+    compact && cell?.size ? `size-${cell.size}` : "",
+    compact && cell?.tall ? "tall" : "",
+    isCheckbox ? "is-checkbox" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div
-      className="field clinical-field"
-      data-field={field.code}
-      data-field-active={field.isActive ? "true" : "false"}
-    >
-      <div className="field-head">
-        <label htmlFor={inputId}>
-          {field.label}
-          {retired ? <span className="muted"> (retired field, read-only)</span> : null}
-        </label>
-        <span className={`save-status ${snap.status}`} role="status" aria-live="polite">
-          {statusText(snap)}
-        </span>
-      </div>
-
-      {isCheckbox ? (
-        <input
-          id={inputId}
-          type="checkbox"
-          checked={snap.value.checked === true}
-          disabled={disabled}
-          onChange={(e) => changeChecked(e.target.checked)}
-        />
-      ) : null}
-
-      {blockedText ? <span className="muted">{blockedText}</span> : null}
-
-      {isSelect ? (
-        <select
-          id={inputId}
-          value={optionIds[0] ?? ""}
-          disabled={disabled}
-          onChange={(e) => changeOptions(e.target.value ? [e.target.value] : [])}
-        >
-          <option value="">—</option>
-          {options.map((o) => (
-            <option key={o.id} value={o.id} disabled={!o.isActive && !optionIds.includes(o.id)}>
-              {o.label}
-              {o.isActive ? "" : " (retired)"}
-            </option>
-          ))}
-        </select>
-      ) : null}
-
-      {isMulti ? (
-        <div className="checks" role="group" aria-labelledby={`${inputId}-legend`} id={inputId}>
-          <span id={`${inputId}-legend`} hidden>
-            {field.label}
+    <div className={classes} data-field={field.code} data-field-active={field.isActive ? "true" : "false"}>
+      {compact && isCheckbox ? null : (
+        <div className="field-head">
+          <label htmlFor={inputId} className={cell?.hideLabel ? "visually-hidden" : undefined}>
+            {visibleLabel}
+            {retired ? <span className="muted"> (retired field, read-only)</span> : null}
+          </label>
+          <span className={`save-status ${snap.status}`} role="status" aria-live="polite">
+            {statusText(snap)}
           </span>
-          {options.length === 0 ? <span className="muted">No options yet.</span> : null}
-          {options.map((o) => (
-            <label key={o.id} className="check">
+          {compact && canAddOptionHere ? (
+            <button
+              type="button"
+              className="add-toggle secondary"
+              aria-expanded={showAdd}
+              aria-label={`Add option to ${field.label}`}
+              title="Add a new option to this list"
+              onClick={() => setShowAdd((v) => !v)}
+            >
+              +
+            </button>
+          ) : null}
+        </div>
+      )}
+
+      <div className="field-body">
+        {isCheckbox ? (
+          compact ? (
+            <div className="check-inline">
               <input
+                id={inputId}
                 type="checkbox"
-                checked={optionIds.includes(o.id)}
-                disabled={disabled || (!o.isActive && !optionIds.includes(o.id))}
-                onChange={(e) =>
-                  changeOptions(
-                    e.target.checked ? [...optionIds, o.id] : optionIds.filter((v) => v !== o.id),
-                  )
-                }
-              />{" "}
-              {o.label}
-              {o.isActive ? "" : " (retired)"}
-            </label>
-          ))}
-        </div>
-      ) : null}
+                checked={snap.value.checked === true}
+                disabled={disabled}
+                onChange={(e) => changeChecked(e.target.checked)}
+              />
+              <label htmlFor={inputId}>
+                {visibleLabel}
+                {retired ? <span className="muted"> (retired field, read-only)</span> : null}
+              </label>
+              <span className={`save-status ${snap.status}`} role="status" aria-live="polite">
+                {statusText(snap)}
+              </span>
+            </div>
+          ) : (
+            <input
+              id={inputId}
+              type="checkbox"
+              checked={snap.value.checked === true}
+              disabled={disabled}
+              onChange={(e) => changeChecked(e.target.checked)}
+            />
+          )
+        ) : null}
 
-      {isChoice && field.allowsFreeText ? (
-        <input
-          type="text"
-          aria-label={`${field.label} — visit-only free text`}
-          placeholder="Free text for this visit only"
-          value={freeText}
-          disabled={disabled}
-          onChange={(e) => changeFreeText(e.target.value)}
-          onBlur={() => void saver.flush()}
-        />
-      ) : null}
+        {blockedText ? <span className="muted">{blockedText}</span> : null}
+        {locked && lockedReason ? <span className="muted">{lockedReason}</span> : null}
 
-      {field.fieldType === "text" ? (
-        <input
-          id={inputId}
-          type="text"
-          value={freeText}
-          disabled={disabled}
-          onChange={(e) => changeFreeText(e.target.value)}
-          onBlur={() => void saver.flush()}
-        />
-      ) : null}
+        {isNumber ? (
+          <span className="number-input">
+            <input
+              id={inputId}
+              type="text"
+              inputMode="decimal"
+              aria-label={controlName}
+              value={freeText}
+              disabled={disabled}
+              onChange={(e) => changeFreeText(e.target.value)}
+              onBlur={() => void saver.flush()}
+            />
+            {numberRule ? <span className="unit">{numberRule.unit}</span> : null}
+          </span>
+        ) : null}
 
-      {field.fieldType === "textarea" ? (
-        <textarea
-          id={inputId}
-          rows={3}
-          value={freeText}
-          disabled={disabled}
-          onChange={(e) => changeFreeText(e.target.value)}
-          onBlur={() => void saver.flush()}
-        />
-      ) : null}
-
-      {snap.conflict ? (
-        <div className="conflict" role="alert">
-          <strong>Conflict</strong> — someone else changed this field after you loaded it.
-          <div>
-            <span className="muted">Theirs:</span>{" "}
-            {describe(snap.conflict.theirs, snap.conflict.options)}
+        {isFixedChoice ? (
+          <div className="radios" role="radiogroup" aria-label={field.label} id={inputId}>
+            {choices.map((c) => (
+              <label key={c.value} className="check">
+                <input
+                  type="radio"
+                  name={`${inputId}-choice`}
+                  value={c.value}
+                  checked={freeText === c.value}
+                  disabled={disabled}
+                  onChange={() => saver.edit({ optionIds: [], freeText: c.value }, CHOICE_DEBOUNCE_MS)}
+                />{" "}
+                {c.label}
+              </label>
+            ))}
           </div>
-          <div>
-            <span className="muted">Mine:</span> {describe(snap.value, [...snap.options, ...snap.conflict.options])}
-          </div>
-          <div className="conflict-actions">
-            <button type="button" onClick={() => void saver.keepMine()}>
-              Keep mine
-            </button>
-            <button type="button" className="secondary" onClick={() => saver.useTheirs()}>
-              Use theirs
-            </button>
-          </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      {snap.message && !snap.conflict ? <span className="inline-error">{snap.message}</span> : null}
-      {snap.failure === "session-expired" ? (
-        <a href="/login" target="_blank" rel="noopener noreferrer">
-          Sign in again (opens in a new tab)
-        </a>
-      ) : null}
-      {snap.failure !== null ? (
-        <button type="button" className="secondary" onClick={() => void saver.retry()}>
-          Retry save
-        </button>
-      ) : null}
+        {isSelect ? (
+          <select
+            id={inputId}
+            value={optionIds[0] ?? ""}
+            aria-label={controlName}
+            disabled={disabled}
+            onChange={(e) => changeOptions(e.target.value ? [e.target.value] : [])}
+          >
+            <option value="">—</option>
+            {options.map((o) => (
+              <option key={o.id} value={o.id} disabled={!o.isActive && !optionIds.includes(o.id)}>
+                {o.label}
+                {o.isActive ? "" : " (retired)"}
+              </option>
+            ))}
+          </select>
+        ) : null}
 
-      {isChoice && canAddOption && !retired && !blocked ? (
-        <div className="add-new">
+        {isMulti ? (
+          <div className="checks" role="group" aria-labelledby={`${inputId}-legend`} id={inputId}>
+            <span id={`${inputId}-legend`} hidden>
+              {field.label}
+            </span>
+            {options.length === 0 ? <span className="muted">No options yet.</span> : null}
+            {options.map((o) => (
+              <label key={o.id} className="check">
+                <input
+                  type="checkbox"
+                  checked={optionIds.includes(o.id)}
+                  disabled={disabled || (!o.isActive && !optionIds.includes(o.id))}
+                  onChange={(e) =>
+                    changeOptions(
+                      e.target.checked ? [...optionIds, o.id] : optionIds.filter((v) => v !== o.id),
+                    )
+                  }
+                />{" "}
+                {o.label}
+                {o.isActive ? "" : " (retired)"}
+              </label>
+            ))}
+          </div>
+        ) : null}
+
+        {isChoice && field.allowsFreeText ? (
           <input
             type="text"
-            aria-label={`New ${field.label} option`}
-            placeholder="New option (saved to the list for all visits)"
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void addNew();
-              }
-            }}
+            aria-label={`${field.label} — visit-only free text`}
+            placeholder="Free text for this visit only"
+            value={freeText}
+            disabled={disabled}
+            onChange={(e) => changeFreeText(e.target.value)}
+            onBlur={() => void saver.flush()}
           />
-          <button
-            type="button"
-            className="secondary"
-            disabled={adding || newLabel.trim() === ""}
-            onClick={() => void addNew()}
-          >
-            + Add New
+        ) : null}
+
+        {field.fieldType === "text" ? (
+          <input
+            id={inputId}
+            type="text"
+            value={freeText}
+            aria-label={controlName}
+            disabled={disabled}
+            onChange={(e) => changeFreeText(e.target.value)}
+            onBlur={() => void saver.flush()}
+          />
+        ) : null}
+
+        {field.fieldType === "textarea" ? (
+          <textarea
+            id={inputId}
+            aria-label={controlName}
+            rows={compact && !cell?.tall ? 1 : 3}
+            value={freeText}
+            disabled={disabled}
+            onChange={(e) => changeFreeText(e.target.value)}
+            onBlur={() => void saver.flush()}
+          />
+        ) : null}
+
+        {snap.conflict ? (
+          <div className="conflict" role="alert">
+            <strong>Conflict</strong> — someone else changed this field after you loaded it.
+            <div>
+              <span className="muted">Theirs:</span> {describe(snap.conflict.theirs, snap.conflict.options)}
+            </div>
+            <div>
+              <span className="muted">Mine:</span>{" "}
+              {describe(snap.value, [...snap.options, ...snap.conflict.options])}
+            </div>
+            <div className="conflict-actions">
+              <button type="button" onClick={() => void saver.keepMine()}>
+                Keep mine
+              </button>
+              <button type="button" className="secondary" onClick={() => saver.useTheirs()}>
+                Use theirs
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {snap.message && !snap.conflict ? <span className="inline-error">{snap.message}</span> : null}
+        {snap.failure === "session-expired" ? (
+          <a href="/login" target="_blank" rel="noopener noreferrer">
+            Sign in again (opens in a new tab)
+          </a>
+        ) : null}
+        {snap.failure !== null ? (
+          <button type="button" className="secondary" onClick={() => void saver.retry()}>
+            Retry save
           </button>
-        </div>
-      ) : null}
-      {addMessage ? (
-        <span className={addMessage.ok ? "muted" : "inline-error"}>
-          {addMessage.text}
-          {addMessage.expired ? (
-            <>
-              {" "}
-              <a href="/login" target="_blank" rel="noopener noreferrer">
-                Sign in again (opens in a new tab)
-              </a>
-            </>
-          ) : null}
-        </span>
-      ) : null}
+        ) : null}
+
+        {canAddOptionHere && (!compact || showAdd) ? (
+          <div className="add-new">
+            <input
+              type="text"
+              aria-label={`New ${field.label} option`}
+              placeholder="New option (saved to the list for all visits)"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void addNew();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="secondary"
+              disabled={adding || newLabel.trim() === ""}
+              onClick={() => void addNew()}
+            >
+              + Add New
+            </button>
+          </div>
+        ) : null}
+        {addMessage ? (
+          <span className={addMessage.ok ? "muted" : "inline-error"}>
+            {addMessage.text}
+            {addMessage.expired ? (
+              <>
+                {" "}
+                <a href="/login" target="_blank" rel="noopener noreferrer">
+                  Sign in again (opens in a new tab)
+                </a>
+              </>
+            ) : null}
+          </span>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+/**
+ * SonoSoft's "Select Impressions" / "Select Recomendations": choosing an option
+ * puts it into the first empty row (AP1/AP2). Rows keep their own saves.
+ */
+function RowFillerControl({
+  filler,
+  rows,
+  disabled,
+}: {
+  filler: RowFiller;
+  rows: { field: ClinicalFieldView; saver: FieldSaver }[];
+  disabled: boolean;
+}) {
+  const snaps = rows.map((r) => r.saver.getSnapshot());
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const offs = rows.map((r) => r.saver.subscribe(listener));
+      return () => offs.forEach((off) => off());
+    },
+    [rows],
+  );
+  const firstEmpty = useSyncExternalStore(
+    subscribe,
+    () => rows.findIndex((r) => !hasValue(r.saver.getSnapshot().value)),
+    () => rows.findIndex((r) => !hasValue(r.saver.getSnapshot().value)),
+  );
+  const options = (snaps[0]?.options ?? []).filter((o) => o.isActive);
+  const target = firstEmpty >= 0 ? rows[firstEmpty] : undefined;
+
+  return (
+    <label className="row-filler">
+      <span>{filler.label}</span>
+      <select
+        aria-label={filler.label}
+        value=""
+        disabled={disabled || !target || options.length === 0}
+        onChange={(e) => {
+          if (!target || !e.target.value) return;
+          target.saver.edit({ optionIds: [e.target.value], freeText: "" }, CHOICE_DEBOUNCE_MS);
+        }}
+      >
+        <option value="">{target ? `→ row ${firstEmpty + 1}` : "All rows are filled"}</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -424,6 +602,7 @@ function ClinicalSectionFormInner({
   readOnly,
   canWrite,
   canAddOption,
+  patientSex,
 }: {
   visitId: string;
   actorId: string;
@@ -432,6 +611,7 @@ function ClinicalSectionFormInner({
   readOnly: boolean;
   canWrite: boolean;
   canAddOption: boolean;
+  patientSex: string | null;
 }) {
   const [group] = useState(() => {
     const g = new SaverGroup(visitId, actorId);
@@ -475,7 +655,11 @@ function ClinicalSectionFormInner({
         peerLabels: excluded.map((f) => f.label),
       });
       for (const f of excluded) {
-        result.set(f.id, { role: "excluded", peers: savers([flag]), peerLabels: [flag.label] });
+        result.set(f.id, {
+          role: "excluded",
+          peers: savers([flag]),
+          peerLabels: [flag.label],
+        });
       }
     }
     return result;
@@ -625,6 +809,76 @@ function ClinicalSectionFormInner({
     };
   }, [group, fields]);
 
+  const layout = SECTION_LAYOUTS[sectionCode] ?? null;
+  const byCode = new Map(fields.map((f) => [f.code, f]));
+  const placedCodes = new Set(layout ? layoutFieldCodes(layout) : []);
+  const unplaced = layout ? fields.filter((f) => !placedCodes.has(f.code)) : [];
+
+  function lockedReasonFor(field: ClinicalFieldView): string | null {
+    if (FEMALE_ONLY_FIELD_CODES.includes(field.code) && patientSex !== "F") {
+      return "For female patients only.";
+    }
+    return null;
+  }
+
+  function renderField(field: ClinicalFieldView, cell: LayoutCell | null) {
+    const saver = group.get(field.id);
+    return saver ? (
+      <FieldEditor
+        key={field.id}
+        field={field}
+        saver={saver}
+        actorId={actorId}
+        readOnly={readOnly}
+        canWrite={canWrite}
+        canAddOption={canAddOption}
+        exclusion={exclusions.get(field.id) ?? null}
+        cell={cell}
+        lockedReason={lockedReasonFor(field)}
+      />
+    ) : null;
+  }
+
+  function renderBox(box: LayoutBox) {
+    const rows = box.rows
+      .map((r) => r.cells.filter((c) => byCode.has(c.code)))
+      .filter((cells) => cells.length > 0);
+    if (rows.length === 0) return null;
+    const fillerRows = box.filler
+      ? box.filler.codes.flatMap((code) => {
+          const field = byCode.get(code);
+          const saver = field ? group.get(field.id) : undefined;
+          return field && saver && field.isActive ? [{ field, saver }] : [];
+        })
+      : [];
+    return (
+      <section
+        key={box.id}
+        className={`layout-box tone-${box.tone}`}
+        data-box={box.id}
+        aria-label={box.title}
+      >
+        {box.title || box.filler ? (
+          <div className="box-head">
+            {box.title ? <h3 className="box-title">{box.title}</h3> : null}
+            {box.filler && fillerRows.length > 0 ? (
+              <RowFillerControl filler={box.filler} rows={fillerRows} disabled={readOnly} />
+            ) : null}
+          </div>
+        ) : null}
+        {box.caption ? <p className="box-caption">{box.caption}</p> : null}
+        {rows.map((cells) => (
+          <div className="layout-row" key={cells.map((c) => c.code).join(":")}>
+            {cells.map((c) => {
+              const field = byCode.get(c.code);
+              return field ? renderField(field, c) : null;
+            })}
+          </div>
+        ))}
+      </section>
+    );
+  }
+
   function stay() {
     const opener = prompt?.opener ?? null;
     setPrompt(null);
@@ -650,23 +904,22 @@ function ClinicalSectionFormInner({
           ? `${unsaved} field${unsaved === 1 ? "" : "s"} not saved yet — keep this page open until it says Saved.`
           : ""}
       </div>
-      <div className="clinical-form">
-        {fields.map((field) => {
-          const saver = group.get(field.id);
-          return saver ? (
-            <FieldEditor
-              key={field.id}
-              field={field}
-              saver={saver}
-              actorId={actorId}
-              readOnly={readOnly}
-              canWrite={canWrite}
-              canAddOption={canAddOption}
-              exclusion={exclusions.get(field.id) ?? null}
-            />
-          ) : null;
-        })}
-      </div>
+      {layout ? (
+        <div className="clinical-form clinical-layout" data-layout={sectionCode}>
+          {layout.boxes.map((box) => renderBox(box))}
+          {unplaced.length > 0 ? (
+            <div className="layout-box tone-plain" data-box="other">
+              {unplaced.map((field) => (
+                <div className="layout-row" key={field.id}>
+                  {renderField(field, { code: field.code, size: "full" })}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="clinical-form">{fields.map((field) => renderField(field, null))}</div>
+      )}
       {prompt ? <DiscardDialog items={prompt.items} onStay={stay} onDiscard={discardAndLeave} /> : null}
     </div>
   );
@@ -688,11 +941,9 @@ export function ClinicalSectionForm(props: {
   readOnly: boolean;
   canWrite: boolean;
   canAddOption: boolean;
+  patientSex: string | null;
 }) {
   return (
-    <ClinicalSectionFormInner
-      key={`${props.visitId}:${props.sectionCode}:${props.actorId}`}
-      {...props}
-    />
+    <ClinicalSectionFormInner key={`${props.visitId}:${props.sectionCode}:${props.actorId}`} {...props} />
   );
 }

@@ -55,5 +55,17 @@ Sprint 3A additions:
   independence, Unknown exclusivity UI + stale-page server refusal, tab-switch unsaved guard
   (Stay / Retry / explicit discard / pending flush), permissions per role.
 
+R1b additions (ADR-029):
+- Vitest `test/r1b.test.ts`: number fields (canonical text, decimals, range, clearing),
+  choice fields, female-only rule (refused for M/unknown, allowed for F, clearing allowed),
+  None/No known and family Unknown exclusions, row fields sharing one list, and migration
+  0007 on a legacy database (retirement, read-only history at the end of the tab, Subj
+  placement removal, Additional Comments type change, idempotency).
+- Vitest `test/patient-search-r1b.test.ts`: day/month/year parsing, `recent` list
+  (newest first; an edited patient moves to the top), schema refuses empty criteria.
+- Playwright: SonoSoft field order and labels per tab, "Select Impressions" filling the
+  next row, Bullets/Numbers, numeric stockings (cm, invalid value refused), female-only
+  field, S1, Unknown/None/No known, recent list + live search + birthdate format.
+
 Core target smoke flow:
 Login → Search/Create Patient → Open/Create Visit → Patient Chart → Save clinical data → Create Diagram → Generate Report → Logout.

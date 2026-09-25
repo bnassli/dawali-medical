@@ -454,3 +454,281 @@ output.derived {
   align-items: center;
   margin-bottom: 0.75rem;
 }
+
+/* ---- SonoSoft-style clinical layouts (R1b, ADR-029) ----
+   Boxes, rows and inline labels follow docs/reference/sonosoft/tabs/. */
+.clinical-form.clinical-layout,
+.clinical-layout {
+  --box-line: #3a3a3a;
+  --box-red: #c62828;
+  --box-blue: #8ea1d3;
+  --field-fill: #eeeeee;
+  --box-title: #1f3c96;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 62rem;
+  font-family: Tahoma, "Segoe UI", Geneva, Verdana, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .clinical-layout {
+    --box-line: #8a8f98;
+    --box-red: #ff8a80;
+    --box-blue: #7e97d6;
+    --field-fill: #22262e;
+    --box-title: #9db4ff;
+  }
+}
+
+.layout-box {
+  padding: 0.45rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.layout-box.tone-plain {
+  border: 1px solid var(--box-line);
+}
+
+.layout-box.tone-red {
+  border: 1px solid var(--box-red);
+}
+
+.layout-box.tone-blue {
+  border: 1px solid var(--box-blue);
+}
+
+.box-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.box-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-decoration: underline;
+  color: inherit;
+}
+
+.layout-box.tone-blue .box-title {
+  color: var(--box-title);
+}
+
+.box-caption {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.row-filler {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.layout-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  align-items: flex-start;
+}
+
+.clinical-field.compact {
+  margin: 0;
+  gap: 0.15rem;
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.clinical-field.compact.size-xs {
+  flex: 0 0 auto;
+}
+
+.clinical-field.compact.size-s {
+  flex: 1 1 10rem;
+}
+
+.clinical-field.compact.size-m {
+  flex: 1 1 16rem;
+}
+
+.clinical-field.compact.size-l {
+  flex: 2 1 22rem;
+}
+
+.clinical-field.compact.size-full {
+  flex: 1 1 100%;
+}
+
+/* Outside a layout the body is transparent: the plain form keeps its column. */
+.field-body {
+  display: contents;
+}
+
+/* SonoSoft puts the label on the left of its control, right-aligned. */
+.clinical-field.compact:not(.is-checkbox) {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 0.4rem;
+}
+
+.clinical-field.compact .field-head {
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 0;
+  max-width: 9rem;
+  padding-top: 0.2rem;
+  text-align: right;
+}
+
+.clinical-field.compact .field-head label {
+  font-weight: 400;
+  font-size: 0.8rem;
+  line-height: 1.15;
+}
+
+.clinical-field.compact .field-head .save-status {
+  font-size: 0.7rem;
+}
+
+.clinical-field.compact .field-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.3rem;
+  min-width: 0;
+}
+
+.clinical-field.compact .field-body > * {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* A single-choice list and its visit-only text share one line. */
+.clinical-field.compact .field-body > select,
+.clinical-field.compact .field-body > select + input[type="text"] {
+  flex: 1 1 8rem;
+}
+
+.clinical-field.compact .add-toggle {
+  margin-top: 0.1rem;
+  padding: 0 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.clinical-field.compact input[type="text"],
+.clinical-field.compact select,
+.clinical-field.compact textarea {
+  background: var(--field-fill);
+  font-size: 0.82rem;
+  padding: 0.2rem 0.35rem;
+}
+
+.clinical-field.compact .checks {
+  max-height: 6.5rem;
+  overflow-y: auto;
+  padding: 0.2rem 0.35rem;
+  background: var(--field-fill);
+  border: 1px solid var(--border);
+  gap: 0.1rem 0.8rem;
+}
+
+.clinical-field.compact.tall .checks {
+  max-height: 9rem;
+}
+
+.clinical-field.compact .add-new input,
+.clinical-field.compact .add-new button {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+}
+
+.clinical-field.compact.is-checkbox {
+  align-self: center;
+}
+
+.check-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.check-inline label {
+  font-weight: 400;
+}
+
+.number-input {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.number-input input {
+  width: 3.5rem;
+}
+
+.number-input .unit {
+  font-size: 0.75rem;
+  color: gray;
+}
+
+.radios {
+  display: flex;
+  gap: 0.25rem 0.9rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .clinical-field.compact,
+  .clinical-field.compact.size-xs,
+  .clinical-field.compact.size-s {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---- Patient search window (R1b PS1-PS4): SonoSoft's list on top, a fixed
+   scrolling area, criteria underneath. ---- */
+.search-hint {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+}
+
+.search-results-wrap {
+  max-height: 22rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+}
+
+.search-results-wrap thead th {
+  position: sticky;
+  top: 0;
+  background: var(--muted);
+}
+
+.search-bottom {
+  margin-top: 0.75rem;
+}
+
+.search-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.search-create-hint {
+  margin: 0;
+  font-size: 0.8rem;
+}

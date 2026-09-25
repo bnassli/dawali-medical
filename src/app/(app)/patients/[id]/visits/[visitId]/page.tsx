@@ -103,6 +103,7 @@ export default async function VisitChartPage({
               readOnly={!canWrite || !visitOpen}
               canWrite={canWrite}
               canAddOption={canAddOption}
+              patientSex={section.visit.patientSex}
             />
           </>
         ) : (

@@ -167,14 +167,6 @@ describe("patients", () => {
     const { actor } = await createTestUser(db, { roleCode: "RECEPTION" });
     const suffix = uniqueSuffix();
 
-    // 105 patients whose last names sort before every other test patient.
-    await db.insert(patients).values(
-      Array.from({ length: 105 }, (_, i) => ({
-        firstName: `Filler-${i}`,
-        lastName: `0000-${suffix}-${String(i).padStart(3, "0")}`,
-      })),
-    );
-
     const fileNo = `ICR-LATE-${suffix}`;
     const target = await createPatient(db, actor, {
       firstName: `Zed-${suffix}`,
@@ -186,6 +178,16 @@ describe("patients", () => {
       email: undefined,
       icareFileNo: fileNo,
     });
+
+    // 105 patients created after the target whose last names sort before every
+    // other test patient: the target is past the first page both by name and in
+    // the "recent patients" list (newest first, R1b PS1).
+    await db.insert(patients).values(
+      Array.from({ length: 105 }, (_, i) => ({
+        firstName: `Filler-${i}`,
+        lastName: `0000-${suffix}-${String(i).padStart(3, "0")}`,
+      })),
+    );
 
     // Precondition: without a filter the target really is past the first page.
     const firstPage = await searchPatients(db, actor, crit({}));
