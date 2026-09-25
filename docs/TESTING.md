@@ -94,5 +94,11 @@ permissions, append-only triggers, audit, Route Handlers, storage key safety and
 write-once); Playwright `e2e/diagrams.spec.ts` (create, draw, undo/redo, save v1, reopen,
 save v2, private file served, reception refused, Vein separate).
 
+R5 additions (ADR-034): Vitest `test/reports.test.ts` (composer never leaves broken text,
+first draft from the chart + latest diagrams, draft → final (.docx content, images, empty
+section omitted) → amended, conflict, nurse cannot finalize, draft refused after final,
+append-only, missing/foreign diagram refused); Playwright `e2e/reports.spec.ts` (warning
+without a diagram, preview, draft, finalize download, amended version, nurse view).
+
 Core target smoke flow:
 Login → Search/Create Patient → Open/Create Visit → Patient Chart → Save clinical data → Create Diagram → Generate Report → Logout.

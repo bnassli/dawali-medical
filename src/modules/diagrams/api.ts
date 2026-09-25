@@ -94,7 +94,8 @@ export async function handleGetFile(
       status: 200,
       headers: {
         "content-type": file.contentType,
-        "content-disposition": `inline; filename="${file.fileName}"`,
+        // Images open in the browser; Word documents download.
+        "content-disposition": `${file.contentType.startsWith("image/") ? "inline" : "attachment"}; filename="${file.fileName}"`,
         "cache-control": "private, no-store",
         "x-content-type-options": "nosniff",
       },

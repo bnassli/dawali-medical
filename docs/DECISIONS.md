@@ -704,3 +704,42 @@ versions keep their own rendered PNGs.
 
 *Not in R4:* report insertion (R5 uses the latest saved Leg Diagram of the visit),
 external-editor round trip, S3 storage, backups of `FILE_STORAGE_DIR` (deployment, R6).
+
+ADR-034: R5 — Report engine (.docx). Source: FINAL_V1 §9, `docs/REPORTS.md`, the report
+samples in `docs/reference/sonosoft/report-samples/` and their README notes.
+
+*Templates are data* (`src/modules/reports/templates.ts`): ordered sections (heading,
+text or list, page break, diagram after). Template 1 (short procedure: narrative + Leg
+Diagram) and Template 2 (HISTORY, PAST MEDICAL HISTORY, PHYSICAL EXAMINATION + Leg
+Diagram; page 2: ULTRASOUND FINDINGS + Vein Diagram, IMPRESSION, RECOMMENDATIONS). A new
+doctor-specific template is a new entry; the composer, preview and .docx writer are shared.
+
+*No retyping, no broken text:* the first draft of every section is composed from the
+visit's chart (`compose.ts`): patient name, age at the visit date and sex from the patient
+record (never a separate title field), chief complaints, meds (or "takes no
+medications"), past history / allergies ("no known allergy"), exam, ultrasound, CEAP/VCSS,
+Impression and Recommendation rows, and for Template 1 the Treatment Plan procedures
+completed on the visit date. Only recorded values are used, joined with spaces and
+punctuation; empty sections print nothing (no empty heading or bullet). Dates are
+dd/mm/yyyy. Bullets or numbers follow the visit's Bullets / Numbers choice.
+
+*Lifecycle (append-only):* `reports` (visit, template) and `report_versions`
+(draft → final → amended; DB checks: only draft has no file). Drafts save the edited text
+and chosen diagrams; Finalize writes a .docx (Times New Roman, clinic header, Patient /
+File Number / Date, sections, diagrams, "Dr. <name>") as a private patient file
+(`YYYY-MM-DD_Report_Template2_v02.docx`); after that, changes are saved only as amended
+versions, each with its own .docx. Nothing is overwritten. Concurrency, replay, open
+visit, same-origin, expectedUserId and audit (`report.create`,
+`report_version.draft/finalize/amend`) as elsewhere.
+
+*Diagrams:* default = the latest saved diagram of each type on the visit; the doctor can
+pick another saved version. A template's diagram is required to finalize: without one the
+editor shows a warning with a link to create it; a base template is never substituted;
+another visit's diagram is refused.
+
+*Who:* drafts `clinical.write` (Doctor, Nurse/Assistant); Finalize / amend — new
+permission `report.finalize`, Doctor only (the .docx is signed with the finalizer's name).
+Admin reads. The .docx downloads through the private file route.
+
+*Pending from the clinic:* the logo image (the header prints "Dawali Clinic" /
+"عيادات دوالي" as text until then) and the doctors' signature/initials images.

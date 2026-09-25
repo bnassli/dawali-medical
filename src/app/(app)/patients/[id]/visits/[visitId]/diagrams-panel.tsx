@@ -18,7 +18,7 @@ export function DiagramsPanel({
   canCreate: boolean;
 }) {
   return (
-    <section className="card diagrams-panel" aria-label="Diagrams">
+    <section className="card diagrams-panel" aria-label="Diagrams" id="diagrams">
       <h3>Diagrams</h3>
       {canCreate ? (
         <p className="diagram-actions">

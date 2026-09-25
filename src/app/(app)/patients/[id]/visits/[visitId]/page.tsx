@@ -14,6 +14,8 @@ import { getVisitById } from "@/modules/visits/service";
 import { loadPatient } from "../../../page-data";
 import { ClinicalSectionForm } from "./clinical-section-form";
 import { DiagramsPanel } from "./diagrams-panel";
+import { ReportsPanel } from "./reports-panel";
+import { listReportsForVisit } from "@/modules/reports/service";
 import { listDiagramsForVisit } from "@/modules/diagrams/service";
 
 export default async function VisitChartPage({
@@ -63,6 +65,7 @@ export default async function VisitChartPage({
         }));
 
   const diagrams = canRead ? await listDiagramsForVisit(getDb(), actor, visit.id) : [];
+  const reportList = canRead ? await listReportsForVisit(getDb(), actor, visit.id) : [];
 
   const reason = canRead
     ? ((await getVisitReasons(getDb(), actor, [visit.id])).get(visit.id) ?? null)
@@ -133,6 +136,13 @@ export default async function VisitChartPage({
         <DiagramsPanel
           base={`/patients/${patient.id}/visits/${visit.id}`}
           diagrams={diagrams}
+          canCreate={canWrite && visitOpen}
+        />
+      ) : null}
+      {canRead ? (
+        <ReportsPanel
+          base={`/patients/${patient.id}/visits/${visit.id}`}
+          reports={reportList}
           canCreate={canWrite && visitOpen}
         />
       ) : null}

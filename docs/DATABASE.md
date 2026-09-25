@@ -216,3 +216,14 @@ Rollback: see the migration header (destroys diagram records; the files in
 `FILE_STORAGE_DIR` are separate and must be backed up / removed deliberately).
 Audit actions added: `diagram.create`, `diagram_version.create`, `patient_file.read`.
 New env: `FILE_STORAGE_DIR` (default `var/files`).
+
+## R5 additions (ADR-034) — migration `0010_r5_reports.sql`
+
+| Table | Notes |
+|---|---|
+| `reports` | `id` (client uuid), `patient_id`, `visit_id`, `template_code`, `created_by`, `created_at`. Insert-only. |
+| `report_versions` | `id`, `report_id`, `version`, `status` (CHECK draft/final/amended), `content` (jsonb: section texts + chosen diagram file ids), `docx_file_id` → `patient_files` (CHECK: NULL exactly for drafts), `client_mutation_id` (unique), `created_by`, `created_at`. Unique (`report_id`, `version`). Insert-only. |
+
+Report files are `patient_files` rows with kind `report`. New permission `report.finalize`
+(Doctor). Audit actions: `report.create`, `report_version.draft`, `report_version.finalize`,
+`report_version.amend`. Rollback: see the migration header.

@@ -85,3 +85,53 @@ export const diagramVersions = pgTable(
     uniqueIndex("diagram_versions_client_mutation_id_idx").on(table.clientMutationId),
   ],
 );
+
+/** Report content as edited in the app: one text per template section + chosen diagram versions. */
+export interface ReportContent {
+  sections: Record<string, string>;
+  /** Diagram version file ids by diagram type ('leg' | 'vein'). */
+  diagramFileIds: Record<string, string | null>;
+}
+
+/** A report of one visit, from a data-driven template (R5, ADR-034). Insert-only. */
+export const reports = pgTable(
+  "reports",
+  {
+    id: uuid("id").primaryKey(),
+    patientId: uuid("patient_id")
+      .notNull()
+      .references(() => patients.id, { onDelete: "restrict" }),
+    visitId: uuid("visit_id")
+      .notNull()
+      .references(() => visits.id, { onDelete: "restrict" }),
+    templateCode: text("template_code").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("reports_visit_idx").on(table.visitId)],
+);
+
+/**
+ * Append-only report versions: 'draft' (no file), then 'final' (a .docx),
+ * then 'amended' (a new .docx). A finalized version is never replaced.
+ */
+export const reportVersions = pgTable(
+  "report_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => reports.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    status: text("status").notNull(),
+    content: jsonb("content").$type<ReportContent>().notNull(),
+    docxFileId: uuid("docx_file_id").references(() => patientFiles.id, { onDelete: "restrict" }),
+    clientMutationId: uuid("client_mutation_id").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("report_versions_report_version_idx").on(table.reportId, table.version),
+    uniqueIndex("report_versions_client_mutation_id_idx").on(table.clientMutationId),
+  ],
+);

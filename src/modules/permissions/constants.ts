@@ -24,6 +24,7 @@ export const PERMISSIONS = {
   CLINICAL_WRITE: "clinical.write",
   CLINICAL_OPTION_ADD: "clinical_option.add",
   CLINICAL_OPTION_MANAGE: "clinical_option.manage",
+  REPORT_FINALIZE: "report.finalize",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -54,6 +55,8 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
     "Add new permanent options to clinical option lists (+ Add New)",
   [PERMISSIONS.CLINICAL_OPTION_MANAGE]:
     "Retire/reactivate clinical option list options",
+  [PERMISSIONS.REPORT_FINALIZE]:
+    "Finalize or amend a report (the .docx is signed with this user's name)",
 };
 
 export const ROLES = {
@@ -79,7 +82,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
   // (ADR-028). Admin deliberately lacks clinical.write: an admin who also needs to edit
   // clinical entries must additionally be assigned the DOCTOR role.
   [ROLES.ADMIN]: ALL_PERMISSION_CODES.filter(
-    (code) => code !== PERMISSIONS.CLINICAL_WRITE,
+    (code) => code !== PERMISSIONS.CLINICAL_WRITE && code !== PERMISSIONS.REPORT_FINALIZE,
   ),
   [ROLES.DOCTOR]: [
     PERMISSIONS.PATIENT_READ,
@@ -91,6 +94,8 @@ export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     PERMISSIONS.CLINICAL_READ,
     PERMISSIONS.CLINICAL_WRITE,
     PERMISSIONS.CLINICAL_OPTION_ADD,
+    // Only a doctor signs a report (R5, ADR-034).
+    PERMISSIONS.REPORT_FINALIZE,
   ],
   [ROLES.NURSE_ASSISTANT]: [
     PERMISSIONS.PATIENT_READ,
