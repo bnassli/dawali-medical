@@ -2,6 +2,8 @@
 
 Global rule: preserve SonoSoft-style order and familiarity. Applicable fields support predefined options, `+ Add New`, reusable save, and visit-only free text.
 
+Visual reference: redacted SonoSoft screenshots of each tab and of the reports are in `docs/reference/sonosoft/` (see its README). Where a screenshot exists, the tab's layout, grouping and labels follow it.
+
 ## Subj Complaints Habits
 Reason for visit; Problem List; Chief Complaints; characteristics; duration; progression; daily-activity impact; chest comments; comments; aggravating factors; relieving factors; previous conservative therapy + duration; family history; alcohol/exercise/tobacco; pain meds; current meds; allergies.
 
