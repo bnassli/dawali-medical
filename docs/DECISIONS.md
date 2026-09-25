@@ -647,3 +647,25 @@ SonoSoft's "Select" filling the next empty Plan row.
 
 *Not in R3 (next phase):* Post EVLT Comp Follow Up (vitals, cardio, ultrasound sections)
 and the Comprehensive / General Clinical Exam.
+
+ADR-032: R3b — Post EVLT Comp Follow Up. Source: `treatment-10-post-evlt-comp-follow-up-part1.jpg`
+and `-part2.jpg`, ADR-029 (pixel layouts), ADR-026 (one global field per concept).
+
+*Per-visit tab* `post_evlt_follow_up` (sort 7), no migration. New global fields: vitals
+(`vital_height`, `vital_weight`, `vital_pulse`, `vital_bp`, `vital_temp`,
+`vital_respiratory_rate`, `vital_bmi` as text — units unknown, no rule invented;
+`vital_rhythm` select), `post_subjective` / `post_objective` (share Follow Up's lists),
+`social_history`, physical exam `exam_constitution/eyes/enmt/neck/lungs/cardio`,
+ultrasound `us_indications/findings/impression`, `ceap`, `vcss_right`, `vcss_left` (text).
+These are named as concepts so the future Add Vitals, Physical Exam and CEAP VCSS tabs
+reuse them instead of creating second copies.
+
+*Shared with the Workup tabs (same field, same value per visit):* Past Medical Hx, Current
+Meds, Allergies, Impression 1–4, Bullets/Numbers, Impr for Init Venous Interp,
+Recommendations 1–5. "Add Impression" / "Add Recomendations" fill the next empty row;
+the new "Clear" button empties a row by saving a new, audited version.
+
+*Not drawn / not built:* the fields between Cardio and Indications (not visible on either
+screenshot — needs one more screenshot; the rest of the form is drawn that much higher),
+the green "Copy from Workup" (+!) buttons (copying from an earlier visit needs a rule for
+which visit — PO question), Add Charge.

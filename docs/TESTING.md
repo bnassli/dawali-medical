@@ -85,7 +85,8 @@ R2 additions (ADR-030):
 
 R3 additions (ADR-031): Vitest `test/r3.test.ts` (tab order, placements = layout, Patient
 feels values, shared row lists); Playwright `e2e/r3.spec.ts` (Laser combos/text across
-reload, Patient feels, Assessment rows, Plan "Select").
+reload, Patient feels, Assessment rows, Plan "Select"; R3b: Post EVLT vitals, Impression
+shared with Assessment Plan+, "Clear" keeps history).
 
 Core target smoke flow:
 Login → Search/Create Patient → Open/Create Visit → Patient Chart → Save clinical data → Create Diagram → Generate Report → Logout.

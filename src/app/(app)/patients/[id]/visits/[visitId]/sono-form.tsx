@@ -164,6 +164,11 @@ function SonoItem({
       if (!fieldFor(item.forCode)) return null;
       return <SonoOpener item={item} origin={o} onOpen={() => focusField(item.forCode)} />;
     }
+    case "clear": {
+      const ctx = fieldFor(item.forCode);
+      if (!ctx) return null;
+      return <SonoClear rect={item.rect} origin={o} ctx={ctx} disabled={readOnly} />;
+    }
     case "filler":
       return <SonoFiller item={item} origin={o} fieldFor={fieldFor} disabled={readOnly} />;
     case "field": {
@@ -246,6 +251,33 @@ function SonoOpener({
       onClick={onOpen}
     >
       {item.text}
+    </button>
+  );
+}
+
+/** SonoSoft's "Clear": empties one row field (saved as a new version, never erased). */
+function SonoClear({
+  rect,
+  origin,
+  ctx,
+  disabled,
+}: {
+  rect: Rect;
+  origin: { x: number; y: number };
+  ctx: SonoFieldContext;
+  disabled: boolean;
+}) {
+  const snap = useSaver(ctx.saver);
+  return (
+    <button
+      type="button"
+      className="sono-btn"
+      aria-label={`Clear ${ctx.field.label}`}
+      style={{ ...place(rect, origin), fontSize: 9 }}
+      disabled={disabled || !ctx.field.isActive || snap.conflict !== null || !hasValue(snap.value)}
+      onClick={() => ctx.saver.edit({ optionIds: [], freeText: "" }, CHOICE_DEBOUNCE_MS)}
+    >
+      Clear
     </button>
   );
 }

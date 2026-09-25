@@ -55,3 +55,33 @@ test("Follow Up Office Visit: Patient feels, Assessment rows and Plan Select", a
   await expect(field(page, "followup_plan_2").getByRole("combobox")).toHaveValue(`Stockings 3 months ${s}`);
   expect((await entryHistory(visit.visitId, "followup_patient_feels")).map((r) => r.freeText)).toEqual(["same"]);
 });
+
+test("Post EVLT Comp Follow Up: vitals, shared Impression with Assessment Plan+, Clear", async ({ page }) => {
+  const visit = await createVisitFixture();
+  await loginAs(page, "doctor");
+  await page.goto(`${visitUrl(visit)}?tab=post_evlt_follow_up`);
+
+  const bp = field(page, "vital_bp").locator("input");
+  await bp.fill("120/80");
+  await bp.blur();
+  await expect(statusOf(page, "vital_bp")).toHaveText("Saved");
+  const impression = field(page, "impression_1").getByRole("combobox");
+  await impression.fill("Unilateral Varicocele");
+  await impression.blur();
+  await expect(statusOf(page, "impression_1")).toHaveText("Saved");
+
+  // Same visit value on Assessment Plan+ (one source, ADR-026).
+  await page.goto(`${visitUrl(visit)}?tab=assessment_plan`);
+  await expect(field(page, "impression_1").getByRole("combobox")).toHaveValue("Unilateral Varicocele");
+
+  await page.goto(`${visitUrl(visit)}?tab=post_evlt_follow_up`);
+  await expect(field(page, "vital_bp").locator("input")).toHaveValue("120/80");
+  await page.getByRole("button", { name: "Clear Impression 1" }).click();
+  await expect(statusOf(page, "impression_1")).toHaveText("Saved");
+  await expect(field(page, "impression_1").getByRole("combobox")).toHaveValue("");
+  // Cleared by a new version; the old text stays in history.
+  expect((await entryHistory(visit.visitId, "impression_1")).map((r) => r.freeText)).toEqual([
+    "Unilateral Varicocele",
+    "",
+  ]);
+});

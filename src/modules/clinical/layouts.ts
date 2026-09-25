@@ -85,7 +85,14 @@ export interface FillerItem {
   codes: string[];
 }
 
-export type LayoutItem = FieldItem | LabelItem | OpenerItem | BoxItem | FillerItem;
+/** SonoSoft's small "Clear" button next to a row: empties that field (a new, audited version). */
+export interface ClearItem {
+  kind: "clear";
+  rect: Rect;
+  forCode: string;
+}
+
+export type LayoutItem = FieldItem | LabelItem | OpenerItem | BoxItem | FillerItem | ClearItem;
 
 export interface SectionLayout {
   width: number;
@@ -461,12 +468,110 @@ const FOLLOW_UP: SectionLayout = {
   ],
 };
 
+/**
+ * docs/reference/sonosoft/tabs/treatment-10-post-evlt-comp-follow-up-part1.jpg and
+ * -part2.jpg (R3b, ADR-032). The two screenshots do not show what lies between
+ * Cardio and Indications; nothing is invented there, so everything from
+ * Indications down is drawn GAP px higher than in SonoSoft.
+ */
+const POST_EVLT_GAP = 56;
+const postEvlt = (): SectionLayout => {
+  const up = (y: number) => y - POST_EVLT_GAP;
+  const rowLabel = (text: string, y: number, code: string, x = 30, w = 100) =>
+    l(text, x, y, { w, align: "right", bold: true, forCode: code });
+  const exam = [
+    ["Constitution", "exam_constitution", 592],
+    ["Eyes", "exam_eyes", 625],
+    ["ENMT", "exam_enmt", 659],
+    ["Neck", "exam_neck", 692],
+    ["Lungs", "exam_lungs", 726],
+    ["Cardio", "exam_cardio", 759],
+  ] as const;
+  return {
+    width: 700,
+    height: up(1410) - 292 + 12,
+    origin: { x: 0, y: 292 },
+    background: "#f0f0f0",
+    items: [
+      box(r(15, 325, 672, up(1410) - 325)),
+      l("Height:", 27, 336, { forCode: "vital_height" }),
+      f("vital_height", r(61, 334, 28, 18)),
+      l("Weight:", 96, 336, { forCode: "vital_weight" }),
+      f("vital_weight", r(133, 334, 32, 18)),
+      l("Pulse:", 189, 336, { forCode: "vital_pulse" }),
+      f("vital_pulse", r(219, 334, 22, 18)),
+      l("Bp:", 248, 336, { forCode: "vital_bp" }),
+      f("vital_bp", r(266, 334, 52, 18)),
+      l("Rhythm:", 329, 336, { forCode: "vital_rhythm" }),
+      f("vital_rhythm", r(368, 335, 67, 16)),
+      l("Temp:", 443, 336, { forCode: "vital_temp" }),
+      f("vital_temp", r(472, 334, 33, 18)),
+      l("Respiratory Rate:", 512, 336, { forCode: "vital_respiratory_rate" }),
+      f("vital_respiratory_rate", r(593, 334, 20, 18)),
+      l("BMI:", 627, 336, { forCode: "vital_bmi" }),
+      f("vital_bmi", r(646, 334, 31, 18)),
+      box(r(15, 362, 672, 1)),
+
+      l("Subjective", 28, 370, { w: 100, align: "right", bold: true, underline: true, size: 10, forCode: "post_subjective" }),
+      f("post_subjective", r(132, 368, 519, 30)),
+      l("Objective Findings", 18, 400, { w: 110, align: "right", bold: true, underline: true, size: 10, forCode: "post_objective" }),
+      f("post_objective", r(132, 402, 519, 30)),
+      rowLabel("Past Medical Hx", 436, "past_medical_history", 17, 110),
+      f("past_medical_history", r(132, 436, 519, 30)),
+      rowLabel("Current Meds", 469, "current_meds", 17, 110),
+      f("current_meds", r(132, 469, 519, 30)),
+      rowLabel("Allergies", 502, "allergies", 17, 110),
+      f("allergies", r(132, 502, 519, 30)),
+      rowLabel("Social Hx", 536, "social_history", 17, 110),
+      f("social_history", r(132, 536, 519, 24)),
+      box(r(15, 563, 672, 1)),
+
+      l("Physical Exam Findings", 23, 571, { bold: true, underline: true, size: 10 }),
+      ...exam.flatMap(([text, code, y]) => [rowLabel(text, y + 1, code), f(code, r(132, y, 519, 30))]),
+
+      l("Indications", 27, up(866), { w: 100, align: "right", bold: true, forCode: "us_indications" }),
+      f("us_indications", r(132, up(860), 519, 28)),
+      l("Findings", 30, up(893), { w: 100, align: "right", forCode: "us_findings" }),
+      f("us_findings", r(132, up(892), 519, 30)),
+      l("Impression", 30, up(926), { w: 100, align: "right", forCode: "us_impression" }),
+      f("us_impression", r(132, up(925), 519, 16)),
+      box(r(15, up(950), 672, 1)),
+
+      l("CEAP:", 89, up(963), { w: 80, align: "right", bold: true, forCode: "ceap" }),
+      f("ceap", r(172, up(962), 278, 16)),
+      l("VCSS Right:", 89, up(983), { w: 80, align: "right", bold: true, forCode: "vcss_right" }),
+      f("vcss_right", r(172, up(982), 278, 16)),
+      l("VCSS Left:", 89, up(1003), { w: 80, align: "right", bold: true, forCode: "vcss_left" }),
+      f("vcss_left", r(172, up(1002), 278, 16)),
+      box(r(15, up(1023), 672, 1)),
+
+      { kind: "filler", label: "Add Impression", rect: r(23, up(1037), 92, 27), codes: ["impression_1", "impression_2", "impression_3", "impression_4"] },
+      f("impression_list_style", r(25, up(1082), 80, 43)),
+      ...[1, 2, 3, 4].flatMap((i): LayoutItem[] => {
+        const y = up(1037 + (i - 1) * 30);
+        return [
+          { kind: "clear", rect: r(118, y, 32, 15), forCode: `impression_${i}` },
+          l(`${i}:`, 161, y + 2, { bold: true, forCode: `impression_${i}` }),
+          f(`impression_${i}`, r(172, y, 480, 26)),
+        ];
+      }),
+      l("Impr for Init Venous Interp", 17, up(1157), { w: 150, align: "right", size: 9, forCode: "impr_for_init_venous_interp" }),
+      f("impr_for_init_venous_interp", r(172, up(1156), 480, 16)),
+      box(r(15, up(1180), 672, 1)),
+
+      { kind: "filler", label: "Add Recomendations", rect: r(23, up(1190), 122, 25), codes: rowCodes("recommendation").slice(0, 5) },
+      ...[1, 2, 3, 4, 5].map((i) => f(`recommendation_${i}`, r(172, up(1190 + (i - 1) * 43), 480, 40))),
+    ],
+  };
+};
+
 export const SECTION_LAYOUTS: Record<string, SectionLayout> = {
   subj_complaints_habits: SUBJ,
   past_medical_hx: PAST_MEDICAL_HX,
   assessment_plan: ASSESSMENT_PLAN,
   laser_ablation: LASER_ABLATION,
   follow_up_office_visit: FOLLOW_UP,
+  post_evlt_follow_up: postEvlt(),
 };
 
 /** Every field code a layout places. */

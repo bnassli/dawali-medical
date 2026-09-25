@@ -298,6 +298,32 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
   ...rowFields("followup_assessment", "Assessment", "followup_assessment", 3),
   ...rowFields("followup_plan", "Plan", "followup_plan", 2),
 
+  // --- Post EVLT Comp Follow Up (R3b, ADR-032). Vitals, exam, ultrasound and CEAP/VCSS
+  // are global concepts other tabs (Add Vitals, Physical Exam, CEAP VCSS) will reuse. ---
+  { code: "vital_height", label: "Height", type: FIELD_TYPES.TEXT },
+  { code: "vital_weight", label: "Weight", type: FIELD_TYPES.TEXT },
+  { code: "vital_pulse", label: "Pulse", type: FIELD_TYPES.TEXT },
+  { code: "vital_bp", label: "Bp", type: FIELD_TYPES.TEXT },
+  { code: "vital_rhythm", label: "Rhythm", type: FIELD_TYPES.SELECT },
+  { code: "vital_temp", label: "Temp", type: FIELD_TYPES.TEXT },
+  { code: "vital_respiratory_rate", label: "Respiratory Rate", type: FIELD_TYPES.TEXT },
+  { code: "vital_bmi", label: "BMI", type: FIELD_TYPES.TEXT },
+  { code: "post_subjective", label: "Subjective", type: FIELD_TYPES.SELECT, optionList: "followup_subjective" },
+  { code: "post_objective", label: "Objective Findings", type: FIELD_TYPES.SELECT, optionList: "followup_objective" },
+  { code: "social_history", label: "Social Hx", type: FIELD_TYPES.SELECT },
+  { code: "exam_constitution", label: "Constitution", type: FIELD_TYPES.SELECT },
+  { code: "exam_eyes", label: "Eyes", type: FIELD_TYPES.SELECT },
+  { code: "exam_enmt", label: "ENMT", type: FIELD_TYPES.SELECT },
+  { code: "exam_neck", label: "Neck", type: FIELD_TYPES.SELECT },
+  { code: "exam_lungs", label: "Lungs", type: FIELD_TYPES.SELECT },
+  { code: "exam_cardio", label: "Cardio", type: FIELD_TYPES.SELECT },
+  { code: "us_indications", label: "Indications", type: FIELD_TYPES.SELECT },
+  { code: "us_findings", label: "Findings", type: FIELD_TYPES.SELECT },
+  { code: "us_impression", label: "Ultrasound Impression", type: FIELD_TYPES.SELECT },
+  { code: "ceap", label: "CEAP", type: FIELD_TYPES.TEXT },
+  { code: "vcss_right", label: "VCSS Right", type: FIELD_TYPES.TEXT },
+  { code: "vcss_left", label: "VCSS Left", type: FIELD_TYPES.TEXT },
+
   // --- Treatment Plan (R2, ADR-030): the columns of the patient's plan table.
   // Placed in no tab: their values live in treatment_plan_entries, per plan row. ---
   { code: "treatment_scheduled", label: "Scheduled", type: FIELD_TYPES.DATE },
@@ -423,6 +449,45 @@ export const FOLLOW_UP_FIELD_CODES = [
   ...rowCodes("followup_plan", 2),
 ];
 
+/**
+ * Post EVLT Comp Follow Up (R3b, ADR-032). Past Medical Hx, Current Meds,
+ * Allergies, Impression 1-4, Bullets/Numbers, Impr for Init Venous Interp and
+ * Recommendations 1-5 are the SAME global fields as the Workup tabs: one value
+ * per visit, whichever tab shows it (ADR-026).
+ */
+export const POST_EVLT_FIELD_CODES = [
+  "vital_height",
+  "vital_weight",
+  "vital_pulse",
+  "vital_bp",
+  "vital_rhythm",
+  "vital_temp",
+  "vital_respiratory_rate",
+  "vital_bmi",
+  "post_subjective",
+  "post_objective",
+  "past_medical_history",
+  "current_meds",
+  "allergies",
+  "social_history",
+  "exam_constitution",
+  "exam_eyes",
+  "exam_enmt",
+  "exam_neck",
+  "exam_lungs",
+  "exam_cardio",
+  "us_indications",
+  "us_findings",
+  "us_impression",
+  "ceap",
+  "vcss_right",
+  "vcss_left",
+  "impression_list_style",
+  ...rowCodes("impression", 4),
+  "impr_for_init_venous_interp",
+  ...rowCodes("recommendation", 5),
+];
+
 export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
   {
     code: SUBJ_COMPLAINTS_HABITS_SECTION_CODE,
@@ -454,6 +519,12 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
   // SonoSoft's Treatment set order: Treatment Plan, Laser Ablation, ..., Follow Up Office Visit.
   { code: "laser_ablation", name: "Laser Ablation", sortOrder: 5, fieldCodes: LASER_ABLATION_FIELD_CODES },
   { code: "follow_up_office_visit", name: "Follow Up Office Visit", sortOrder: 6, fieldCodes: FOLLOW_UP_FIELD_CODES },
+  {
+    code: "post_evlt_follow_up",
+    name: "Post EVLT Comp Follow Up",
+    sortOrder: 7,
+    fieldCodes: POST_EVLT_FIELD_CODES,
+  },
 ];
 
 /**

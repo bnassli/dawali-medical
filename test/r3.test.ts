@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { clinicalFieldDefinitions } from "@/db/schema";
-import { FOLLOW_UP_FIELD_CODES, LASER_ABLATION_FIELD_CODES } from "@/modules/clinical/definitions";
+import { FOLLOW_UP_FIELD_CODES, LASER_ABLATION_FIELD_CODES, POST_EVLT_FIELD_CODES } from "@/modules/clinical/definitions";
 import { layoutFieldCodes, SECTION_LAYOUTS } from "@/modules/clinical/layouts";
 import {
   addClinicalOption,
@@ -58,18 +58,20 @@ describe("R3: Laser Ablation and Follow Up Office Visit (ADR-031)", () => {
 
   it("adds the tabs in SonoSoft's Treatment order, each field placed in order and on the screen", async () => {
     // Other test files leave extra sections in the shared database; only ours count.
-    const ours = ["assessment_plan", "treatment_plan", "laser_ablation", "follow_up_office_visit"];
+    const ours = ["assessment_plan", "treatment_plan", "laser_ablation", "follow_up_office_visit", "post_evlt_follow_up"];
     const codes = (await listClinicalSections(db, doctor)).map((t) => t.code).filter((c) => ours.includes(c));
     expect(codes).toEqual([
       "assessment_plan",
       "treatment_plan",
       "laser_ablation",
       "follow_up_office_visit",
+      "post_evlt_follow_up",
     ]);
     const v = await visitId();
     for (const [section, expected] of [
       ["laser_ablation", LASER_ABLATION_FIELD_CODES],
       ["follow_up_office_visit", FOLLOW_UP_FIELD_CODES],
+      ["post_evlt_follow_up", POST_EVLT_FIELD_CODES],
     ] as const) {
       const view = await getClinicalSectionForVisit(db, doctor, v, section);
       expect(view.fields.map((f) => f.code)).toEqual(expected);
@@ -95,5 +97,17 @@ describe("R3: Laser Ablation and Follow Up Office Visit (ADR-031)", () => {
     await expect(save(v, "laser_agent_3", { optionIds: [agent.id], freeText: "extra" })).resolves.toMatchObject({
       changed: true,
     });
+  });
+
+  it("Post EVLT shows the visit's own Impression and Allergies: one value per visit (ADR-026)", async () => {
+    const v = await visitId();
+    await save(v, "impression_1", { freeText: "Unilateral Varicocele" });
+    await save(v, "allergies", { freeText: "none known" });
+    const post = await getClinicalSectionForVisit(db, doctor, v, "post_evlt_follow_up");
+    const ap = await getClinicalSectionForVisit(db, doctor, v, "assessment_plan");
+    const val = (view: typeof post, code: string) => view.fields.find((f) => f.code === code)?.value.freeText;
+    expect(val(post, "impression_1")).toBe("Unilateral Varicocele");
+    expect(val(ap, "impression_1")).toBe("Unilateral Varicocele");
+    expect(val(post, "allergies")).toBe("none known");
   });
 });
