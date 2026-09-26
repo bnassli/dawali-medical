@@ -1,0 +1,69 @@
+# Dawali Medical on a clinic server (R6a, ADR-036).
+#   cd deploy && cp .env.example .env   (fill it in)
+#   docker compose up -d --build
+# Database in the Docker volume "pgdata"; patient files and certificates in ./data.
+# Back up with backup.sh / backup.ps1 (they dump the database, never copy the volume).
+name: dawali
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dawali
+      POSTGRES_USER: dawali
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      # Named volume, not a folder: PostgreSQL cannot run on a Windows (NTFS) bind mount.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dawali -d dawali"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # No published port: only the app reaches the database.
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://dawali:${POSTGRES_PASSWORD}@db:5432/dawali
+      APP_ORIGIN: https://${SITE_ADDRESS:?set SITE_ADDRESS in deploy/.env}
+      APP_TIME_ZONE: ${APP_TIME_ZONE:-Asia/Riyadh}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      FILE_STORAGE_DIR: /app/var/files
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      INVOICE_AI_MODEL: ${INVOICE_AI_MODEL:-claude-sonnet-5}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+    volumes:
+      - ./data/files:/app/var/files
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    # No published port: HTTPS only, through caddy.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+
+volumes:
+  pgdata:

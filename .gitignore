@@ -92,3 +92,8 @@ test-results/
 
 # Private patient files (local file storage, ADR-033)
 var/
+
+# Clinic server data and backups (R6a) — never commit
+deploy/data/
+deploy/backups/
+deploy/.env

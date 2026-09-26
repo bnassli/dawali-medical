@@ -1,0 +1,14 @@
+node_modules
+.next
+var
+backups
+deploy/data
+deploy/backups
+deploy/.env
+.env
+.env.*
+playwright-report
+test-results
+coverage
+*.log
+.git

@@ -1,0 +1,6 @@
+# Shell scripts and the Caddyfile run inside Linux containers: keep LF line endings even
+# when the repository is cloned on Windows (core.autocrlf would otherwise break them).
+*.sh      text eol=lf
+Caddyfile text eol=lf
+Dockerfile text eol=lf
+*.ps1     text eol=crlf
