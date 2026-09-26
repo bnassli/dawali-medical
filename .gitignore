@@ -48,6 +48,9 @@ backups/
 db-backups/
 pgdata/
 
+# Persistent local dev database (npm run db:dev): data dir + log
+.dev-db/
+
 # Embedded PostgreSQL (used by tests / db:validate) data + downloaded binaries
 .embedded-postgres/
 .embedded-pg-data/
