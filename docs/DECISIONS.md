@@ -794,3 +794,9 @@ production-mode start through the entrypoint (migrate, seed, first admin, cross-
 refused). Not tested here: building the images (Docker Hub is not reachable from the build
 environment) and `backup.ps1` (no Windows) — both to be run once on the clinic server.
 The later cloud move is a backup/restore onto the same stack in a Saudi region.
+Update 2026-09-26: the clinic server runs Windows (Product Owner). The database moved to
+the named volume `pgdata` (PostgreSQL refuses an NTFS bind mount); `.gitattributes`
+forces LF on scripts that run in Linux containers; added `restore.ps1` and
+`setup-windows.ps1` (private-network firewall rules, no sleep, nightly backup task).
+Docker Desktop needs the server account signed in (auto sign-in + locked screen). The
+PowerShell scripts are not executed here (no Windows) — run once on the server.

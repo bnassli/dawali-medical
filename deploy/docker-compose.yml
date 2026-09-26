@@ -1,7 +1,8 @@
 # Dawali Medical on a clinic server (R6a, ADR-036).
 #   cd deploy && cp .env.example .env   (fill it in)
 #   docker compose up -d --build
-# Data lives in ./data (database + patient files) — back it up with backup.sh / backup.ps1.
+# Database in the Docker volume "pgdata"; patient files and certificates in ./data.
+# Back up with backup.sh / backup.ps1 (they dump the database, never copy the volume).
 name: dawali
 
 services:
@@ -13,7 +14,8 @@ services:
       POSTGRES_USER: dawali
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      # Named volume, not a folder: PostgreSQL cannot run on a Windows (NTFS) bind mount.
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dawali -d dawali"]
       interval: 10s
@@ -62,3 +64,6 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data
+
+volumes:
+  pgdata:

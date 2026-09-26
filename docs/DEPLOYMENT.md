@@ -25,6 +25,35 @@ docker compose ps           # db, app and caddy "healthy"/"running"
 a DNS entry on the clinic router, or a line `192.168.1.20 dawali.clinic.local` in each
 PC's hosts file (`C:\Windows\System32\drivers\etc\hosts`).
 
+## 2a. Windows server step by step (the clinic's choice)
+1. Windows 11 Pro (or Windows Server 2022) on the dedicated PC; a local account used only
+   for the server, with a strong password. Enable BitLocker on the disk (patient data).
+2. Install **Docker Desktop** (WSL 2 backend). Settings → General: tick "Start Docker
+   Desktop when you sign in". Docker Desktop only runs while that account is signed in,
+   so set the account to sign in automatically after a restart (e.g. Sysinternals
+   Autologon) and lock the screen (Win+L) — never sign it out.
+3. Install **Git for Windows**, then in PowerShell:
+   ```powershell
+   git clone https://github.com/bnassli/dawali-medical.git C:\dawali
+   cd C:\dawali\deploy
+   copy .env.example .env      # edit with Notepad: SITE_ADDRESS, passwords, admin, API key
+   docker compose up -d --build
+   docker compose ps
+   ```
+   `.gitattributes` keeps the Linux scripts with LF endings, so the clone works as is.
+4. As Administrator, once:
+   `powershell -ExecutionPolicy Bypass -File C:\dawali\deploy\setup-windows.ps1 -OffsiteDir E:\dawali-backups`
+   — opens 443/80 on the private network only, disables sleep, schedules the nightly
+   backup (02:30) with a copy to the external disk.
+5. Set the clinic network as "Private" in Windows (Settings → Network), give the server a
+   fixed IP, and set Windows Update active hours to clinic hours so restarts happen at night.
+6. Continue with sections 3–5 below. Restore on Windows:
+   `powershell -ExecutionPolicy Bypass -File C:\dawali\deploy\restore.ps1 C:\dawali\deploy\backups\<date_time>`
+
+The database lives in the Docker volume `dawali_pgdata` (PostgreSQL cannot run on an NTFS
+folder); patient files and certificates stay in `deploy\data`. Backups use pg_dump, so
+they never depend on where the volume is.
+
 ## 3. HTTPS certificate on the clinic PCs (once per PC)
 Caddy creates the clinic's own certificate authority. Copy its root certificate from
 `deploy/data/caddy/caddy/pki/authorities/local/root.crt` and install it on each PC:
@@ -40,7 +69,7 @@ staff accounts with their roles (Admin → Users), then remove `SEED_ADMIN_PASSW
 ## 5. Backups (mandatory)
 - Linux: `deploy/backup.sh` from cron every night, e.g.
   `30 2 * * * /opt/dawali/deploy/backup.sh >> /var/log/dawali-backup.log 2>&1`
-- Windows: Task Scheduler, daily, `powershell -ExecutionPolicy Bypass -File C:\dawali\deploy\backup.ps1`
+- Windows: scheduled by `setup-windows.ps1` (Task Scheduler → "Dawali Medical backup").
 - Each backup = `database.dump` + `files.tar.gz` + `SHA256SUMS` in
   `deploy/backups/<date_time>/`, kept 30 days (`KEEP_DAYS`), and the dump is verified as
   readable before the backup is reported ok.
