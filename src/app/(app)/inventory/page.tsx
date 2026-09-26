@@ -100,6 +100,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           />
           <section className="card" aria-label="Materials used by doctor">
             <h3>Materials used — last 30 days, by doctor</h3>
+            <p><a href="/inventory/consumption">Full report by period, doctor and product, with cost and Excel export →</a></p>
             {byDoctor.size === 0 ? (
               <p className="muted">Nothing recorded.</p>
             ) : (

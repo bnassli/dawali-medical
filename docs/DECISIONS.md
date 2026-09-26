@@ -800,3 +800,14 @@ forces LF on scripts that run in Linux containers; added `restore.ps1` and
 `setup-windows.ps1` (private-network firewall rules, no sleep, nightly backup task).
 Docker Desktop needs the server account signed in (auto sign-in + locked screen). The
 PowerShell scripts are not executed here (no Windows) — run once on the server.
+
+ADR-037: I2 — Materials-used reports. Product Owner choice 2026-09-26. Page
+`/inventory/consumption` (inventory.manage: storekeeper, Admin) filters the consumption
+ledger by clinic-day period (From/To in APP_TIME_ZONE, at most one year), doctor and store,
+and shows totals by doctor and by product plus the detail lines. Cost = units used × unit
+cost of the batch, where unit cost = invoice pack price (before VAT) / pack size, weighted
+over the batch's priced receipt lines; lines from batches without a price (opening balances,
+unpriced invoices) are counted and flagged, never guessed. Patient names appear only for
+users with patient.read (the storekeeper sees totals without names). Excel export
+(`GET /api/inventory/consumption`, exceljs; sheets By doctor / By product / Details) is
+private, no-store and audited as `consumption_report.export`. Read-only: no schema change.
