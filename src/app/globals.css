@@ -918,5 +918,7 @@ output.derived {
 .inv-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .inv-table th, .inv-table td { border-bottom: 1px solid var(--border); padding: 0.3rem 0.4rem; text-align: left; }
 .inv-table input { width: 100%; min-width: 4rem; }
+.inv-filter { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; }
+.inv-table + .inv-table { margin-top: 1rem; }
 .inv-expiring td { background: #fff4d6; }
 .inv-expired td { background: #fde2e1; color: var(--danger); }

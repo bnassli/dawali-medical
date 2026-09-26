@@ -48,3 +48,25 @@ test("storekeeper receives a scanned invoice (reviewed), nurse charges usage to 
   await expect(page.getByRole("region", { name: "Stock" }).getByRole("row", { name: new RegExp(product) })).toContainText("8 vial");
   await expect(page.getByRole("region", { name: "Materials used by doctor" })).toContainText(`${product} (vial): 2`);
 });
+
+test("materials-used report: storekeeper filters and exports to Excel; nurse has no access", async ({ page, browser }) => {
+  await loginAs(page, "store");
+  await page.goto("/inventory");
+  await page.getByRole("link", { name: /Full report by period/ }).click();
+  await expect(page.getByRole("heading", { name: "Materials used" })).toBeVisible();
+  await expect(page.getByTestId("consumption-total")).toContainText("Total cost:");
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Export to Excel" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^materials-used_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.xlsx$/);
+
+  const nurseCtx = await browser.newContext();
+  try {
+    const nurse = await nurseCtx.newPage();
+    await loginAs(nurse, "nurse");
+    const res = await nurse.goto("/inventory/consumption");
+    expect(res?.status()).toBe(404);
+    expect((await nurse.request.get("/api/inventory/consumption?from=2026-01-01&to=2026-01-31")).status()).toBe(403);
+  } finally {
+    await nurseCtx.close();
+  }
+});
