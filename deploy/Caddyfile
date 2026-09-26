@@ -1,0 +1,17 @@
+# HTTPS inside the clinic network (R6a, ADR-036). "tls internal" makes Caddy its own
+# certificate authority: install its root certificate once on each clinic PC (see
+# docs/DEPLOYMENT.md). With a real public domain, remove "tls internal".
+{$SITE_ADDRESS} {
+	tls internal
+	encode gzip
+	request_body {
+		max_size 12MB
+	}
+	reverse_proxy app:3000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		X-Frame-Options "DENY"
+	}
+}

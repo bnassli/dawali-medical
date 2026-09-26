@@ -22,6 +22,7 @@ R2: Treatment Plan (repeatable ordered rows; additive migration; no Inventory).
 R3: Follow Up Office Visit, Laser Ablation, Comprehensive / General Clinical Exam.
 R4: Diagram engine (Create Leg Diagram / Create Vein Diagram, versioned, no overwrite).
 R5: Report engine (Template 1 and 2, editable DOCX, lifecycle, patient file indexing).
+R6a: Clinic-server deployment kit (Docker, HTTPS, backups/restore) — ADR-036, docs/DEPLOYMENT.md.
 R6: iCare integration (manual external identifier, then connector/sync), staging validation, deployment hardening.
 
 I1: Inventory — Operations store first: scanned invoices read by AI and reviewed, batches/expiry (FEFO), ledger, transfers, opening balances, materials used per patient and doctor (ADR-035).

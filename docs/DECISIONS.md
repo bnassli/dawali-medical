@@ -780,3 +780,17 @@ Inventory role sees stock only, no patient data.
 *Not in I1:* matching the statement of account to received invoices, costs/valuation
 reports, returns to supplier, reorder levels, the Clinic store workflow in detail, and
 billing of materials to the patient (iCare).
+
+ADR-036: R6a — Run on a clinic server first, cloud later. Product Owner decision
+2026-09-26. Docker Compose stack in `deploy/`: PostgreSQL 16 (no published port), the app
+(migrations + idempotent seed on every start, non-root user, healthcheck) and Caddy for
+HTTPS on the clinic network (`tls internal`: the clinic's own CA, root installed once per
+PC), satisfying the production requirement of a canonical HTTPS `APP_ORIGIN`. All data in
+`deploy/data/` (git-ignored). Nightly backups (`backup.sh` / `backup.ps1`): pg_dump custom
+format + files archive + checksums, dump verified readable, 30-day retention, optional
+off-server copy (GPG-encrypted on Linux); `restore.sh` replaces DB and files, keeping the
+replaced files aside. Tested here: backup → restore round trip against PostgreSQL, and a
+production-mode start through the entrypoint (migrate, seed, first admin, cross-origin API
+refused). Not tested here: building the images (Docker Hub is not reachable from the build
+environment) and `backup.ps1` (no Windows) — both to be run once on the clinic server.
+The later cloud move is a backup/restore onto the same stack in a Saudi region.
