@@ -1,141 +1,172 @@
-import { notFound } from "next/navigation";
+import Link from "next/link";
 import { getDb } from "@/db/client";
+import { todayIn } from "@/lib/age";
+import { getEnv } from "@/lib/env";
 import { requireActor } from "@/modules/auth/current-actor";
-import { consumptionBetween, listProducts, listWarehouses, stockLevels } from "@/modules/inventory/service";
+import { inventorySummary } from "@/modules/inventory/catalog";
+import type { DictKey } from "@/modules/inventory/i18n";
+import { consumptionBetween } from "@/modules/inventory/service";
 import { PERMISSIONS } from "@/modules/permissions/constants";
-import { AdjustForm, ReceiveInvoice, TransferForm } from "./inventory-forms";
-
-const EXPIRY_WARNING_DAYS = 60;
+import { fmtDate, fmtQty, inventoryLang } from "./_ui/lang";
 
 /** Request time (kept out of the component body: rendering must stay pure). */
 function requestTime(): number {
   return Date.now();
 }
 
-function fmt(iso: string | null) {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
-
-/** Inventory I1 (ADR-035): stock by store and batch, receiving, adjustments, transfers, usage. */
-export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ store?: string }> }) {
+/** I3 overview: what needs attention now, and the latest movements. */
+export default async function InventoryOverview() {
   const actor = await requireActor();
-  if (!actor.permissions.has(PERMISSIONS.INVENTORY_READ)) notFound();
+  const { lang, d } = await inventoryLang();
   const canManage = actor.permissions.has(PERMISSIONS.INVENTORY_MANAGE);
-  // The storekeeper sees totals by doctor, but patient names only with patient access.
   const canSeePatients = actor.permissions.has(PERMISSIONS.PATIENT_READ);
   const db = getDb();
-  const warehouses = await listWarehouses(db, actor);
-  const { store } = await searchParams;
-  const current = warehouses.find((w) => w.id === store) ?? warehouses[0];
-  const stock = await stockLevels(db, actor, current?.id);
-  const allStock = canManage ? await stockLevels(db, actor) : [];
-  const products = canManage ? await listProducts(db, actor) : [];
+  const today = todayIn(getEnv().APP_TIME_ZONE);
+  const s = await inventorySummary(db, actor, today);
   const now = requestTime();
-  const soon = new Date(now + EXPIRY_WARNING_DAYS * 86_400_000).toISOString().slice(0, 10);
   const usage = canManage ? await consumptionBetween(db, actor, new Date(now - 30 * 86_400_000), new Date(now + 60_000)) : [];
   const byDoctor = new Map<string, Map<string, number>>();
   for (const u of usage) {
-    const d = byDoctor.get(u.doctorName ?? "—") ?? new Map<string, number>();
+    const m = byDoctor.get(u.doctorName ?? "—") ?? new Map<string, number>();
     const key = `${u.productName} (${u.unit})`;
-    d.set(key, (d.get(key) ?? 0) + u.quantity);
-    byDoctor.set(u.doctorName ?? "—", d);
+    m.set(key, (m.get(key) ?? 0) + u.quantity);
+    byDoctor.set(u.doctorName ?? "—", m);
   }
+  const locale = lang === "ar" ? "ar-SA-u-nu-latn" : "en-GB";
+  const when = (d0: Date) => d0.toLocaleString(locale, { dateStyle: "short", timeStyle: "short", timeZone: getEnv().APP_TIME_ZONE });
 
   return (
-    <div className="inventory">
-      <h1>Inventory</h1>
-      <nav className="tabs" aria-label="Stores">
-        {warehouses.map((w) =>
-          w.id === current?.id ? (
-            <span key={w.id} className="tab active" aria-current="page">{w.name}</span>
+    <>
+      <div className="inv-kpis">
+        <Link className="inv-kpi" href="/inventory/stock">
+          <span className="inv-kpi-n">{s.activeProducts}</span>
+          <span>{d.kpiProducts}</span>
+        </Link>
+        <Link className={`inv-kpi${s.low.length ? " warn" : ""}`} href="/inventory/stock?show=low">
+          <span className="inv-kpi-n" data-testid="kpi-low">{s.low.length}</span>
+          <span>{d.kpiLow}</span>
+        </Link>
+        <Link className={`inv-kpi${s.expiring.length ? " warn" : ""}`} href="/inventory/stock?show=expiring">
+          <span className="inv-kpi-n" data-testid="kpi-expiring">{s.expiring.length}</span>
+          <span>{d.kpiExpiring}</span>
+        </Link>
+        <Link className={`inv-kpi${s.expiredCount ? " bad" : ""}`} href="/inventory/stock?show=expiring">
+          <span className="inv-kpi-n">{s.expiredCount}</span>
+          <span>{d.kpiExpired}</span>
+        </Link>
+      </div>
+
+      {canManage ? (
+        <div className="inv-actions" aria-label={d.quickActions}>
+          <Link className="button" href="/inventory/receive">{d.navReceive}</Link>
+          <Link className="button secondary" href="/inventory/stocktake">{d.navStocktake}</Link>
+          <Link className="button secondary" href="/inventory/transfer">{d.navTransfer}</Link>
+        </div>
+      ) : null}
+
+      <div className="inv-grid">
+        <section className="card" aria-label={d.lowList}>
+          <h3>{d.lowList}</h3>
+          {s.low.length === 0 ? (
+            <p className="muted">{d.nothingFound}</p>
           ) : (
-            <a key={w.id} className="tab" href={`/inventory?store=${w.id}`}>{w.name}</a>
-          ),
-        )}
-      </nav>
-      <section className="card" aria-label="Stock">
-        <h3>Stock — {current?.name}</h3>
-        {stock.length === 0 ? (
-          <p className="muted">No stock in this store.</p>
+            <table className="inv-table">
+              <thead><tr><th>{d.product}</th><th>{d.inStock}</th><th>{d.minLevel}</th></tr></thead>
+              <tbody>
+                {s.low.slice(0, 10).map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.name}</td>
+                    <td><span className={`inv-badge inv-q ${p.status}`}>{fmtQty(p.total)} {p.unit}</span></td>
+                    <td>{p.minLevel === null ? d.none : `${fmtQty(p.minLevel)} ${p.unit}`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+        <section className="card" aria-label={d.expiringList}>
+          <h3>{d.expiringList}</h3>
+          {s.expiring.length === 0 ? (
+            <p className="muted">{d.nothingFound}</p>
+          ) : (
+            <table className="inv-table">
+              <thead><tr><th>{d.product}</th><th>{d.lot}</th><th>{d.expiry}</th><th>{d.quantity}</th></tr></thead>
+              <tbody>
+                {s.expiring.slice(0, 10).map((b) => (
+                  <tr key={`${b.warehouseId}:${b.batchId}`} className={b.expiryDate !== null && b.expiryDate < today ? "inv-expired" : "inv-expiring"}>
+                    <td>{b.productName}<div className="muted small">{b.warehouseName}</div></td>
+                    <td>{b.lotNumber || d.none}</td>
+                    <td>{fmtDate(b.expiryDate)}</td>
+                    <td><span className="inv-q">{fmtQty(b.quantity)} {b.unit}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
+
+      <section className="card" aria-label={d.recentMovements}>
+        <h3>{d.recentMovements}</h3>
+        {s.movements.length === 0 ? (
+          <p className="muted">{d.noMovements}</p>
         ) : (
           <table className="inv-table">
-            <thead>
-              <tr><th>Product</th><th>Lot</th><th>Expiry</th><th>Quantity</th></tr>
-            </thead>
+            <thead><tr><th>{d.date}</th><th>{d.movement}</th><th>{d.product}</th><th>{d.quantity}</th><th>{d.store}</th><th>{d.by}</th></tr></thead>
             <tbody>
-              {stock.map((r) => {
-                const expired = r.expiryDate !== null && r.expiryDate < new Date(now).toISOString().slice(0, 10);
-                const expiring = !expired && r.expiryDate !== null && r.expiryDate <= soon;
-                return (
-                  <tr key={r.batchId} className={expired ? "inv-expired" : expiring ? "inv-expiring" : undefined}>
-                    <td>{r.productName}</td>
-                    <td>{r.lotNumber || "—"}</td>
-                    <td>
-                      {fmt(r.expiryDate)}
-                      {expired ? " (expired)" : expiring ? " (expires soon)" : ""}
-                    </td>
-                    <td>{r.quantity} {r.unit}</td>
-                  </tr>
-                );
-              })}
+              {s.movements.map((m) => (
+                <tr key={m.id}>
+                  <td>{when(m.createdAt)}</td>
+                  <td>{d[`mv_${m.movementType}` as DictKey] ?? m.movementType}</td>
+                  <td>{m.productName}{m.lotNumber ? <span className="muted small"> · {m.lotNumber}</span> : null}</td>
+                  <td className={m.quantity < 0 ? "inv-neg" : "inv-pos"} dir="ltr">{m.quantity > 0 ? "+" : ""}{fmtQty(m.quantity)} {m.unit}</td>
+                  <td>{m.warehouseName}</td>
+                  <td>{m.createdBy ?? d.none}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
       </section>
 
       {canManage ? (
-        <>
-          <ReceiveInvoice warehouses={warehouses} products={products.map((p) => ({ name: p.name, unit: p.unit }))} />
-          <AdjustForm warehouses={warehouses} />
-          <TransferForm
-            warehouses={warehouses}
-            batches={allStock.map((r) => ({
-              key: `${r.warehouseId}:${r.batchId}`,
-              warehouseId: r.warehouseId,
-              batchId: r.batchId,
-              label: `${r.warehouseName}: ${r.productName} lot ${r.lotNumber || "—"} exp ${fmt(r.expiryDate)} (${r.quantity} ${r.unit})`,
-            }))}
-          />
-          <section className="card" aria-label="Materials used by doctor">
-            <h3>Materials used — last 30 days, by doctor</h3>
-            <p><a href="/inventory/consumption">Full report by period, doctor and product, with cost and Excel export →</a></p>
-            {byDoctor.size === 0 ? (
-              <p className="muted">Nothing recorded.</p>
-            ) : (
-              [...byDoctor.entries()].map(([doctor, items]) => (
-                <div key={doctor}>
-                  <strong>{doctor}</strong>
-                  <ul>
-                    {[...items.entries()].map(([k, q]) => <li key={k}>{k}: {q}</li>)}
-                  </ul>
-                </div>
-              ))
-            )}
-            {usage.length > 0 && canSeePatients ? (
-              <details>
-                <summary>By patient ({usage.length} entries)</summary>
-                <table className="inv-table">
-                  <thead><tr><th>Date</th><th>Patient</th><th>Doctor</th><th>Product</th><th>Qty</th><th>Recorded by</th></tr></thead>
-                  <tbody>
-                    {usage.map((u) => (
-                      <tr key={u.id}>
-                        <td>{u.createdAt.toLocaleDateString("en-GB")}</td>
-                        <td>{u.patientName}</td>
-                        <td>{u.doctorName ?? "—"}</td>
-                        <td>{u.productName} (lot {u.lotNumber || "—"})</td>
-                        <td>{u.quantity} {u.unit}</td>
-                        <td>{u.recordedBy ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </details>
-            ) : null}
-          </section>
-        </>
+        <section className="card" aria-label="Materials used by doctor">
+          <h3>{d.usageByDoctor}</h3>
+          <p><Link href="/inventory/consumption">{d.fullReport}</Link></p>
+          {byDoctor.size === 0 ? (
+            <p className="muted">{d.nothingRecorded}</p>
+          ) : (
+            [...byDoctor.entries()].map(([doctor, items]) => (
+              <div key={doctor}>
+                <strong>{doctor}</strong>
+                <ul>
+                  {[...items.entries()].map(([k, q]) => <li key={k}>{k}: {fmtQty(q)}</li>)}
+                </ul>
+              </div>
+            ))
+          )}
+          {usage.length > 0 && canSeePatients ? (
+            <details>
+              <summary>{d.byPatient} ({usage.length})</summary>
+              <table className="inv-table">
+                <thead><tr><th>{d.date}</th><th>{d.patient}</th><th>{d.doctor}</th><th>{d.product}</th><th>{d.quantity}</th><th>{d.recordedBy}</th></tr></thead>
+                <tbody>
+                  {usage.map((u) => (
+                    <tr key={u.id}>
+                      <td>{when(u.createdAt)}</td>
+                      <td>{u.patientName}</td>
+                      <td>{u.doctorName ?? d.none}</td>
+                      <td>{u.productName} ({d.lot} {u.lotNumber || d.none})</td>
+                      <td><span className="inv-q">{fmtQty(u.quantity)} {u.unit}</span></td>
+                      <td>{u.recordedBy ?? d.none}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          ) : null}
+        </section>
       ) : null}
-    </div>
+    </>
   );
 }

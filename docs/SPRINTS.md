@@ -24,6 +24,8 @@ R4: Diagram engine (Create Leg Diagram / Create Vein Diagram, versioned, no over
 R5: Report engine (Template 1 and 2, editable DOCX, lifecycle, patient file indexing).
 R6a: Clinic-server deployment kit (Docker, HTTPS, backups/restore) — ADR-036, docs/DEPLOYMENT.md.
 I2: Materials-used reports by period, doctor, product and patient, with cost and Excel export — ADR-037.
+I3a: Inventory section — own navigation, Arabic/English, overview, stock, product catalogue (minimum level, barcode), stock counts (opening balance) — ADR-038.
+I3b: Nurse quick issue screen (FEFO), movements log, reports in Arabic, barcode scanning.
 R6: iCare integration (manual external identifier, then connector/sync), staging validation, deployment hardening.
 
 I1: Inventory — Operations store first: scanned invoices read by AI and reviewed, batches/expiry (FEFO), ledger, transfers, opening balances, materials used per patient and doctor (ADR-035).

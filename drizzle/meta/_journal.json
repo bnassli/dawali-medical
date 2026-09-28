@@ -85,6 +85,13 @@
       "when": 1790366755227,
       "tag": "0011_i1_inventory",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790605129434,
+      "tag": "0012_i3_inventory_catalog",
+      "breakpoints": true
     }
   ]
 }

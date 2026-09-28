@@ -238,3 +238,11 @@ pack_size, pack price ex VAT; insert-only), `stock_movements` (the ledger: store
 signed quantity in units, type, receipt/transfer/visit/patient/doctor, reason, mutation id;
 insert-only, CHECKs on type and non-zero quantity). New env: `ANTHROPIC_API_KEY`,
 `INVOICE_AI_MODEL`. Rollback: see the migration header.
+
+## I3 additions (ADR-038) — migration `0012_i3_inventory_catalog.sql`
+- `inventory_products.min_level` (numeric, ≥ 0, nullable) and `barcode` (text, unique when set).
+- `stock_counts` (id = client count id, store, notes, who, when) and `stock_count_lines`
+  (count, batch, system_quantity, counted_quantity ≥ 0; one line per batch per count). Both append-only.
+- `stock_movements.count_id` and movement type `stock_count` (differences of a count).
+- Additive only. Rollback: drop `stock_movements.count_id`, the two tables and the two columns,
+  and restore the previous `stock_movements_type_check`.

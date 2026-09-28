@@ -34,27 +34,34 @@ import type { InvoiceExtractor } from "./extractor";
  */
 
 export class InventoryError extends Error {
-  constructor(message: string) {
+  /** I3: optional message key so the screens can show it in the user's language. */
+  constructor(
+    message: string,
+    readonly key?: string,
+  ) {
     super(message);
     this.name = "InventoryError";
   }
 }
 export class InsufficientStockError extends InventoryError {
-  constructor(available: number, unit: string) {
+  constructor(
+    readonly available: number,
+    readonly unit: string,
+  ) {
     super(`Not enough stock: only ${available} ${unit} available in this store.`);
     this.name = "InsufficientStockError";
   }
 }
 
-const qty = z
+export const qty = z
   .number()
   .finite()
   .refine((n) => Math.round(n * 100) === n * 100, "At most 2 decimals.")
   .refine((n) => Math.abs(n) <= 1_000_000, "Quantity is too large.");
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date (YYYY-MM-DD).");
-const text = (max: number) => z.string().trim().max(max);
+export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date (YYYY-MM-DD).");
+export const text = (max: number) => z.string().trim().max(max);
 
-const meta = (actor: ActorContext) => ({ ip: actor.ip ?? null, userAgent: actor.userAgent ?? null });
+export const meta = (actor: ActorContext) => ({ ip: actor.ip ?? null, userAgent: actor.userAgent ?? null });
 
 export interface WarehouseView {
   id: string;
@@ -96,7 +103,7 @@ export async function listDoctors(db: Database): Promise<{ id: string; name: str
     .orderBy(asc(users.displayName));
 }
 
-async function findOrCreateProduct(tx: Database, actor: ActorContext, name: string, unit: string): Promise<string> {
+export async function findOrCreateProduct(tx: Database, actor: ActorContext, name: string, unit: string): Promise<string> {
   const [found] = await tx
     .select({ id: inventoryProducts.id })
     .from(inventoryProducts)
@@ -109,7 +116,7 @@ async function findOrCreateProduct(tx: Database, actor: ActorContext, name: stri
   return created.id;
 }
 
-async function findOrCreateBatch(tx: Database, productId: string, lotNumber: string, expiryDate: string | null): Promise<string> {
+export async function findOrCreateBatch(tx: Database, productId: string, lotNumber: string, expiryDate: string | null): Promise<string> {
   const where = and(
     eq(inventoryBatches.productId, productId),
     eq(inventoryBatches.lotNumber, lotNumber),
@@ -129,7 +136,7 @@ async function findOrCreateBatch(tx: Database, productId: string, lotNumber: str
 }
 
 /** Current balance of a batch in a store, after taking the batch's lock. */
-async function lockedBalance(tx: Database, warehouseId: string, batchId: string): Promise<number> {
+export async function lockedBalance(tx: Database, warehouseId: string, batchId: string): Promise<number> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`stock:${warehouseId}:${batchId}`}, 0))`);
   const [row] = await tx
     .select({ total: sql<string>`coalesce(sum(${stockMovements.quantity}), 0)` })
@@ -149,7 +156,7 @@ async function batchInfo(tx: Database, batchId: string) {
   return b;
 }
 
-async function alreadyApplied(tx: Database, clientMutationId: string) {
+export async function alreadyApplied(tx: Database, clientMutationId: string) {
   const [row] = await tx.select().from(stockMovements).where(eq(stockMovements.clientMutationId, clientMutationId)).limit(1);
   return row ?? null;
 }

@@ -65,13 +65,30 @@ export type Env = z.infer<typeof envSchema>;
 let cached: Env | undefined;
 
 /**
+ * An empty variable means "not set". Docker Compose passes optional settings
+ * as empty strings (e.g. `ANTHROPIC_API_KEY=`), which must not fail validation
+ * or override a default.
+ */
+export function withoutEmptyValues(source: Record<string, string | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined && value.trim() !== "") out[key] = value;
+  }
+  return out;
+}
+
+export function parseEnv(source: Record<string, string | undefined>): Env {
+  return envSchema.parse(withoutEmptyValues(source));
+}
+
+/**
  * Lazily parse and cache the environment. Lazy so that `next build` (which
  * imports server modules to trace them) never fails just because
  * DATABASE_URL isn't set in the build environment.
  */
 export function getEnv(): Env {
   if (!cached) {
-    cached = envSchema.parse(process.env);
+    cached = parseEnv(process.env);
   }
   return cached;
 }
