@@ -26,11 +26,19 @@ export const inventoryProducts = pgTable(
     // Counting unit: "vial", "ml", "pair", "box", "piece"...
     unit: text("unit").notNull(),
     category: text("category"),
+    /** I3: reorder level, compared with the total in all stores (null = no alert). */
+    minLevel: numeric("min_level", { precision: 12, scale: 2 }),
+    /** I3: optional barcode, ready for scanners later. */
+    barcode: text("barcode"),
     isActive: boolean("is_active").notNull().default(true),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("inventory_products_lower_name_idx").on(sql`lower(${t.name})`)],
+  (t) => [
+    uniqueIndex("inventory_products_lower_name_idx").on(sql`lower(${t.name})`),
+    uniqueIndex("inventory_products_barcode_idx").on(t.barcode).where(sql`${t.barcode} IS NOT NULL`),
+    check("inventory_products_min_level_check", sql`${t.minLevel} IS NULL OR ${t.minLevel} >= 0`),
+  ],
 );
 
 export const suppliers = pgTable(
@@ -164,6 +172,8 @@ export const stockMovements = pgTable(
     // Consumption is charged to the doctor as well as the patient.
     doctorId: uuid("doctor_id").references(() => users.id, { onDelete: "restrict" }),
     reason: text("reason"),
+    /** I3: the stock count that produced this correction. */
+    countId: uuid("count_id").references(() => stockCounts.id, { onDelete: "restrict" }),
     clientMutationId: uuid("client_mutation_id").notNull(),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -176,7 +186,41 @@ export const stockMovements = pgTable(
     check("stock_movements_quantity_check", sql`${t.quantity} <> 0`),
     check(
       "stock_movements_type_check",
-      sql`${t.movementType} IN ('receipt', 'transfer_out', 'transfer_in', 'consumption', 'adjustment')`,
+      sql`${t.movementType} IN ('receipt', 'transfer_out', 'transfer_in', 'consumption', 'adjustment', 'stock_count')`,
     ),
+  ],
+);
+
+/**
+ * I3: a stock count (the first one is the opening balance). Every counted batch
+ * keeps the system and counted quantities, even when they match; differences
+ * are posted as 'stock_count' movements. Append-only.
+ */
+export const stockCounts = pgTable("stock_counts", {
+  id: uuid("id").primaryKey(),
+  warehouseId: uuid("warehouse_id")
+    .notNull()
+    .references(() => warehouses.id, { onDelete: "restrict" }),
+  notes: text("notes"),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const stockCountLines = pgTable(
+  "stock_count_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    countId: uuid("count_id")
+      .notNull()
+      .references(() => stockCounts.id, { onDelete: "restrict" }),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => inventoryBatches.id, { onDelete: "restrict" }),
+    systemQuantity: numeric("system_quantity", { precision: 12, scale: 2 }).notNull(),
+    countedQuantity: numeric("counted_quantity", { precision: 12, scale: 2 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("stock_count_lines_count_batch_idx").on(t.countId, t.batchId),
+    check("stock_count_lines_counted_check", sql`${t.countedQuantity} >= 0`),
   ],
 );

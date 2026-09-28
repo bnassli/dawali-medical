@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ExtractedInvoice } from "@/db/schema";
 import { newMutationId } from "@/modules/clinical/autosave-client";
+import type { Dict } from "@/modules/inventory/i18n";
 import { adjustAction, receiveAction, scanInvoiceAction, transferAction, type ActionResult } from "./actions";
 
 interface Warehouse {
@@ -33,7 +34,7 @@ function Result({ result }: { result: ActionResult | null }) {
  * Scan -> AI draft -> review -> Confirm (I1, ADR-035). Nothing is added to the
  * stock until the reviewed form is confirmed; every value stays editable.
  */
-export function ReceiveInvoice({ warehouses, products }: { warehouses: Warehouse[]; products: { name: string; unit: string }[] }) {
+export function ReceiveInvoice({ d, warehouses, products }: { d: Dict; warehouses: Warehouse[]; products: { name: string; unit: string }[] }) {
   const [scanId, setScanId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -70,15 +71,14 @@ export function ReceiveInvoice({ warehouses, products }: { warehouses: Warehouse
       setScanId(null);
       return setNote(
         r.extracted.documentType === "statement"
-          ? "This is a statement of account, not an invoice — nothing to receive. Scan the invoices themselves."
-          : "This document does not look like a purchase invoice — nothing to receive.",
+          ? d.statementNote
+          : d.otherDocNote,
       );
     }
     setScanId(r.scanId);
     if (r.extracted) load(r.extracted);
     setNote(
-      r.error ??
-        "Read by AI — check every value against the paper invoice, and add lot and expiry from the boxes, before confirming.",
+      r.error ?? d.aiCheck,
     );
   }
 
@@ -116,7 +116,7 @@ export function ReceiveInvoice({ warehouses, products }: { warehouses: Warehouse
 
   return (
     <section className="card" aria-label="Receive invoice">
-      <h3>Receive purchase invoice</h3>
+      <h3>{d.receiveTitle}</h3>
       <form
         className="inv-row"
         onSubmit={(e) => {
@@ -125,18 +125,18 @@ export function ReceiveInvoice({ warehouses, products }: { warehouses: Warehouse
         }}
       >
         <label>
-          Scanned invoice (JPG, PNG or PDF){" "}
+          {d.scannedInvoice}{" "}
           <input type="file" name="scan" accept="image/jpeg,image/png,image/webp,application/pdf" required />
         </label>
         <button type="submit" disabled={busy}>
-          {busy ? "Reading…" : "Scan and read with AI"}
+          {busy ? d.reading : d.scanRead}
         </button>
       </form>
       {note ? <p className="muted" role="status">{note}</p> : null}
 
       <div className="inv-row">
         <label>
-          Store{" "}
+          {d.store}{" "}
           <select value={head.warehouseId} onChange={(e) => setHead({ ...head, warehouseId: e.target.value })}>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>
@@ -146,13 +146,13 @@ export function ReceiveInvoice({ warehouses, products }: { warehouses: Warehouse
           </select>
         </label>
         <label>
-          Supplier <input value={head.supplierName} onChange={(e) => setHead({ ...head, supplierName: e.target.value })} />
+          {d.supplier} <input value={head.supplierName} onChange={(e) => setHead({ ...head, supplierName: e.target.value })} />
         </label>
         <label>
-          Invoice number <input value={head.invoiceNumber} onChange={(e) => setHead({ ...head, invoiceNumber: e.target.value })} />
+          {d.invoiceNumber} <input value={head.invoiceNumber} onChange={(e) => setHead({ ...head, invoiceNumber: e.target.value })} />
         </label>
         <label>
-          Invoice date <input type="date" value={head.invoiceDate} onChange={(e) => setHead({ ...head, invoiceDate: e.target.value })} />
+          {d.invoiceDate} <input type="date" value={head.invoiceDate} onChange={(e) => setHead({ ...head, invoiceDate: e.target.value })} />
         </label>
       </div>
       <datalist id="inv-products">
@@ -163,13 +163,13 @@ export function ReceiveInvoice({ warehouses, products }: { warehouses: Warehouse
       <table className="inv-table">
         <thead>
           <tr>
-            <th>Product</th>
-            <th>Stock unit</th>
-            <th>Lot</th>
-            <th>Expiry</th>
-            <th>Packs</th>
-            <th>Units / pack</th>
-            <th>Pack price (ex VAT)</th>
+            <th>{d.product}</th>
+            <th>{d.stockUnit}</th>
+            <th>{d.lot}</th>
+            <th>{d.expiry}</th>
+            <th>{d.packs}</th>
+            <th>{d.unitsPerPack}</th>
+            <th>{d.packPrice}</th>
             <th />
           </tr>
         </thead>
@@ -184,7 +184,7 @@ export function ReceiveInvoice({ warehouses, products }: { warehouses: Warehouse
               <td><input aria-label={`Units per pack ${i + 1}`} inputMode="decimal" size={4} value={l.packSize} onChange={(e) => setLine(i, { packSize: e.target.value })} /></td>
               <td><input aria-label={`Unit cost ${i + 1}`} inputMode="decimal" size={7} value={l.unitCost} onChange={(e) => setLine(i, { unitCost: e.target.value })} /></td>
               <td>
-                <button type="button" className="secondary" aria-label={`Remove line ${i + 1}`} disabled={lines.length === 1} onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>
+                <button type="button" className="secondary" aria-label={`${d.removeLine} ${i + 1}`} disabled={lines.length === 1} onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>
                   ✕
                 </button>
               </td>
@@ -194,10 +194,10 @@ export function ReceiveInvoice({ warehouses, products }: { warehouses: Warehouse
       </table>
       <div className="inv-row">
         <button type="button" className="secondary" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
-          + Add line
+          {d.addLine}
         </button>
         <button type="button" disabled={busy} onClick={() => void confirm()}>
-          Confirm and add to stock
+          {d.confirmReceive}
         </button>
       </div>
       <Result result={result} />
@@ -205,23 +205,23 @@ export function ReceiveInvoice({ warehouses, products }: { warehouses: Warehouse
   );
 }
 
-export function AdjustForm({ warehouses }: { warehouses: Warehouse[] }) {
-  const [f, setF] = useState({ warehouseId: warehouses[0]?.id ?? "", productName: "", unit: "", lotNumber: "", expiryDate: "", quantity: "", reason: "Opening balance" });
+export function AdjustForm({ d, warehouses }: { d: Dict; warehouses: Warehouse[] }) {
+  const [f, setF] = useState({ warehouseId: warehouses[0]?.id ?? "", productName: "", unit: "", lotNumber: "", expiryDate: "", quantity: "", reason: "" });
   const [result, setResult] = useState<ActionResult | null>(null);
   return (
     <section className="card" aria-label="Opening balance / adjustment">
-      <h3>Opening balance / stock count</h3>
-      <p className="muted">Positive to add, negative to remove (with a reason).</p>
+      <h3>{d.adjustTitle}</h3>
+      <p className="muted">{d.adjustHint}</p>
       <div className="inv-row">
-        <select aria-label="Store" value={f.warehouseId} onChange={(e) => setF({ ...f, warehouseId: e.target.value })}>
+        <select aria-label={d.store} value={f.warehouseId} onChange={(e) => setF({ ...f, warehouseId: e.target.value })}>
           {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
-        <input aria-label="Adjust product" placeholder="Product" list="inv-products" value={f.productName} onChange={(e) => setF({ ...f, productName: e.target.value })} />
-        <input aria-label="Adjust unit" placeholder="Unit" size={6} value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} />
-        <input aria-label="Adjust lot" placeholder="Lot" size={8} value={f.lotNumber} onChange={(e) => setF({ ...f, lotNumber: e.target.value })} />
+        <input aria-label="Adjust product" placeholder={d.product} list="inv-products" value={f.productName} onChange={(e) => setF({ ...f, productName: e.target.value })} />
+        <input aria-label="Adjust unit" placeholder={d.unit} size={6} value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} />
+        <input aria-label="Adjust lot" placeholder={d.lot} size={8} value={f.lotNumber} onChange={(e) => setF({ ...f, lotNumber: e.target.value })} />
         <input aria-label="Adjust expiry" type="date" value={f.expiryDate} onChange={(e) => setF({ ...f, expiryDate: e.target.value })} />
         <input aria-label="Adjust quantity" placeholder="± Qty" size={6} value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} />
-        <input aria-label="Reason" size={18} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+        <input aria-label="Reason" placeholder={d.reason} size={18} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
         <button
           type="button"
           onClick={async () =>
@@ -239,7 +239,7 @@ export function AdjustForm({ warehouses }: { warehouses: Warehouse[] }) {
             )
           }
         >
-          Save adjustment
+          {d.saveAdjustment}
         </button>
       </div>
       <Result result={result} />
@@ -247,7 +247,7 @@ export function AdjustForm({ warehouses }: { warehouses: Warehouse[] }) {
   );
 }
 
-export function TransferForm({ warehouses, batches }: { warehouses: Warehouse[]; batches: { key: string; warehouseId: string; batchId: string; label: string }[] }) {
+export function TransferForm({ d, warehouses, batches }: { d: Dict; warehouses: Warehouse[]; batches: { key: string; warehouseId: string; batchId: string; label: string }[] }) {
   const [sel, setSel] = useState(batches[0]?.key ?? "");
   const [to, setTo] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -255,16 +255,16 @@ export function TransferForm({ warehouses, batches }: { warehouses: Warehouse[];
   const chosen = batches.find((b) => b.key === sel);
   return (
     <section className="card" aria-label="Transfer between stores">
-      <h3>Transfer between stores</h3>
+      <h3>{d.transferTitle}</h3>
       <div className="inv-row">
         <select aria-label="Batch to transfer" value={sel} onChange={(e) => setSel(e.target.value)}>
           {batches.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
         </select>
         <select aria-label="To store" value={to} onChange={(e) => setTo(e.target.value)}>
-          <option value="">To store…</option>
+          <option value="">{d.toStorePlaceholder}</option>
           {warehouses.filter((w) => w.id !== chosen?.warehouseId).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
-        <input aria-label="Transfer quantity" placeholder="Qty" size={6} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+        <input aria-label="Transfer quantity" placeholder={d.quantity} size={6} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
         <button
           type="button"
           disabled={!chosen || !to}
@@ -281,7 +281,7 @@ export function TransferForm({ warehouses, batches }: { warehouses: Warehouse[];
             )
           }
         >
-          Transfer
+          {d.transfer}
         </button>
       </div>
       <Result result={result} />

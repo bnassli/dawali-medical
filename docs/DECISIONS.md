@@ -811,3 +811,22 @@ unpriced invoices) are counted and flagged, never guessed. Patient names appear 
 users with patient.read (the storekeeper sees totals without names). Excel export
 (`GET /api/inventory/consumption`, exceljs; sheets By doctor / By product / Details) is
 private, no-store and audited as `consumption_report.export`. Read-only: no schema change.
+
+ADR-038: I3a — Inventory as its own section, Arabic/English, catalogue and stock counts.
+Product Owner decision 2026-09-28 (inventory is the first module to take into daily use).
+`/inventory` becomes a section with its own navigation: Overview (KPIs: active products,
+below minimum, expiring within 60 days, expired still in stock; reorder and expiry lists;
+latest movements; usage by doctor), Stock (per product: store and all-stores totals,
+status, nearest expiry, batches; search and filters), Products (catalogue: unit, category,
+minimum level, optional barcode, active), Stock count, Receive invoice, Transfer & adjust,
+Reports. Screens are Arabic (RTL) by default with a per-browser switch to English (cookie
+`inv_lang`); product, supplier and store names are data and shown as entered; service
+errors carry a message key so they are shown in the chosen language. Minimum level is
+compared with the total in all stores ("low" when total ≤ minimum, "out" at 0). The unit
+of a product is locked once stock has moved (quantities would change meaning). Stock
+count: the first count is the opening balance; each counted batch keeps system and
+counted quantities (`stock_count_lines`, even when equal) and only differences are posted
+as `stock_count` movements linked to the count; balances are read under the batch locks
+at posting time; replaying a count is a no-op; counts are append-only. Migration 0012 is
+additive (rollback plan in its header). Barcode scanning and the nurse's quick issue
+screen (FEFO) follow in I3b.
