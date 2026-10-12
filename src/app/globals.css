@@ -1504,3 +1504,4 @@ a.sono-btn.sono-diagram {
 /* I5 (ADR-043): returns & disposal */
 .inv-wo-lines input { width: 6rem; min-width: 0; }
 .inv-wo-lines select { max-width: 100%; }
+.inv-proc-total td { font-weight: 600; }

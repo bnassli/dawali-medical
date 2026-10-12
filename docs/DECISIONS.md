@@ -943,3 +943,15 @@ disposal, the credit to expect for a return. The single correction form stays fo
 and other corrections; its hint now points expired / damaged / recalled stock here, and the
 overview's "Expired, still in stock" opens this screen for the storekeeper. Migration 0015
 is additive (rollback in its header).
+
+ADR-044: I6 — Cost per procedure. Product Owner choice of 2026-10-12. The materials-used
+report (ADR-037) gains two views over the same period/doctor/store filter and in the same
+Excel export (new sheets "By procedure" and "By visit"; the Details sheet gains the kit).
+There is no Procedure table yet, so a procedure is one visit: every material recorded on
+it in the period, named by the procedure kit(s) used on it (ADR-042) — "EVLT",
+"EVLT + Sclerotherapy" — or "Without a kit" when everything was recorded item by item.
+Items added on top of a kit count toward that procedure. Per procedure type: number of
+procedures, total, average, lowest and highest, and the same by doctor; procedures with a
+line without an invoice price are counted and flagged (their cost is too low). Cost is the
+weighted invoice cost ex VAT, as in ADR-037. Read-only; no schema change. When a Procedure
+entity exists, the grouping moves from the kit to the procedure.
