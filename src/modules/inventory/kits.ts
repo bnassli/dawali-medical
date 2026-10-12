@@ -198,6 +198,11 @@ export async function issueToVisit(db: Database, actor: ActorContext, raw: Issue
   const today = todayIn(getEnv().APP_TIME_ZONE);
   try {
     return await db.transaction(async (tx) => {
+      // Serialise requests carrying the same id (double click, retry) before
+      // the replay check: a kit's batches are chosen at run time, so the
+      // per-batch unique index alone would not stop a second request that
+      // moved on to the next batch.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`mutation:${input.clientMutationId}`}, 0))`);
       if (await alreadyApplied(tx, input.clientMutationId)) return { replayed: true, lines: [] };
       const [visit] = await tx
         .select({ id: visits.id, patientId: visits.patientId, status: visits.status })

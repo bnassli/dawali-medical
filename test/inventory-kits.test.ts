@@ -167,6 +167,21 @@ describe("Procedure kits I4 (ADR-042)", () => {
     expect(await balance(s, "G")).toBe(0);
   });
 
+  it("two identical requests at once (double click, retry) record the kit once", async () => {
+    const s = uniqueSuffix();
+    const p = await stock(s);
+    const visitId = await openVisit();
+    // One fibre: the first request empties lot SOON, so a second one would move on to LATE.
+    const issue = { clientMutationId: randomUUID(), visitId, warehouseId: ops, doctorId: doctor.userId, kitId: null, items: [{ productId: p.fibre, quantity: 1 }] };
+    const results = await Promise.all([issueToVisit(db, nurse, issue), issueToVisit(db, nurse, issue), issueToVisit(db, nurse, issue)]);
+    expect(results.filter((r) => !r.replayed)).toHaveLength(1);
+    expect(await visitConsumption(db, nurse, visitId)).toHaveLength(1);
+    expect(await balance(s, "SOON")).toBe(0);
+    expect(await balance(s, "LATE")).toBe(5);
+    const audit = await db.select().from(auditLogs).where(and(eq(auditLogs.visitId, visitId), eq(auditLogs.action, "stock.consume_kit")));
+    expect(audit).toHaveLength(1);
+  });
+
   it("checks the doctor, an open visit, an active kit and the nurse's permission", async () => {
     const s = uniqueSuffix();
     const p = await stock(s);
