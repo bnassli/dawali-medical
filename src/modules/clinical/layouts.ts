@@ -140,6 +140,8 @@ const SUBJ: SectionLayout = {
     l("Reason for visit", 95, 309, { size: 11, forCode: "reason_for_visit" }),
     f("reason_for_visit", r(180, 308, 381, 16)),
     f("problem_list", r(5, 336, 85, 21), { buttonOnly: { text: "Problem List", color: "red" } }),
+    f("problem_list_none", r(13, 313, 11, 11)),
+    l("None", 27, 312, { forCode: "problem_list_none" }),
 
     box(r(94, 329, 686, 195)),
     opener("Add Chief Complaints with characteristics and Associated conditions", r(172, 338, 496, 16), "chief_complaints", {

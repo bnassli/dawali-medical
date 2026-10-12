@@ -173,6 +173,8 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
   // --- Subj Complaints Habits. Labels are SonoSoft's, word for word (R1b, ADR-029). ---
   { code: "reason_for_visit", label: "Reason for visit", type: FIELD_TYPES.SELECT },
   { code: "problem_list", label: "Problem List", type: FIELD_TYPES.MULTISELECT },
+  // Shown as "None" next to Problem List; the full label tells it apart from Current Meds / None.
+  { code: "problem_list_none", label: "Problem List: None", type: FIELD_TYPES.CHECKBOX },
   { code: "chief_complaints", label: "Chief Complaints", type: FIELD_TYPES.MULTISELECT },
   { code: "characteristics", label: "associated with", type: FIELD_TYPES.MULTISELECT },
   { code: "duration", label: "How long?", type: FIELD_TYPES.SELECT },
@@ -358,6 +360,7 @@ export const RETIRED_FIELD_CODES = [
 export const SUBJ_COMPLAINTS_HABITS_FIELD_CODES = [
   "reason_for_visit",
   "problem_list",
+  "problem_list_none",
   "chief_complaints",
   "characteristics",
   "duration",
@@ -534,6 +537,7 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
  */
 export const FIELD_EXCLUSION_RULES: ExclusionRule[] = [
   { flag: "family_history_unknown", excludes: ["family_history"] },
+  { flag: "problem_list_none", excludes: ["problem_list"] },
   { flag: "current_meds_none", excludes: ["current_meds"] },
   { flag: "allergies_no_known", excludes: ["allergies"] },
 ];

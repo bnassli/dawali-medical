@@ -64,3 +64,22 @@ What the reports show about SonoSoft:
   Use one unambiguous format.
 - Sex and title come from separate fields in SonoSoft and contradicted each other on a
   real report. Derive them from the patient's sex.
+
+## Product Owner decisions on marked printouts (2026-10-12)
+
+Printed SonoSoft screens marked by hand (✓ = needed, X = not needed):
+
+- **Physical Exam** — not needed in V1 (every field crossed; never part of Dawali).
+- **CEAP VCSS** — not needed in V1 (whole screen crossed).
+- **Assessment Plan+** — keep exactly as built (no change, including Stockings detail).
+- **Initial US Exam** — needed, as a new tab. Keep: Right/Left Deep Vessels With Reflux
+  (Common Femoral, Femoral, Popliteal); Right/Left GSV and SSV (Competent / Incompetent /
+  Absent, size at the femoral / popliteal junction, size at knee, Tortuous, Reflux time /
+  Rec. Time, Dist Ext of Reflux); Incompetent Accessories (anterior, posterior);
+  Incompetent perforators (Thigh, Proximal Calf, Mid Calf, Distal Calf, Ankle) with the
+  "There are no incompetent perforators seen in the right / left leg" statement;
+  Add'l Measurements; Create Diagram; Add'l Findings 1–3; Impression; "There is NO evidence
+  of DVT found during this examination"; Location / Extent of DVT, superficial
+  thrombophlebitis or flow characteristics. Drop: Date of Service, Name of Exam, Add Charge,
+  Leg Study, Tutorial, insurance guideline text, and the Branch Tributarie section
+  (Group 1 / Group 2). Needs a clean screenshot before it is built.

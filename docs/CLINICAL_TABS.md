@@ -8,7 +8,7 @@ Visual reference: redacted SonoSoft screenshots of each tab and of the reports a
 Reason for visit; Problem List; Chief Complaints; characteristics; duration; progression; daily-activity impact; chest comments; comments; aggravating factors; relieving factors; previous conservative therapy + duration; family history; alcohol/exercise/tobacco; pain meds; current meds; allergies.
 
 Implemented (R1b, ADR-029), SonoSoft labels and boxes (`workup-01-subj-complaints-habits.jpg`):
-Reason for visit, Problem List | box "Add Chief Complaints with characteristics and Associated conditions": Chief Complaints, associated with, How long?, Symptoms getting worse over time? (checkbox), Progression, Affects daily living activities?, Chest comments, Comment | red box: Aggravating Factors, Relieving Factors | blue box: Previous conservative therapy, How long?, Family history of VV? | Habits: Alcohol, Exercise, Tobacco use | Pain Meds for CC, Current Meds + None, Allergies + No known.
+Reason for visit, Problem List + None | box "Add Chief Complaints with characteristics and Associated conditions": Chief Complaints, associated with, How long?, Symptoms getting worse over time? (checkbox), Progression, Affects daily living activities?, Chest comments, Comment | red box: Aggravating Factors, Relieving Factors | blue box: Previous conservative therapy, How long?, Family history of VV? | Habits: Alcohol, Exercise, Tobacco use | Pain Meds for CC, Current Meds + None, Allergies + No known.
 None / No known exclude Current Meds / Allergies. The general family history is no longer on this tab (S1): it is "Family Medical Hx" in Past Medical Hx.
 
 ## Past Medical Hx

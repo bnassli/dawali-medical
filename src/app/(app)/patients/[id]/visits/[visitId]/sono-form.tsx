@@ -65,7 +65,9 @@ function place(rect: Rect, origin: { x: number; y: number }): CSSProperties {
 }
 
 const controlId = (code: string) => `field-${code}`;
-const MAX_ZOOM = 1.6;
+// Layout coordinates are SonoSoft's own screen pixels, so 1 draws the form at
+// exactly SonoSoft's size (Product Owner: "same as SonoSoft").
+const MAX_ZOOM = 1;
 const MIN_ZOOM = 1;
 
 export function SonoForm({ layout, sectionCode, fieldFor, actorId, readOnly, canWrite, canAddOption }: SonoFormProps) {

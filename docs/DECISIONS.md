@@ -830,3 +830,20 @@ as `stock_count` movements linked to the count; balances are read under the batc
 at posting time; replaying a count is a no-op; counts are append-only. Migration 0012 is
 additive (rollback plan in its header). Barcode scanning and the nurse's quick issue
 screen (FEFO) follow in I3b.
+
+ADR-039: Visit doctor and nurse; "None" for Problem List; SonoSoft shell. Product Owner
+requests of 2026-10-12. (1) Each visit records its doctor and its nurse as references to
+user accounts (`visits.doctor_user_id`, `visits.nurse_user_id`, migration 0013, additive):
+the doctor is chosen from active users with the DOCTOR role, the nurse from active users
+with the NURSE_ASSISTANT role, so reports and inventory can later use the real accounts.
+Shown on every tab, above the clinical tabs, where SonoSoft has "Interp Phys/Surgeon" and
+"Technologist" (labels "Doctor" / "Nurse"). Same rules as clinical entries: clinical.write
+(Admin and Reception read only), open visit only, optimistic check against the value the
+page showed (a stale change is refused and the current value shown, never
+last-write-wins), audited as `visit.staff`. A person who later loses the role stays shown
+on old visits. (2) Problem List gets SonoSoft's "None" checkbox (`problem_list_none`,
+seed-only, no migration) with the same exclusion as Current Meds / None (ADR-027
+mechanism). (3) The patient header, tabs and visit panel follow SonoSoft's geometry and
+the SonoSoft form is drawn at 1:1 (its layout coordinates are SonoSoft screen pixels)
+instead of being enlarged up to 1.6x; the excluded legacy areas (§3, §14: Workup/Check
+Out, photo, Time Card, billing, the grey navigation row) leave no gap.

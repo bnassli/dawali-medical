@@ -21,6 +21,7 @@ const TABS = ["Subj Complaints Habits", "Past Medical Hx", "Assessment Plan+"];
 const SUBJ_CODES = [
   "reason_for_visit",
   "problem_list",
+  "problem_list_none",
   "chief_complaints",
   "characteristics",
   "duration",

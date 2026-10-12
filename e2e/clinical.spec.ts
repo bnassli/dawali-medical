@@ -23,6 +23,7 @@ import {
 const SUBJ_COMPLAINTS_HABITS_CODES = [
   "reason_for_visit",
   "problem_list",
+  "problem_list_none",
   "chief_complaints",
   "characteristics",
   "duration",

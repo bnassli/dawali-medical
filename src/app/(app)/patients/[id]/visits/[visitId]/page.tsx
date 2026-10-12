@@ -11,11 +11,13 @@ import { TREATMENT_PLAN_SECTION_CODE } from "@/modules/clinical/definitions";
 import { getTreatmentPlanForVisit } from "@/modules/clinical/treatment-plan";
 import { PERMISSIONS } from "@/modules/permissions/constants";
 import { getVisitById } from "@/modules/visits/service";
+import { getVisitStaff } from "@/modules/visits/staff";
 import { loadPatient } from "../../../page-data";
 import { ClinicalSectionForm } from "./clinical-section-form";
 import { DiagramsPanel } from "./diagrams-panel";
 import { ReportsPanel } from "./reports-panel";
 import { MaterialsPanel } from "./materials-panel";
+import { VisitStaffRow } from "./visit-staff-row";
 import { listDoctors, listWarehouses, stockLevels, visitConsumption } from "@/modules/inventory/service";
 import { listReportsForVisit } from "@/modules/report-engine/service";
 import { listDiagramsForVisit } from "@/modules/diagrams/service";
@@ -101,6 +103,8 @@ export default async function VisitChartPage({
     ? ((await getVisitReasons(getDb(), actor, [visit.id])).get(visit.id) ?? null)
     : null;
 
+  const staff = await getVisitStaff(getDb(), actor, visit.id);
+
   return (
     <div>
       {/* Visit context. Patient context is the persistent Patient Header
@@ -110,6 +114,14 @@ export default async function VisitChartPage({
         {visit.status}
         {reason ? ` | Reason: ${reason}` : ""}
       </p>
+
+      <VisitStaffRow
+        visitId={visit.id}
+        doctor={staff.doctor}
+        nurse={staff.nurse}
+        choices={staff.choices}
+        editable={canWrite && visitOpen}
+      />
 
       {/* Tab area — data-driven from clinical_sections (docs/CLINICAL_TABS.md
           order). The active tab is plain text; the others are links, which the
@@ -135,7 +147,7 @@ export default async function VisitChartPage({
       ) : null}
 
       {/* Content area */}
-      <div className="card">
+      <div className="card visit-panel">
         {section ? (
           <>
             {!canWrite ? (

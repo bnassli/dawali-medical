@@ -40,6 +40,7 @@ import { createTestUser, openTestDb, saveCurrent, uniqueSuffix } from "./helpers
 const SUBJ_LABELS = [
   "Reason for visit",
   "Problem List",
+  "Problem List: None",
   "Chief Complaints",
   "associated with",
   "How long?",
@@ -105,8 +106,8 @@ const STOCKING_CODES = [
 ];
 
 describe("definitions (pure)", () => {
-  it("every section places an explicit list; Subj has its 23 SonoSoft fields and no other tab's", () => {
-    expect(SUBJ_COMPLAINTS_HABITS_FIELD_CODES).toHaveLength(23);
+  it("every section places an explicit list; Subj has its 24 SonoSoft fields and no other tab's", () => {
+    expect(SUBJ_COMPLAINTS_HABITS_FIELD_CODES).toHaveLength(24);
     const subj = DEFAULT_CLINICAL_DEFINITIONS.sections.find(
       (s) => s.code === SUBJ_COMPLAINTS_HABITS_SECTION_CODE,
     );
@@ -176,6 +177,7 @@ describe("definitions (pure)", () => {
     expect(DEFAULT_CLINICAL_DEFINITIONS.fields.find((f) => f.code === "past_medical_unknown")).toBeUndefined();
     expect(FIELD_EXCLUSION_RULES).toEqual([
       { flag: "family_history_unknown", excludes: ["family_history"] },
+      { flag: "problem_list_none", excludes: ["problem_list"] },
       { flag: "current_meds_none", excludes: ["current_meds"] },
       { flag: "allergies_no_known", excludes: ["allergies"] },
     ]);
@@ -274,7 +276,7 @@ describe("Sprint 3A clinical tabs: Past Medical Hx and Assessment Plan+", () => 
       await expect(listClinicalSections(db, reception)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
-    it("Subj Complaints Habits: exactly its 23 fields with SonoSoft labels, in order", async () => {
+    it("Subj Complaints Habits: exactly its 24 fields with SonoSoft labels, in order", async () => {
       const d = await doctor();
       const visit = await newVisit(d);
       const subj = await view(d, visit.id, SUBJ_COMPLAINTS_HABITS_SECTION_CODE);
