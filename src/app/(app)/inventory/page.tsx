@@ -50,7 +50,7 @@ export default async function InventoryOverview() {
           <span className="inv-kpi-n" data-testid="kpi-expiring">{s.expiring.length}</span>
           <span>{d.kpiExpiring}</span>
         </Link>
-        <Link className={`inv-kpi${s.expiredCount ? " bad" : ""}`} href="/inventory/stock?show=expiring">
+        <Link className={`inv-kpi${s.expiredCount ? " bad" : ""}`} href={canManage ? "/inventory/writeoffs" : "/inventory/stock?show=expiring"}>
           <span className="inv-kpi-n">{s.expiredCount}</span>
           <span>{d.kpiExpired}</span>
         </Link>
@@ -61,6 +61,7 @@ export default async function InventoryOverview() {
           <Link className="button" href="/inventory/receive">{d.navReceive}</Link>
           <Link className="button secondary" href="/inventory/stocktake">{d.navStocktake}</Link>
           <Link className="button secondary" href="/inventory/transfer">{d.navTransfer}</Link>
+          <Link className="button secondary" href="/inventory/writeoffs">{d.navWriteOffs}</Link>
         </div>
       ) : null}
 

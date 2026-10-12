@@ -146,7 +146,16 @@ export const purchaseReceiptLines = pgTable(
   ],
 );
 
-export const MOVEMENT_TYPES = ["receipt", "transfer_out", "transfer_in", "consumption", "adjustment"] as const;
+export const MOVEMENT_TYPES = [
+  "receipt",
+  "transfer_out",
+  "transfer_in",
+  "consumption",
+  "adjustment",
+  "stock_count",
+  "supplier_return",
+  "disposal",
+] as const;
 
 /**
  * The stock ledger. Every change of stock is one row (+ in, - out); rows are
@@ -176,6 +185,8 @@ export const stockMovements = pgTable(
     countId: uuid("count_id").references(() => stockCounts.id, { onDelete: "restrict" }),
     /** I4: the procedure kit a consumption was recorded with (null = item by item). */
     kitId: uuid("kit_id").references(() => procedureKits.id, { onDelete: "restrict" }),
+    /** I5: the return-to-supplier / disposal document of this line. */
+    writeOffId: uuid("write_off_id").references(() => stockWriteOffs.id, { onDelete: "restrict" }),
     clientMutationId: uuid("client_mutation_id").notNull(),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -188,7 +199,7 @@ export const stockMovements = pgTable(
     check("stock_movements_quantity_check", sql`${t.quantity} <> 0`),
     check(
       "stock_movements_type_check",
-      sql`${t.movementType} IN ('receipt', 'transfer_out', 'transfer_in', 'consumption', 'adjustment', 'stock_count')`,
+      sql`${t.movementType} IN ('receipt', 'transfer_out', 'transfer_in', 'consumption', 'adjustment', 'stock_count', 'supplier_return', 'disposal')`,
     ),
   ],
 );
@@ -264,5 +275,37 @@ export const procedureKitItems = pgTable(
   (t) => [
     uniqueIndex("procedure_kit_items_kit_product_idx").on(t.kitId, t.productId),
     check("procedure_kit_items_quantity_check", sql`${t.quantity} > 0`),
+  ],
+);
+
+
+/**
+ * I5 (ADR-043): stock that leaves the clinic without being used on a patient —
+ * returned to the supplier or disposed of (expired, damaged, recalled). One
+ * document, one or more lines; each line is a negative 'supplier_return' or
+ * 'disposal' movement carrying write_off_id. Append-only; a mistake is
+ * corrected by an adjustment, never by editing the document.
+ */
+export const stockWriteOffs = pgTable(
+  "stock_write_offs",
+  {
+    id: uuid("id").primaryKey(),
+    kind: text("kind").notNull(),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id, { onDelete: "restrict" }),
+    supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "restrict" }),
+    reason: text("reason").notNull(),
+    // Supplier's return authorisation / credit note, or the disposal record number.
+    reference: text("reference"),
+    notes: text("notes"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("stock_write_offs_created_idx").on(t.createdAt),
+    check("stock_write_offs_kind_check", sql`${t.kind} IN ('supplier_return', 'disposal')`),
+    check("stock_write_offs_reason_check", sql`${t.reason} IN ('expired', 'damaged', 'recalled', 'other')`),
+    check("stock_write_offs_supplier_check", sql`${t.kind} <> 'supplier_return' OR ${t.supplierId} IS NOT NULL`),
   ],
 );

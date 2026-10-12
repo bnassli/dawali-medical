@@ -921,3 +921,25 @@ one client mutation id, so a retry is a no-op; one audit entry `stock.consume_ki
 the lines. The visit list shows "(kit …)" on those lines. Migration 0014 is additive
 (rollback in its header). It must be applied after 0013 (PR #15): drizzle's migrator only
 applies migrations newer than the last applied one, so PR #15 is merged first.
+
+ADR-043: I5 — Returns to supplier and disposals. Product Owner choice of 2026-10-12 (first
+item after procedure kits). Stock that leaves without being used on a patient now has its
+own document instead of a generic negative adjustment: Inventory → Returns & disposal
+(`inventory.manage`). A document (`stock_write_offs`: id chosen by the screen, kind
+`supplier_return` | `disposal`, store, supplier — required for a return —, reason
+`expired` | `damaged` | `recalled` | `other`, optional reference such as the supplier's
+return or credit-note number, notes, who, when) holds one or more lines; each line is a
+negative movement of type `supplier_return` or `disposal` with `write_off_id`, the reason,
+and the document id as client mutation id (a repeated submit is a no-op). All lines or
+none: each batch is checked under its lock and a line can never take more than the batch
+holds in that store. One audit entry `stock.write_off` lists the lines. Documents are
+append-only (trigger); a mistake is put right with an adjustment. The reasons are a fixed
+set like the movement types (they drive reports, not clinical content; CLAUDE.md rule #10
+is about clinical dropdowns); free text goes in the notes. "Add everything expired in this
+store" fills the lines with every expired batch at its full quantity; a return suggests
+the supplier the chosen batch was last received from until the user picks one. The history
+shows each document with its value at the weighted invoice cost (ex VAT) — the loss of a
+disposal, the credit to expect for a return. The single correction form stays for counts
+and other corrections; its hint now points expired / damaged / recalled stock here, and the
+overview's "Expired, still in stock" opens this screen for the storekeeper. Migration 0015
+is additive (rollback in its header).

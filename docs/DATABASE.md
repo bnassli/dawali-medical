@@ -264,3 +264,12 @@ insert-only, CHECKs on type and non-zero quantity). New env: `ANTHROPIC_API_KEY`
 - `stock_movements.kit_id` (nullable FK): the kit a consumption was recorded with.
 - Additive only. Rollback: drop `stock_movements.kit_id`, then the two tables.
   Apply after `0013_visit_staff.sql`.
+
+## I5 additions (ADR-043) — migration `0015_stock_write_offs.sql`
+- `stock_write_offs` (id chosen by the client, kind `supplier_return` | `disposal`, store,
+  supplier — required for a return (check) —, reason `expired` | `damaged` | `recalled` | `other`,
+  reference, notes, created_by, created_at). Append-only (trigger).
+- `stock_movements.write_off_id` (nullable FK) and movement types `supplier_return`, `disposal`
+  (negative quantities, one per batch of the document).
+- Additive only. Rollback (while no such movement exists): restore the previous
+  `stock_movements_type_check`, drop `stock_movements.write_off_id`, drop the table.
