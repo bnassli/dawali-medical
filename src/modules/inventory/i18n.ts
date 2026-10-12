@@ -21,6 +21,7 @@ const en = {
   navReceive: "Receive invoice",
   navTransfer: "Transfer & adjust",
   navReports: "Reports",
+  navKits: "Procedure kits",
   store: "Store",
   allStores: "All stores",
   product: "Product",
@@ -89,6 +90,18 @@ const en = {
   unitLockedHint: "The unit cannot change once the product has stock movements.",
   inactive: "Inactive",
   productsHint: "Stock is counted in the product's unit. The minimum level is compared with the total in all stores.",
+  // procedure kits (I4)
+  kitsHint:
+    "A kit lists the usual materials of one procedure (e.g. EVLT). On the visit the nurse picks the kit, changes a quantity if the case differed, and records all of it at once — earliest expiry first, never an expired batch.",
+  newKit: "New kit",
+  kitName: "Kit name",
+  kitItems: "Items",
+  editKit: "Edit",
+  addKitItem: "+ Add item",
+  removeKitItem: "Remove item",
+  chooseProduct: "Choose a product…",
+  noKits: "No kits yet.",
+  kitItemCount: "{n} items",
   // stocktake
   stocktakeTitle: "Stock count",
   stocktakeHint:
@@ -147,6 +160,9 @@ const en = {
   err_countDuplicate: "The same product, lot and expiry is counted twice.",
   err_badDate: "Write dates as day/month/year, e.g. 31/12/2027.",
   err_expiredBatch: "This batch has expired and cannot be used on a patient. Choose another batch.",
+  err_duplicateKitName: "A kit with this name already exists.",
+  err_kitConflict: "Someone else changed this kit; reload the page and edit again.",
+  err_unknownKit: "This kit is not in use any more.",
 } as const;
 
 export type DictKey = keyof typeof en;
@@ -162,6 +178,7 @@ const ar: Dict = {
   navReceive: "استلام فاتورة",
   navTransfer: "تحويل وتسوية",
   navReports: "التقارير",
+  navKits: "أطقم العمليات",
   store: "المستودع",
   allStores: "كل المستودعات",
   product: "المادة",
@@ -228,6 +245,17 @@ const ar: Dict = {
   unitLockedHint: "لا يمكن تغيير الوحدة بعد وجود حركات على المادة.",
   inactive: "موقوفة",
   productsHint: "الرصيد يُحسب بوحدة المادة. الحد الأدنى يُقارن بمجموع كل المستودعات.",
+  kitsHint:
+    "الطقم يضم المواد المعتادة لإجراء واحد (مثل EVLT). في الزيارة تختار الممرضة الطقم، وتعدّل الكمية إذا اختلفت الحالة، وتسجّل الكل بضغطة واحدة — الأقرب انتهاءً أولاً، ولا تُستعمل تشغيلة منتهية أبداً.",
+  newKit: "طقم جديد",
+  kitName: "اسم الطقم",
+  kitItems: "المواد",
+  editKit: "تعديل",
+  addKitItem: "+ إضافة مادة",
+  removeKitItem: "حذف المادة",
+  chooseProduct: "اختر مادة…",
+  noKits: "لا توجد أطقم بعد.",
+  kitItemCount: "{n} مواد",
   stocktakeTitle: "الجرد",
   stocktakeHint:
     "عدّ الموجود على الرف واكتب العدد. اترك السطر فارغاً إذا لم تعدّه. الفروقات فقط تغيّر الرصيد، وأول جرد هو الرصيد الافتتاحي.",
@@ -284,6 +312,9 @@ const ar: Dict = {
   err_countDuplicate: "نفس المادة والتشغيلة وتاريخ الانتهاء معدودة مرتين.",
   err_badDate: "اكتب التاريخ بصيغة يوم/شهر/سنة، مثل 31/12/2027.",
   err_expiredBatch: "هذه التشغيلة منتهية الصلاحية ولا يجوز استعمالها على مريض. اختر تشغيلة أخرى.",
+  err_duplicateKitName: "يوجد طقم بنفس الاسم.",
+  err_kitConflict: "عدّل شخص آخر هذا الطقم؛ أعد تحميل الصفحة وعدّل مرة أخرى.",
+  err_unknownKit: "هذا الطقم لم يعد مستعملاً.",
 };
 
 export const DICTS: Record<Lang, Dict> = { en, ar };

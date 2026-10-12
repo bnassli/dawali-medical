@@ -18,7 +18,8 @@ import { ClinicalSectionForm } from "./clinical-section-form";
 import { DiagramsPanel } from "./diagrams-panel";
 import { ReportsPanel } from "./reports-panel";
 import { MaterialsPanel } from "./materials-panel";
-import { USE_WARNING_DAYS } from "@/modules/inventory/catalog";
+import { daysUntil, USE_WARNING_DAYS } from "@/modules/inventory/fefo";
+import { listKits } from "@/modules/inventory/kits";
 import { listDoctors, listWarehouses, stockLevels, visitConsumption } from "@/modules/inventory/service";
 import { listReportsForVisit } from "@/modules/report-engine/service";
 import { listDiagramsForVisit } from "@/modules/diagrams/service";
@@ -86,9 +87,8 @@ export default async function VisitChartPage({
         const doctors = canConsume ? await listDoctors(getDb()) : [];
         const dmy = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "no expiry");
         const today = todayIn(getEnv().APP_TIME_ZONE);
-        const daysLeft = (iso: string) => Math.round((Date.parse(iso) - Date.parse(today)) / 86_400_000);
         const batches = stock.map((r) => {
-          const left = r.expiryDate === null ? null : daysLeft(r.expiryDate);
+          const left = r.expiryDate === null ? null : daysUntil(r.expiryDate, today);
           return {
             warehouseId: r.warehouseId,
             warehouseName: r.warehouseName,
@@ -101,10 +101,22 @@ export default async function VisitChartPage({
         });
         return {
           batches: [...batches.filter((b) => !b.expired), ...batches.filter((b) => b.expired)],
+          // I4 (ADR-042): procedure kits, previewed against the same stock.
+          kits: canConsume ? await listKits(getDb(), actor, { activeOnly: true }) : [],
+          stores: stores.map((w) => ({ id: w.id, name: w.name })),
+          stock: stock.map((r) => ({
+            warehouseId: r.warehouseId,
+            productId: r.productId,
+            batchId: r.batchId,
+            lotNumber: r.lotNumber,
+            expiryDate: r.expiryDate,
+            quantity: r.quantity,
+          })),
+          today,
           doctors,
           used: used.map((u) => ({
             id: u.id,
-            text: `${u.quantity} ${u.unit} ${u.productName} (lot ${u.lotNumber || "—"}) — Dr. ${u.doctorName ?? "?"}, recorded by ${u.recordedBy ?? "?"}`,
+            text: `${u.quantity} ${u.unit} ${u.productName} (lot ${u.lotNumber || "—"}) — Dr. ${u.doctorName ?? "?"}, recorded by ${u.recordedBy ?? "?"}${u.kitName ? ` (kit ${u.kitName})` : ""}`,
           })),
         };
       })()
@@ -199,6 +211,10 @@ export default async function VisitChartPage({
           defaultDoctorId={materials.doctors.some((d) => d.id === actor.userId) ? actor.userId : null}
           canRecord={canConsume}
           used={materials.used}
+          kits={materials.kits}
+          stores={materials.stores}
+          stock={materials.stock}
+          today={materials.today}
         />
       ) : null}
 

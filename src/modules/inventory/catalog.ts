@@ -33,8 +33,7 @@ import {
  */
 
 export const EXPIRY_WARNING_DAYS = 60;
-/** At the point of use (visit materials panel) a batch this close to its expiry is flagged. */
-export const USE_WARNING_DAYS = 30;
+export { USE_WARNING_DAYS } from "./fefo";
 
 // ---------------------------------------------------------------- catalogue
 

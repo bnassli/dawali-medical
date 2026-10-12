@@ -174,6 +174,8 @@ export const stockMovements = pgTable(
     reason: text("reason"),
     /** I3: the stock count that produced this correction. */
     countId: uuid("count_id").references(() => stockCounts.id, { onDelete: "restrict" }),
+    /** I4: the procedure kit a consumption was recorded with (null = item by item). */
+    kitId: uuid("kit_id").references(() => procedureKits.id, { onDelete: "restrict" }),
     clientMutationId: uuid("client_mutation_id").notNull(),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -222,5 +224,45 @@ export const stockCountLines = pgTable(
   (t) => [
     uniqueIndex("stock_count_lines_count_batch_idx").on(t.countId, t.batchId),
     check("stock_count_lines_counted_check", sql`${t.countedQuantity} >= 0`),
+  ],
+);
+
+/**
+ * I4 (ADR-042): a procedure kit — the usual materials of one procedure (e.g.
+ * EVLT), so the nurse records them in one step. A kit is configuration, not a
+ * clinical record: what was actually used is the consumption movements, which
+ * keep the kit id. Edits are audited (before/after); kits are deactivated,
+ * never deleted, once used.
+ */
+export const procedureKits = pgTable(
+  "procedure_kits",
+  {
+    id: uuid("id").primaryKey(),
+    name: text("name").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("procedure_kits_lower_name_idx").on(sql`lower(${t.name})`)],
+);
+
+export const procedureKitItems = pgTable(
+  "procedure_kit_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kitId: uuid("kit_id")
+      .notNull()
+      .references(() => procedureKits.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => inventoryProducts.id, { onDelete: "restrict" }),
+    // In the product's counting unit.
+    quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull(),
+    sortOrder: integer("sort_order").notNull(),
+  },
+  (t) => [
+    uniqueIndex("procedure_kit_items_kit_product_idx").on(t.kitId, t.productId),
+    check("procedure_kit_items_quantity_check", sql`${t.quantity} > 0`),
   ],
 );

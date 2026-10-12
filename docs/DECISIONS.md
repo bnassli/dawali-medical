@@ -848,3 +848,26 @@ is flagged with the days left. The store screens keep their 60-day "expiring soo
 (`EXPIRY_WARNING_DAYS`) and red expired rows; an expired batch is written off with an
 adjustment. Transfers are not blocked (e.g. moving it to be returned). No controlled
 drugs, no tablets, no barcode scanners for now (PO).
+
+ADR-042: I4 — Procedure kits. Product Owner request of 2026-10-12 (after the inventory
+review): the nurse picks the procedure (e.g. EVLT) and records all its materials in one
+step instead of item by item. A kit (`procedure_kits`, `procedure_kit_items`) is
+configuration kept by the storekeeper under Inventory → Procedure kits (needs
+`inventory.manage`; everyone with `inventory.read` sees the list): a name, active flag and
+the usual quantity of each product, in the product's unit. Kits are not seeded (products
+differ per clinic; CLAUDE.md rule #10). Edits are audited with before/after
+(`procedure_kit.create` / `.update`) and use an optimistic check on `updated_at` — a stale
+edit is refused, never last-write-wins; the screen chooses the id of a new kit so a
+repeated save is not a second kit. A kit is deactivated, not deleted, once used
+(movements reference it). On the visit, the materials panel offers the active kits: the
+nurse chooses the kit and store (Operations first), may change a quantity or drop a line
+for this case, and sees the batches each line will be taken from. Allocation is
+first-expiry-first, never an expired batch (ADR addendum above), batches without expiry
+last; the same pure function (`src/modules/inventory/fefo.ts`) previews on the screen and
+allocates on the server under the per-batch locks. Recording is all or nothing: if any
+line lacks usable stock in that store nothing is recorded and the shortage is listed.
+Each batch taken is one `consumption` movement (patient, visit, doctor, `kit_id`), sharing
+one client mutation id, so a retry is a no-op; one audit entry `stock.consume_kit` lists
+the lines. The visit list shows "(kit …)" on those lines. Migration 0014 is additive
+(rollback in its header). It must be applied after 0013 (PR #15): drizzle's migrator only
+applies migrations newer than the last applied one, so PR #15 is merged first.

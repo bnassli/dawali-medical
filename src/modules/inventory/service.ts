@@ -483,6 +483,7 @@ export interface StockRow {
   warehouseId: string;
   warehouseName: string;
   batchId: string;
+  productId: string;
   productName: string;
   unit: string;
   lotNumber: string;
@@ -499,6 +500,7 @@ export async function stockLevels(db: Database, actor: ActorContext, warehouseId
       warehouseId: warehouses.id,
       warehouseName: warehouses.name,
       batchId: inventoryBatches.id,
+      productId: inventoryProducts.id,
       productName: inventoryProducts.name,
       unit: inventoryProducts.unit,
       lotNumber: inventoryBatches.lotNumber,
@@ -529,6 +531,8 @@ export interface ConsumptionRow {
   recordedBy: string | null;
   patientName: string;
   visitId: string | null;
+  /** I4: the procedure kit it was recorded with, if any. */
+  kitName: string | null;
 }
 
 async function consumptionRows(db: Database, where: ReturnType<typeof and>): Promise<ConsumptionRow[]> {
@@ -548,6 +552,7 @@ async function consumptionRows(db: Database, where: ReturnType<typeof and>): Pro
       firstName: patients.firstName,
       lastName: patients.lastName,
       visitId: stockMovements.visitId,
+      kitName: sql<string | null>`(SELECT k.name FROM procedure_kits k WHERE k.id = ${stockMovements.kitId})`,
     })
     .from(stockMovements)
     .innerJoin(inventoryBatches, eq(inventoryBatches.id, stockMovements.batchId))

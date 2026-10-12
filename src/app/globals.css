@@ -967,3 +967,16 @@ output.derived {
   .inv-pos { color: #8fd9a8; }
 }
 .inv-q { unicode-bidi: isolate; direction: ltr; display: inline-block; }
+
+/* I4 (ADR-042): procedure kits */
+.inv-kits { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
+.inv-kit { border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.8rem; }
+.inv-kit ul { margin: 0.4rem 0 0; padding-inline-start: 1.2rem; }
+.inv-kit-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.inv-kit-head h3 { margin: 0; }
+.inv-kit-head button { margin-inline-start: auto; }
+.inv-kit-form { border: 1px solid var(--accent); border-radius: 8px; padding: 0.6rem 0.8rem; margin-top: 0.75rem; }
+.inv-kit-use { border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
+.inv-kit-use h4, .diagrams-panel h4 { margin: 0.5rem 0 0.25rem; }
+.inv-table input.inv-qty, .inv-kit-use .inv-table input, .inv-kit-form .inv-table input { width: 5.5rem; min-width: 0; }
+.inv-kit-form .inv-table select { max-width: 100%; }

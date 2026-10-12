@@ -246,3 +246,12 @@ insert-only, CHECKs on type and non-zero quantity). New env: `ANTHROPIC_API_KEY`
 - `stock_movements.count_id` and movement type `stock_count` (differences of a count).
 - Additive only. Rollback: drop `stock_movements.count_id`, the two tables and the two columns,
   and restore the previous `stock_movements_type_check`.
+
+## I4 additions (ADR-042) — migration `0014_procedure_kits.sql`
+- `procedure_kits` (id chosen by the client, name unique case-insensitive, is_active,
+  created_by, created_at, updated_at — the optimistic-check token).
+- `procedure_kit_items` (kit, product, quantity > 0 in the product's unit, sort_order;
+  one line per product per kit). Replaced as a whole when the kit is edited (audited).
+- `stock_movements.kit_id` (nullable FK): the kit a consumption was recorded with.
+- Additive only. Rollback: drop `stock_movements.kit_id`, then the two tables.
+  Apply after `0013_visit_staff.sql`.
