@@ -28,6 +28,7 @@ I3a: Inventory section — own navigation, Arabic/English, overview, stock, prod
 I3b: Nurse quick issue screen (FEFO), movements log, reports in Arabic, barcode scanning.
 I4: Procedure kits — the nurse records a procedure's usual materials in one step (FEFO, never expired, all or nothing) — ADR-042.
 I5: Returns to supplier and disposals — one append-only document per return/disposal, all lines or none, value at invoice cost — ADR-043.
+I6: Cost per procedure — materials report by procedure (kit) and by visit: average, range, by doctor, Excel — ADR-044.
 R6: iCare integration (manual external identifier, then connector/sync), staging validation, deployment hardening.
 
 I1: Inventory — Operations store first: scanned invoices read by AI and reviewed, batches/expiry (FEFO), ledger, transfers, opening balances, materials used per patient and doctor (ADR-035).

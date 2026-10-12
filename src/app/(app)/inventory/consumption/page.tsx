@@ -85,6 +85,56 @@ export default async function ConsumptionPage({
               {report.unpriced > 0 ? `, ${report.unpriced} without an invoice price (not in the cost)` : ""}
             </p>
           </section>
+          <section className="card" aria-label="Cost per procedure">
+            <h3>Cost per procedure</h3>
+            <p className="muted">
+              A procedure is one visit: every material recorded on it, named by the kit used (items added on top of the kit included).
+            </p>
+            {report.byProcedure.length === 0 ? <p className="muted">Nothing recorded in this period.</p> : (
+              <table className="inv-table">
+                <thead>
+                  <tr><th>Procedure (kit)</th><th>Doctor</th><th>Procedures</th><th>Average</th><th>Lowest – highest</th><th>Total</th></tr>
+                </thead>
+                <tbody>
+                  {report.byProcedure.flatMap((p) => [
+                    <tr key={p.procedure} className="inv-proc-total">
+                      <td>{p.procedure}</td><td>All doctors</td><td>{p.visits}</td>
+                      <td>{sar(p.average)}{p.incomplete ? " *" : ""}</td>
+                      <td>{sar(p.min)} – {sar(p.max)}</td><td>{sar(p.cost)}</td>
+                    </tr>,
+                    ...(p.byDoctor.length > 1
+                      ? p.byDoctor.map((d) => (
+                          <tr key={`${p.procedure}:${d.doctor}`}>
+                            <td /><td>{d.doctor}</td><td>{d.visits}</td><td>{sar(d.average)}</td><td /><td>{sar(d.cost)}</td>
+                          </tr>
+                        ))
+                      : []),
+                  ])}
+                </tbody>
+              </table>
+            )}
+            {report.byProcedure.some((p) => p.incomplete > 0) ? (
+              <p className="muted">* some of these procedures have lines without an invoice price, so their cost is too low.</p>
+            ) : null}
+          </section>
+          <section className="card" aria-label="By visit">
+            <h3>By visit</h3>
+            <table className="inv-table">
+              <thead>
+                <tr><th>Date</th>{report.canSeePatients ? <th>Patient</th> : null}<th>Doctor</th><th>Procedure (kit)</th><th>Lines</th><th>Cost</th></tr>
+              </thead>
+              <tbody>
+                {report.byVisit.map((v) => (
+                  <tr key={v.visitId}>
+                    <td>{v.date.toLocaleDateString("en-GB", { timeZone })}</td>
+                    {report.canSeePatients ? <td>{v.patientName}</td> : null}
+                    <td>{v.doctors}</td><td>{v.procedure}</td><td>{v.items}</td>
+                    <td>{sar(v.cost)}{v.unpriced ? " *" : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
           <section className="card" aria-label="By doctor">
             <h3>By doctor</h3>
             {report.byDoctor.length === 0 ? <p className="muted">Nothing recorded in this period.</p> : null}

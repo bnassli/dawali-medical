@@ -80,4 +80,10 @@ test("procedure kit: set up by the storekeeper, recorded by the nurse in one ste
   const stock = page.getByRole("region", { name: "Stock" });
   await expect(stock.getByRole("row", { name: new RegExp(fibre) }).first()).toContainText("4 piece");
   await expect(stock.getByRole("row", { name: new RegExp(gel) }).first()).toContainText("3 piece");
+
+  // I6: the visit is one EVLT procedure in the materials report.
+  await page.goto("/inventory/consumption");
+  const procedures = page.getByRole("region", { name: "Cost per procedure" });
+  await expect(procedures.getByRole("row", { name: new RegExp(kit) })).toContainText(`${kit}All doctors1`);
+  await expect(page.getByRole("region", { name: "By visit" }).getByRole("row", { name: new RegExp(kit) })).toContainText("3");
 });

@@ -39,7 +39,40 @@ export interface ConsumptionLine {
   /** Null when the viewer may not read patients. */
   patientName: string | null;
   recordedBy: string;
+  visitId: string | null;
+  /** I4: the procedure kit the line was recorded with, if any. */
+  kitName: string | null;
 }
+
+/** I6 (ADR-044): the materials of one visit — one procedure — and their cost. */
+export interface VisitCost {
+  visitId: string;
+  /** First material recorded on the visit in the period. */
+  date: Date;
+  patientName: string | null;
+  doctors: string;
+  /** The kits used ("EVLT", "EVLT + Sclerotherapy") or WITHOUT_KIT. */
+  procedure: string;
+  items: number;
+  cost: number;
+  unpriced: number;
+}
+
+/** Cost per procedure type: what one procedure costs in materials, on average and by doctor. */
+export interface ProcedureCost {
+  procedure: string;
+  visits: number;
+  cost: number;
+  average: number;
+  min: number;
+  max: number;
+  /** Visits with at least one line without an invoice price (their cost is too low). */
+  incomplete: number;
+  byDoctor: { doctor: string; visits: number; cost: number; average: number }[];
+}
+
+/** Label of visits whose materials were all recorded item by item. */
+export const WITHOUT_KIT = "Without a kit";
 
 export interface ConsumptionTotal {
   key: string;
@@ -56,6 +89,8 @@ export interface ConsumptionReport {
   lines: ConsumptionLine[];
   byDoctor: { doctor: string; cost: number; unpriced: number; products: ConsumptionTotal[] }[];
   byProduct: ConsumptionTotal[];
+  byVisit: VisitCost[];
+  byProcedure: ProcedureCost[];
   totalCost: number;
   unpriced: number;
   canSeePatients: boolean;
@@ -145,6 +180,8 @@ export async function consumptionReport(
       firstName: patients.firstName,
       lastName: patients.lastName,
       recordedBy: users.displayName,
+      visitId: stockMovements.visitId,
+      kitName: sql<string | null>`(SELECT k.name FROM procedure_kits k WHERE k.id = ${stockMovements.kitId})`,
     })
     .from(stockMovements)
     .innerJoin(inventoryBatches, eq(inventoryBatches.id, stockMovements.batchId))
@@ -173,6 +210,8 @@ export async function consumptionReport(
       lineCost: cost === null ? null : round2(cost * quantity),
       patientName: canSeePatients ? `${r.firstName} ${r.lastName}`.trim() : null,
       recordedBy: r.recordedBy ?? "—",
+      visitId: r.visitId,
+      kitName: r.kitName,
     };
   });
 
@@ -201,7 +240,65 @@ export async function consumptionReport(
     })
     .sort((a, b) => a.doctor.localeCompare(b.doctor));
   const all = total(lines, "all", "all");
-  return { filter, lines, byDoctor, byProduct: productTotals(lines), totalCost: all.cost, unpriced: all.unpriced, canSeePatients };
+  const byVisit = visitCosts(lines);
+  return {
+    filter,
+    lines,
+    byDoctor,
+    byProduct: productTotals(lines),
+    byVisit,
+    byProcedure: procedureCosts(byVisit),
+    totalCost: all.cost,
+    unpriced: all.unpriced,
+    canSeePatients,
+  };
+}
+
+/** One row per visit (= one procedure): all its materials in the period, newest first. */
+export function visitCosts(lines: ConsumptionLine[]): VisitCost[] {
+  const visits = new Map<string, ConsumptionLine[]>();
+  for (const l of lines) if (l.visitId) visits.set(l.visitId, [...(visits.get(l.visitId) ?? []), l]);
+  const distinct = (xs: string[]) => [...new Set(xs)].sort((a, b) => a.localeCompare(b));
+  return [...visits.entries()]
+    .map(([visitId, g]) => {
+      const kits = distinct(g.flatMap((l) => (l.kitName ? [l.kitName] : [])));
+      return {
+        visitId,
+        date: new Date(Math.min(...g.map((l) => l.createdAt.getTime()))),
+        patientName: g[0]!.patientName,
+        doctors: distinct(g.map((l) => l.doctorName)).join(", "),
+        procedure: kits.length > 0 ? kits.join(" + ") : WITHOUT_KIT,
+        items: g.length,
+        cost: round2(g.reduce((n, l) => n + (l.lineCost ?? 0), 0)),
+        unpriced: g.filter((l) => l.lineCost === null).length,
+      };
+    })
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
+}
+
+/** Per procedure type (kit), most frequent first; "Without a kit" last. */
+export function procedureCosts(visits: VisitCost[]): ProcedureCost[] {
+  const groups = new Map<string, VisitCost[]>();
+  for (const v of visits) groups.set(v.procedure, [...(groups.get(v.procedure) ?? []), v]);
+  const sum = (vs: VisitCost[]) => round2(vs.reduce((n, v) => n + v.cost, 0));
+  return [...groups.entries()]
+    .map(([procedure, vs]) => {
+      const doctors = new Map<string, VisitCost[]>();
+      for (const v of vs) doctors.set(v.doctors, [...(doctors.get(v.doctors) ?? []), v]);
+      return {
+        procedure,
+        visits: vs.length,
+        cost: sum(vs),
+        average: round2(sum(vs) / vs.length),
+        min: Math.min(...vs.map((v) => v.cost)),
+        max: Math.max(...vs.map((v) => v.cost)),
+        incomplete: vs.filter((v) => v.unpriced > 0).length,
+        byDoctor: [...doctors.entries()]
+          .map(([doctor, dv]) => ({ doctor, visits: dv.length, cost: sum(dv), average: round2(sum(dv) / dv.length) }))
+          .sort((a, b) => a.doctor.localeCompare(b.doctor)),
+      };
+    })
+    .sort((a, b) => (a.procedure === WITHOUT_KIT ? 1 : b.procedure === WITHOUT_KIT ? -1 : b.visits - a.visits || a.procedure.localeCompare(b.procedure)));
 }
 
 function dayOf(d: Date, timeZone: string): string {
@@ -255,6 +352,38 @@ export async function consumptionWorkbook(
   }
   header(products);
 
+  const procedures = wb.addWorksheet("By procedure");
+  procedures.columns = [
+    { header: "Procedure (kit)", key: "procedure", width: 30 },
+    { header: "Doctor", key: "doctor", width: 26 },
+    { header: "Procedures", key: "visits", width: 12 },
+    { header: "Total cost (SAR, excl. VAT)", key: "cost", width: 24, style: { numFmt: money } },
+    { header: "Average per procedure", key: "average", width: 22, style: { numFmt: money } },
+    { header: "Lowest", key: "min", width: 12, style: { numFmt: money } },
+    { header: "Highest", key: "max", width: 12, style: { numFmt: money } },
+    { header: "With unpriced lines", key: "incomplete", width: 18 },
+  ];
+  for (const p of report.byProcedure) {
+    procedures.addRow({ procedure: p.procedure, doctor: "All doctors", visits: p.visits, cost: p.cost, average: p.average, min: p.min, max: p.max, incomplete: p.incomplete || null }).font = { bold: true };
+    for (const d of p.byDoctor) procedures.addRow({ procedure: p.procedure, doctor: d.doctor, visits: d.visits, cost: d.cost, average: d.average });
+  }
+  header(procedures);
+
+  const visits = wb.addWorksheet("By visit");
+  visits.columns = [
+    { header: "Date", key: "date", width: 12 },
+    ...(report.canSeePatients ? [{ header: "Patient", key: "patient", width: 28 }] : []),
+    { header: "Doctor", key: "doctor", width: 24 },
+    { header: "Procedure (kit)", key: "procedure", width: 28 },
+    { header: "Lines", key: "items", width: 8 },
+    { header: "Cost (SAR, excl. VAT)", key: "cost", width: 20, style: { numFmt: money } },
+    { header: "Lines without price", key: "unpriced", width: 18 },
+  ];
+  for (const v of report.byVisit) {
+    visits.addRow({ date: dayOf(v.date, timeZone), patient: v.patientName, doctor: v.doctors, procedure: v.procedure, items: v.items, cost: v.cost, unpriced: v.unpriced || null });
+  }
+  header(visits);
+
   const details = wb.addWorksheet("Details");
   details.columns = [
     { header: "Date", key: "date", width: 12 },
@@ -263,6 +392,7 @@ export async function consumptionWorkbook(
       : []),
     { header: "Doctor", key: "doctor", width: 24 },
     { header: "Product", key: "product", width: 36 },
+    { header: "Kit", key: "kit", width: 18 },
     { header: "Lot", key: "lot", width: 14 },
     { header: "Store", key: "store", width: 16 },
     { header: "Quantity", key: "quantity", width: 10 },
@@ -277,6 +407,7 @@ export async function consumptionWorkbook(
       patient: l.patientName,
       doctor: l.doctorName,
       product: l.productName,
+      kit: l.kitName,
       lot: l.lotNumber || "—",
       store: l.warehouseName,
       quantity: l.quantity,

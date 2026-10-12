@@ -115,7 +115,7 @@ describe("Consumption reports I2 (ADR-037)", () => {
     expect(fileName).toBe(`materials-used_${today()}_${today()}.xlsx`);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(bytes as unknown as ArrayBuffer);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(["By doctor", "By product", "Details"]);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["By doctor", "By product", "By procedure", "By visit", "Details"]);
     // No patient column for the storekeeper.
     expect(wb.getWorksheet("Details")!.getRow(1).values).not.toContain("Patient");
     const audits = await db.select().from(auditLogs).where(eq(auditLogs.actorUserId, store.userId));
