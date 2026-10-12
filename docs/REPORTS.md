@@ -17,3 +17,10 @@ Rules:
 - Later edits create amended/new versions.
 - Save to patient file area and DB index.
 - Keep templates data-driven, not hard-coded in page components.
+
+## Where the first draft comes from (ADR-034, ADR-045)
+- HISTORY: Subj Complaints Habits (reason, complaints, duration, progression, therapy, family history of VV, medications) and Past Venous Hx (checked items, Vein History Narrative).
+- PAST MEDICAL HISTORY: Past Medical Hx (history, allergies, surgical and family history).
+- ULTRASOUND FINDINGS: Initial US Exam (a paragraph per leg, then measurements, findings, DVT statement, US impression), then the Post EVLT ultrasound fields.
+- IMPRESSION / RECOMMENDATIONS: the Assessment Plan+ rows.
+- Template 1 narrative: Treatment Plan procedures completed that day and the follow-up plan.

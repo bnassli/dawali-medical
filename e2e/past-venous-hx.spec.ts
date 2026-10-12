@@ -47,5 +47,10 @@ test.describe("Past Venous Hx", () => {
       "Sclerotherapy in 2019.",
     );
     expect(await entryHistory(visit.visitId, "venous_hx_sclerotherapy")).toHaveLength(1);
+
+    // ADR-045: the first draft of Template 2 carries it into HISTORY.
+    await page.goto(visitUrl(visit));
+    await page.getByRole("region", { name: "Reports" }).getByRole("link", { name: /Template 2/ }).click();
+    await expect(page.getByLabel("HISTORY:", { exact: true })).toHaveValue(/Past venous history of sclerotherapy\. Sclerotherapy in 2019\.$/);
   });
 });

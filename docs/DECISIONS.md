@@ -877,8 +877,8 @@ shared by both legs, accessories and five perforator checkboxes; then Add'l Meas
 a new vein diagram of the visit, built on the server like the Diagrams section (no new
 diagram logic; disabled when the user may not write or the visit is closed). Dropped
 (Product Owner): Date of Service, Name of Exam, Add Charge, Leg Study, Tutorial, the
-insurance text and Branch Tributarie. Seed only, no migration. The reports do not read
-these fields yet (Template 2 still uses its own text); layout measured on photos of the
+insurance text and Branch Tributarie. Seed only, no migration. The reports did not read
+these fields at first (they do since ADR-045); layout measured on photos of the
 printouts, to refine when a screenshot is available.
 
 **Addendum (inventory review fixes).** (1) An invoice may list the same product, lot and
@@ -955,3 +955,19 @@ procedures, total, average, lowest and highest, and the same by doctor; procedur
 line without an invoice price are counted and flagged (their cost is too low). Cost is the
 weighted invoice cost ex VAT, as in ADR-037. Read-only; no schema change. When a Procedure
 entity exists, the grouping moves from the kit to the procedure.
+
+ADR-045: Reports read the Past Venous Hx and Initial US Exam tabs. Product Owner choice of
+2026-10-12. The first draft of Template 2 (ADR-034) now uses the two tabs of ADR-040 and
+ADR-041, so the doctor does not retype them; the template's sections are unchanged
+(REPORTS.md). HISTORY gains "Past venous history of phlebitis, DVT and prior vein surgery."
+(the checked boxes, in report words) and the Vein History Narrative. ULTRASOUND FINDINGS
+starts with one paragraph per leg — deep reflux, GSV and SSV (status from the fixed choice,
+size at the junction, size at the knee with its unit, tortuous, reflux time, distal
+extent), incompetent accessory veins and perforators, the perforators statement — then a
+paragraph with the additional measurements, Add'l Findings 1–3, SonoSoft's DVT sentence
+("There is NO evidence of DVT found during this examination.") with the location / extent,
+and the US impression; the Post EVLT ultrasound text follows as before. As everywhere in
+the composer, only recorded values are used: a leg with nothing recorded has no paragraph,
+an empty field leaves no broken sentence. Only new drafts change: saved and finalized
+report versions are never recomposed. The on-screen preview now splits a section's
+paragraphs at a blank line, as the .docx always did. No schema change.
