@@ -567,8 +567,49 @@ const postEvlt = (): SectionLayout => {
   };
 };
 
+/**
+ * Past Venous Hx (ADR-040). Measured from a photo of the printed SonoSoft screen
+ * (no screenshot yet), so positions follow SonoSoft's grid approximately.
+ * Calculate Caprini Score and Tutorial are not reproduced (Product Owner).
+ */
+const PV_COLS = [120, 300, 480];
+const PV_ROWS = [309, 323, 337, 351];
+const PV_BOXES: [string, string][] = [
+  ["venous_hx_phlebitis", "Phlebitis"],
+  ["venous_hx_dvt", "DVT"],
+  ["venous_hx_pulmonary_embolism", "Pulmonary Embolism"],
+  ["venous_hx_bleeding_from_veins", "Bleeding from veins"],
+  ["venous_hx_sclerotherapy", "Sclerotherapy"],
+  ["venous_hx_sonogram", "Sonogram"],
+  ["venous_hx_prior_vein_surgery", "Prior Vein Surgery"],
+  ["venous_hx_hemorrhoids", "Hemorrhoids"],
+  ["venous_hx_iv_drug_use", "IV drug use"],
+  ["venous_hx_aids_hiv_hepatitis", "AIDS/HIV/Hepatitis"],
+  ["venous_hx_previous_trauma", "Previous Trauma"],
+  ["venous_hx_clotting_disorder", "Clotting Disorder"],
+];
+
+const PAST_VENOUS_HX: SectionLayout = {
+  width: 790,
+  height: 175,
+  origin: { x: 0, y: 292 },
+  background: "#f0f0f0",
+  items: [
+    box(r(10, 300, 760, 158)),
+    l("Venous History", 20, 309, { title: true }),
+    ...PV_BOXES.flatMap(([code, text], i): LayoutItem[] => {
+      const x = PV_COLS[Math.floor(i / 4)]!;
+      const y = PV_ROWS[i % 4]!;
+      return [f(code, r(x, y, 11, 11)), l(text, x + 14, y, { forCode: code })];
+    }),
+    l("Vein History Narrative", 14, 378, { w: 100, align: "right", forCode: "vein_history_narrative" }),
+    f("vein_history_narrative", r(120, 375, 640, 76), { size: 9.5, arrow: true }),
+  ],
+};
+
 export const SECTION_LAYOUTS: Record<string, SectionLayout> = {
   subj_complaints_habits: SUBJ,
+  past_venous_hx: PAST_VENOUS_HX,
   past_medical_hx: PAST_MEDICAL_HX,
   assessment_plan: ASSESSMENT_PLAN,
   laser_ablation: LASER_ABLATION,

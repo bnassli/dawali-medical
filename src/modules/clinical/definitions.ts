@@ -142,6 +142,7 @@ export function assertExclusionRulesConsistent(
  * migration (ADR-026). Labels and placement order may be updated here.
  */
 export const SUBJ_COMPLAINTS_HABITS_SECTION_CODE = "subj_complaints_habits";
+export const PAST_VENOUS_HX_SECTION_CODE = "past_venous_hx";
 export const PAST_MEDICAL_HX_SECTION_CODE = "past_medical_hx";
 export const ASSESSMENT_PLAN_SECTION_CODE = "assessment_plan";
 export const TREATMENT_PLAN_SECTION_CODE = "treatment_plan";
@@ -215,6 +216,22 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
   { code: "current_meds_none", label: "None", type: FIELD_TYPES.CHECKBOX },
   { code: "allergies", label: "Allergies", type: FIELD_TYPES.MULTISELECT },
   { code: "allergies_no_known", label: "No known", type: FIELD_TYPES.CHECKBOX },
+
+  // --- Past Venous Hx (ADR-040): SonoSoft's Venous History checkboxes + narrative ---
+  { code: "venous_hx_phlebitis", label: "Phlebitis", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_dvt", label: "DVT", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_pulmonary_embolism", label: "Pulmonary Embolism", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_bleeding_from_veins", label: "Bleeding from veins", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_sclerotherapy", label: "Sclerotherapy", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_sonogram", label: "Sonogram", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_prior_vein_surgery", label: "Prior Vein Surgery", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_hemorrhoids", label: "Hemorrhoids", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_iv_drug_use", label: "IV drug use", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_aids_hiv_hepatitis", label: "AIDS/HIV/Hepatitis", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_previous_trauma", label: "Previous Trauma", type: FIELD_TYPES.CHECKBOX },
+  { code: "venous_hx_clotting_disorder", label: "Clotting Disorder", type: FIELD_TYPES.CHECKBOX },
+  // Several sentences (picked from its list and/or typed), shown wrapped like SonoSoft's narrative box.
+  { code: "vein_history_narrative", label: "Vein History Narrative", type: FIELD_TYPES.MULTISELECT },
 
   // --- Past Medical Hx ---
   { code: "past_medical_history", label: "Past Medical Hx", type: FIELD_TYPES.MULTISELECT },
@@ -384,6 +401,23 @@ export const SUBJ_COMPLAINTS_HABITS_FIELD_CODES = [
   "allergies_no_known",
 ];
 
+/** SonoSoft Past Venous Hx (ADR-040): checkboxes column by column, then the narrative. */
+export const PAST_VENOUS_HX_FIELD_CODES = [
+  "venous_hx_phlebitis",
+  "venous_hx_dvt",
+  "venous_hx_pulmonary_embolism",
+  "venous_hx_bleeding_from_veins",
+  "venous_hx_sclerotherapy",
+  "venous_hx_sonogram",
+  "venous_hx_prior_vein_surgery",
+  "venous_hx_hemorrhoids",
+  "venous_hx_iv_drug_use",
+  "venous_hx_aids_hiv_hepatitis",
+  "venous_hx_previous_trauma",
+  "venous_hx_clotting_disorder",
+  "vein_history_narrative",
+];
+
 /** SonoSoft order (P1-P3): Unknown under Family Medical Hx; the female statement last. */
 export const PAST_MEDICAL_HX_FIELD_CODES = [
   "past_medical_history",
@@ -498,17 +532,24 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     sortOrder: 1,
     fieldCodes: SUBJ_COMPLAINTS_HABITS_FIELD_CODES,
   },
+  // SonoSoft's Workup order: Subj Complaints Habits, Past Venous Hx, Past Medical Hx, ...
+  {
+    code: PAST_VENOUS_HX_SECTION_CODE,
+    name: "Past Venous Hx",
+    sortOrder: 2,
+    fieldCodes: PAST_VENOUS_HX_FIELD_CODES,
+  },
   {
     code: PAST_MEDICAL_HX_SECTION_CODE,
     name: "Past Medical Hx",
-    sortOrder: 2,
+    sortOrder: 3,
     fieldCodes: PAST_MEDICAL_HX_FIELD_CODES,
     labelOverrides: { family_history: "Family Medical Hx" },
   },
   {
     code: ASSESSMENT_PLAN_SECTION_CODE,
     name: "Assessment Plan+",
-    sortOrder: 3,
+    sortOrder: 4,
     fieldCodes: ASSESSMENT_PLAN_FIELD_CODES,
   },
   {
@@ -516,16 +557,16 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     // columns are TREATMENT_PLAN_COLUMN_CODES and its rows are plan items.
     code: TREATMENT_PLAN_SECTION_CODE,
     name: "Treatment Plan",
-    sortOrder: 4,
+    sortOrder: 5,
     fieldCodes: [],
   },
   // SonoSoft's Treatment set order: Treatment Plan, Laser Ablation, ..., Follow Up Office Visit.
-  { code: "laser_ablation", name: "Laser Ablation", sortOrder: 5, fieldCodes: LASER_ABLATION_FIELD_CODES },
-  { code: "follow_up_office_visit", name: "Follow Up Office Visit", sortOrder: 6, fieldCodes: FOLLOW_UP_FIELD_CODES },
+  { code: "laser_ablation", name: "Laser Ablation", sortOrder: 6, fieldCodes: LASER_ABLATION_FIELD_CODES },
+  { code: "follow_up_office_visit", name: "Follow Up Office Visit", sortOrder: 7, fieldCodes: FOLLOW_UP_FIELD_CODES },
   {
     code: "post_evlt_follow_up",
     name: "Post EVLT Comp Follow Up",
-    sortOrder: 7,
+    sortOrder: 8,
     fieldCodes: POST_EVLT_FIELD_CODES,
   },
 ];

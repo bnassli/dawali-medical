@@ -11,6 +11,13 @@ Implemented (R1b, ADR-029), SonoSoft labels and boxes (`workup-01-subj-complaint
 Reason for visit, Problem List + None | box "Add Chief Complaints with characteristics and Associated conditions": Chief Complaints, associated with, How long?, Symptoms getting worse over time? (checkbox), Progression, Affects daily living activities?, Chest comments, Comment | red box: Aggravating Factors, Relieving Factors | blue box: Previous conservative therapy, How long?, Family history of VV? | Habits: Alcohol, Exercise, Tobacco use | Pain Meds for CC, Current Meds + None, Allergies + No known.
 None / No known exclude Current Meds / Allergies. The general family history is no longer on this tab (S1): it is "Family Medical Hx" in Past Medical Hx.
 
+## Past Venous Hx
+Implemented (ADR-040), SonoSoft's second Workup tab (between Subj Complaints Habits and Past Medical Hx), from the
+Product Owner's marked printout: Venous History checkboxes — Phlebitis, DVT, Pulmonary Embolism, Bleeding from veins |
+Sclerotherapy, Sonogram, Prior Vein Surgery, Hemorrhoids | IV drug use, AIDS/HIV/Hepatitis, Previous Trauma, Clotting
+Disorder — then Vein History Narrative (several sentences picked from its list and/or typed, + Add New). Not reproduced:
+Calculate Caprini Score, Tutorial. Positions are approximate until a SonoSoft screenshot replaces the photo.
+
 ## Past Medical Hx
 Past Medical Hx; Family Medical Hx; Unknown; Prior Test Results; Additional Comments; Surgical Hx; female-specific option/field from reference screen.
 

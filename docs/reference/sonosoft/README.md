@@ -83,3 +83,15 @@ Printed SonoSoft screens marked by hand (✓ = needed, X = not needed):
   thrombophlebitis or flow characteristics. Drop: Date of Service, Name of Exam, Add Charge,
   Leg Study, Tutorial, insurance guideline text, and the Branch Tributarie section
   (Group 1 / Group 2). Needs a clean screenshot before it is built.
+
+Follow-up the same day (second set of marked printouts):
+
+- **Rule:** nothing is removed from a tab that is already built (Subj Complaints Habits,
+  Past Medical Hx, Assessment Plan+, Treatment Plan, ...), even where a printout crosses it
+  out. Only new tabs or missing items are added.
+- **Past Venous Hx** — needed, as a new tab: the twelve Venous History checkboxes
+  (Phlebitis, DVT, Pulmonary Embolism, Bleeding from veins, Sclerotherapy, Sonogram, Prior
+  Vein Surgery, Hemorrhoids, IV drug use, AIDS/HIV/Hepatitis, Previous Trauma, Clotting
+  Disorder), Vein History Narrative and its sentences. Drop: Calculate Caprini Score, Tutorial.
+- **Review of Systems** and **Vascular Findings** — not needed in V1 (crossed out; the only
+  ticked item, Create Diagram, already exists in the visit's Diagrams section).

@@ -1465,3 +1465,12 @@ body:has(.sono-shell) .top-nav button {
 .vs-status.error {
   color: #c62828;
 }
+
+/* Inputs in the panels under the tab (Materials used, ...) at SonoSoft size. */
+.sono-shell .card select,
+.sono-shell .card input:not([type="checkbox"]):not([type="radio"]) {
+  height: 20px;
+  padding: 1px 4px;
+  border-radius: 0;
+  font-size: 11px;
+}

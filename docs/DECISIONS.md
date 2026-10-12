@@ -847,3 +847,17 @@ mechanism). (3) The patient header, tabs and visit panel follow SonoSoft's geome
 the SonoSoft form is drawn at 1:1 (its layout coordinates are SonoSoft screen pixels)
 instead of being enlarged up to 1.6x; the excluded legacy areas (§3, §14: Workup/Check
 Out, photo, Time Card, billing, the grey navigation row) leave no gap.
+
+ADR-040: Past Venous Hx tab. Product Owner decision 2026-10-12 (marked printout of
+SonoSoft's Past Venous Hx; rule of the same day: built tabs keep every field, only new tabs
+and missing items are added). New section `past_venous_hx`, sort order 2 (SonoSoft's
+Workup order; the later tabs move down by one). Twelve independent checkbox fields
+(`venous_hx_*`), each its own version stream and audit trail, and
+`vein_history_narrative` (multiselect: sentences from its option list, + Add New, plus
+visit-only free text; shown wrapped like SonoSoft's narrative box). The narrative is not
+generated from the checkboxes: SonoSoft's automatic sentences turn every unticked box into
+a negative statement ("does not have phlebitis"), which records findings nobody entered;
+the doctor picks or types them instead. Calculate Caprini Score and Tutorial are not
+reproduced. Seed only, no migration. Layout measured on a photo of the printout; refine it
+when a screenshot is available. Review of Systems, Vascular Findings, Physical Exam and
+CEAP VCSS are not part of V1 (same decision).
