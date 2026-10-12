@@ -295,6 +295,9 @@ export async function receiveStock(db: Database, actor: ActorContext, raw: Recei
       scanId: input.scanId,
       createdBy: actor.userId,
     });
+    // Every invoice line is kept; lines of the same batch (e.g. paid + free
+    // bonus of one lot) add up to one receipt movement for that batch.
+    const unitsByBatch = new Map<string, number>();
     for (const line of input.lines) {
       const productId = await findOrCreateProduct(tx, actor, line.productName, line.unit);
       const batchId = await findOrCreateBatch(tx, productId, line.lotNumber, line.expiryDate);
@@ -306,11 +309,13 @@ export async function receiveStock(db: Database, actor: ActorContext, raw: Recei
         unitCost: line.unitCost === null ? null : String(line.unitCost),
       });
       // Stock is counted in units: 10 boxes of 5 = 50.
-      const units = Math.round(line.quantity * line.packSize * 100) / 100;
+      unitsByBatch.set(batchId, (unitsByBatch.get(batchId) ?? 0) + line.quantity * line.packSize);
+    }
+    for (const [batchId, units] of unitsByBatch) {
       await tx.insert(stockMovements).values({
         warehouseId: wh.id,
         batchId,
-        quantity: String(units),
+        quantity: String(Math.round(units * 100) / 100),
         movementType: "receipt",
         receiptId: input.receiptId,
         clientMutationId: input.receiptId,

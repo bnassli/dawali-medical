@@ -830,3 +830,13 @@ as `stock_count` movements linked to the count; balances are read under the batc
 at posting time; replaying a count is a no-op; counts are append-only. Migration 0012 is
 additive (rollback plan in its header). Barcode scanning and the nurse's quick issue
 screen (FEFO) follow in I3b.
+
+**Addendum (inventory review fixes).** (1) An invoice may list the same product, lot and
+expiry on more than one line (paid + free bonus): every `purchase_receipt_lines` row is
+kept, and the units of lines resolving to the same batch are summed into one `receipt`
+movement for that batch (the idempotency index is one movement per receipt, type and
+batch). Unit cost stays the weighted average of the priced lines, so a free line lowers it.
+(2) Inventory dates are typed day/month/year (dd/mm/yyyy), as on invoices and boxes; the
+browser date picker showed the US order. A date that is not real is refused before
+anything is sent; the materials-used report also accepts yyyy-mm-dd in links. No schema
+change.

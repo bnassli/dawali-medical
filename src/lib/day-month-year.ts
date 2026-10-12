@@ -18,3 +18,13 @@ export function isoToDayMonthYear(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
+
+/**
+ * A date typed by a user (dd/mm/yyyy) or carried in a link (yyyy-mm-dd).
+ * Returns ISO yyyy-mm-dd, "" for an empty value, or null when it is not a real date.
+ */
+export function parseDateInput(text: string): string | null {
+  const t = text.trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  return iso ? parseDayMonthYear(`${iso[3]}/${iso[2]}/${iso[1]}`) : parseDayMonthYear(t);
+}

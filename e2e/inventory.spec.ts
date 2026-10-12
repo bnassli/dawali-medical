@@ -23,12 +23,18 @@ test("storekeeper receives a scanned invoice (reviewed), nurse charges usage to 
   await expect(page.getByText(/enter the invoice by hand|check every value/)).toBeVisible();
   await page.getByLabel("Supplier").fill(`Pharma ${s}`);
   await page.getByLabel("Invoice number").fill(`INV-${s}`);
-  await page.getByLabel("Invoice date").fill("2026-09-20");
+  await page.getByLabel("Invoice date").fill("20/09/2026");
   await page.getByLabel("Product 1").fill(product);
   await page.getByLabel("Unit 1").fill("vial");
   await page.getByLabel("Lot 1").fill("P1");
-  await page.getByLabel("Expiry 1").fill("2027-06-30");
+  await page.getByLabel("Expiry 1").fill("30/06/2027");
   await page.getByLabel("Quantity 1").fill("10");
+  // Dates are day/month/year; one that is not real is refused before anything is received.
+  await page.getByLabel("Expiry 1").fill("31/02/2027");
+  await expect(page.getByLabel("Expiry 1")).toHaveAttribute("aria-invalid", "true");
+  await page.getByRole("button", { name: "Confirm and add to stock" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "day/month/year" })).toHaveText("Write dates as day/month/year, e.g. 31/12/2027.");
+  await page.getByLabel("Expiry 1").fill("30/06/2027");
   await page.getByRole("button", { name: "Confirm and add to stock" }).click();
   await expect(page.getByText(`Invoice INV-${s} received into stock.`)).toBeVisible();
   await page.goto("/inventory/stock");
@@ -64,6 +70,12 @@ test("materials-used report: storekeeper filters and exports to Excel; nurse has
   await page.goto("/inventory");
   await page.getByRole("link", { name: /Full report by period/ }).click();
   await expect(page.getByRole("heading", { name: "Materials used" })).toBeVisible();
+  await expect(page.getByTestId("consumption-total")).toContainText("Total cost:");
+  await expect(page.getByLabel("From")).toHaveValue(/^01\/\d{2}\/\d{4}$/);
+  await page.getByLabel("From").fill("01/01/2026");
+  await page.getByRole("button", { name: "Show" }).click();
+  await expect(page).toHaveURL(/from=01%2F01%2F2026/);
+  await expect(page.getByLabel("From")).toHaveValue("01/01/2026");
   await expect(page.getByTestId("consumption-total")).toContainText("Total cost:");
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: "Export to Excel" }).click();
@@ -112,7 +124,7 @@ test("I3: Arabic by default with a language switch; catalogue, opening count and
   const lineIndex = await page.locator('input[aria-label^="Product New "]').evaluateAll((els, n) => els.findIndex((e) => (e as HTMLInputElement).value === n), name);
   expect(lineIndex).toBeGreaterThanOrEqual(0);
   await page.getByLabel(`Lot New ${lineIndex + 1}`).fill("G1");
-  await page.getByLabel(`Expiry New ${lineIndex + 1}`).fill("2027-05-31");
+  await page.getByLabel(`Expiry New ${lineIndex + 1}`).fill("31/05/2027");
   await page.getByLabel(`Counted New ${lineIndex + 1}`).fill("4");
   await page.getByRole("button", { name: "Post count" }).click();
   await expect(page.getByRole("status")).toContainText("Count posted");

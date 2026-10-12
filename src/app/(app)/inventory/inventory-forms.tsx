@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import type { ExtractedInvoice } from "@/db/schema";
+import { isoToDayMonthYear, parseDayMonthYear } from "@/lib/day-month-year";
 import { newMutationId } from "@/modules/clinical/autosave-client";
 import type { Dict } from "@/modules/inventory/i18n";
+import { DateInput } from "./_ui/date-input";
 import { adjustAction, receiveAction, scanInvoiceAction, transferAction, type ActionResult } from "./actions";
 
 interface Warehouse {
@@ -44,7 +46,7 @@ export function ReceiveInvoice({ d, warehouses, products }: { d: Dict; warehouse
   const [receiptId, setReceiptId] = useState(newMutationId);
 
   function load(x: ExtractedInvoice) {
-    setHead((h) => ({ ...h, supplierName: x.supplierName ?? "", invoiceNumber: x.invoiceNumber ?? "", invoiceDate: x.invoiceDate ?? "" }));
+    setHead((h) => ({ ...h, supplierName: x.supplierName ?? "", invoiceNumber: x.invoiceNumber ?? "", invoiceDate: isoToDayMonthYear(x.invoiceDate ?? "") }));
     setLines(
       x.lines.length === 0
         ? [emptyLine()]
@@ -53,7 +55,7 @@ export function ReceiveInvoice({ d, warehouses, products }: { d: Dict; warehouse
             // The stock unit of a known product; a pack description ("box of 5") is not a unit.
             unit: products.find((p) => p.name.toLowerCase() === l.productName.toLowerCase())?.unit ?? "",
             lotNumber: l.lotNumber ?? "",
-            expiryDate: l.expiryDate ?? "",
+            expiryDate: isoToDayMonthYear(l.expiryDate ?? ""),
             quantity: l.quantity === null ? "" : String(l.quantity),
             packSize: l.packSize === null ? "1" : String(l.packSize),
             unitCost: l.unitCost === null ? "" : String(l.unitCost),
@@ -83,6 +85,10 @@ export function ReceiveInvoice({ d, warehouses, products }: { d: Dict; warehouse
   }
 
   async function confirm() {
+    // Typed day/month/year; a date that is not real stops here, before the server.
+    const invoiceDate = parseDayMonthYear(head.invoiceDate);
+    const expiries = lines.map((l) => parseDayMonthYear(l.expiryDate));
+    if (invoiceDate === null || expiries.includes(null)) return setResult({ ok: false, message: d.err_badDate });
     setBusy(true);
     const r = await receiveAction({
       receiptId,
@@ -90,12 +96,12 @@ export function ReceiveInvoice({ d, warehouses, products }: { d: Dict; warehouse
       warehouseId: head.warehouseId,
       supplierName: head.supplierName,
       invoiceNumber: head.invoiceNumber,
-      invoiceDate: head.invoiceDate,
-      lines: lines.map((l) => ({
+      invoiceDate,
+      lines: lines.map((l, i) => ({
         productName: l.productName,
         unit: l.unit,
         lotNumber: l.lotNumber,
-        expiryDate: l.expiryDate || null,
+        expiryDate: expiries[i] || null,
         quantity: Number(l.quantity),
         packSize: Number(l.packSize),
         unitCost: l.unitCost === "" ? null : Number(l.unitCost),
@@ -152,7 +158,7 @@ export function ReceiveInvoice({ d, warehouses, products }: { d: Dict; warehouse
           {d.invoiceNumber} <input value={head.invoiceNumber} onChange={(e) => setHead({ ...head, invoiceNumber: e.target.value })} />
         </label>
         <label>
-          {d.invoiceDate} <input type="date" value={head.invoiceDate} onChange={(e) => setHead({ ...head, invoiceDate: e.target.value })} />
+          {d.invoiceDate} <DateInput label={d.invoiceDate} value={head.invoiceDate} onChange={(v) => setHead({ ...head, invoiceDate: v })} />
         </label>
       </div>
       <datalist id="inv-products">
@@ -179,7 +185,7 @@ export function ReceiveInvoice({ d, warehouses, products }: { d: Dict; warehouse
               <td><input aria-label={`Product ${i + 1}`} list="inv-products" value={l.productName} onChange={(e) => setLine(i, { productName: e.target.value })} /></td>
               <td><input aria-label={`Unit ${i + 1}`} value={l.unit} size={6} onChange={(e) => setLine(i, { unit: e.target.value })} /></td>
               <td><input aria-label={`Lot ${i + 1}`} value={l.lotNumber} size={8} onChange={(e) => setLine(i, { lotNumber: e.target.value })} /></td>
-              <td><input aria-label={`Expiry ${i + 1}`} type="date" value={l.expiryDate} onChange={(e) => setLine(i, { expiryDate: e.target.value })} /></td>
+              <td><DateInput label={`Expiry ${i + 1}`} value={l.expiryDate} onChange={(v) => setLine(i, { expiryDate: v })} /></td>
               <td><input aria-label={`Quantity ${i + 1}`} inputMode="decimal" size={6} value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
               <td><input aria-label={`Units per pack ${i + 1}`} inputMode="decimal" size={4} value={l.packSize} onChange={(e) => setLine(i, { packSize: e.target.value })} /></td>
               <td><input aria-label={`Unit cost ${i + 1}`} inputMode="decimal" size={7} value={l.unitCost} onChange={(e) => setLine(i, { unitCost: e.target.value })} /></td>
@@ -219,12 +225,14 @@ export function AdjustForm({ d, warehouses }: { d: Dict; warehouses: Warehouse[]
         <input aria-label="Adjust product" placeholder={d.product} list="inv-products" value={f.productName} onChange={(e) => setF({ ...f, productName: e.target.value })} />
         <input aria-label="Adjust unit" placeholder={d.unit} size={6} value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} />
         <input aria-label="Adjust lot" placeholder={d.lot} size={8} value={f.lotNumber} onChange={(e) => setF({ ...f, lotNumber: e.target.value })} />
-        <input aria-label="Adjust expiry" type="date" value={f.expiryDate} onChange={(e) => setF({ ...f, expiryDate: e.target.value })} />
+        <DateInput label="Adjust expiry" value={f.expiryDate} onChange={(v) => setF({ ...f, expiryDate: v })} />
         <input aria-label="Adjust quantity" placeholder="± Qty" size={6} value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} />
         <input aria-label="Reason" placeholder={d.reason} size={18} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
         <button
           type="button"
-          onClick={async () =>
+          onClick={async () => {
+            const expiryDate = parseDayMonthYear(f.expiryDate);
+            if (expiryDate === null) return setResult({ ok: false, message: d.err_badDate });
             setResult(
               await adjustAction({
                 clientMutationId: newMutationId(),
@@ -232,12 +240,12 @@ export function AdjustForm({ d, warehouses }: { d: Dict; warehouses: Warehouse[]
                 productName: f.productName,
                 unit: f.unit,
                 lotNumber: f.lotNumber,
-                expiryDate: f.expiryDate || null,
+                expiryDate: expiryDate || null,
                 quantity: Number(f.quantity),
                 reason: f.reason,
               }),
-            )
-          }
+            );
+          }}
         >
           {d.saveAdjustment}
         </button>

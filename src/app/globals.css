@@ -918,6 +918,7 @@ output.derived {
 .inv-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .inv-table th, .inv-table td { border-bottom: 1px solid var(--border); padding: 0.35rem 0.5rem; text-align: start; vertical-align: top; }
 .inv-table input { width: 100%; min-width: 4rem; }
+.inventory input.invalid, .inv-shell input.invalid { outline: 1px solid var(--danger); outline-offset: -1px; }
 .inv-filter { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; }
 .inv-table + .inv-table { margin-top: 1rem; }
 .inv-expiring td { background: #fff4d6; }
