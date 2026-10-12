@@ -13,4 +13,4 @@ Patient → Visit → Procedure → Doctor → Consumed Items → Batch/Lot → 
 
 Support FEFO later.
 
-I1 implemented (ADR-035): products, suppliers, scanned invoice + AI draft + human confirmation, lots/expiry, stock movements, adjustments, transfers, consumption by visit/patient/doctor. Still future: FEFO enforcement options, valuation, returns, reorder levels, statement reconciliation.
+I1 implemented (ADR-035): products, suppliers, scanned invoice + AI draft + human confirmation, lots/expiry, stock movements, adjustments, transfers, consumption by visit/patient/doctor. Still future: valuation, statement reconciliation. Done since: reorder levels (I3), FEFO and expired blocking, procedure kits (I4), returns and disposals (I5).

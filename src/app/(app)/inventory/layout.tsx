@@ -20,6 +20,7 @@ export default async function InventoryLayout({ children }: { children: React.Re
           { href: "/inventory/stocktake", label: d.navStocktake },
           { href: "/inventory/receive", label: d.navReceive },
           { href: "/inventory/transfer", label: d.navTransfer },
+          { href: "/inventory/writeoffs", label: d.navWriteOffs },
           { href: "/inventory/consumption", label: d.navReports },
         ]
       : []),

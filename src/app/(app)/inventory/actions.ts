@@ -12,6 +12,7 @@ import { VisitNotOpenError } from "@/modules/clinical/service";
 import { postStockCount, saveProduct, type ProductInput, type StockCountInput } from "@/modules/inventory/catalog";
 import { AnthropicInvoiceExtractor } from "@/modules/inventory/extractor";
 import { issueToVisit, KitShortageError, saveKit, type IssueInput, type KitInput } from "@/modules/inventory/kits";
+import { postWriteOff, WriteOffShortageError, type WriteOffInput } from "@/modules/inventory/write-offs";
 import { DICTS, fill, LANG_COOKIE, parseLang, type Dict, type DictKey } from "@/modules/inventory/i18n";
 import {
   adjustStock,
@@ -141,6 +142,22 @@ export async function saveKitAction(input: KitInput): Promise<ActionResult> {
     revalidatePath("/inventory/kits");
     return { ok: true, message: d.saved };
   } catch (err) {
+    return failure(d, err);
+  }
+}
+
+/** I5: return to the supplier or dispose of stock (one document, all lines or none). */
+export async function writeOffAction(input: WriteOffInput): Promise<ActionResult> {
+  const actor = await requireActor();
+  const d = await dict();
+  try {
+    const r = await postWriteOff(getDb(), actor, input);
+    revalidatePath("/inventory", "layout");
+    return { ok: true, message: fill(d.woPosted, { n: r.lines }) };
+  } catch (err) {
+    if (err instanceof WriteOffShortageError) {
+      return { ok: false, message: fill(d.woShort, { product: err.productName, lot: err.lotNumber || d.none, n: err.available, unit: err.unit }) };
+    }
     return failure(d, err);
   }
 }

@@ -1500,3 +1500,7 @@ a.sono-btn.sono-diagram {
 .inv-kit-use h4, .diagrams-panel h4 { margin: 0.5rem 0 0.25rem; }
 .inv-table input.inv-qty, .inv-kit-use .inv-table input, .inv-kit-form .inv-table input { width: 5.5rem; min-width: 0; }
 .inv-kit-form .inv-table select { max-width: 100%; }
+
+/* I5 (ADR-043): returns & disposal */
+.inv-wo-lines input { width: 6rem; min-width: 0; }
+.inv-wo-lines select { max-width: 100%; }
