@@ -1474,3 +1474,12 @@ body:has(.sono-shell) .top-nav button {
   border-radius: 0;
   font-size: 11px;
 }
+
+/* "Create Diagram" inside a SonoSoft tab (ADR-041): a link drawn as SonoSoft's push button. */
+a.sono-btn.sono-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  text-decoration: none;
+}

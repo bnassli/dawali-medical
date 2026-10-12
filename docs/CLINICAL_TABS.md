@@ -30,6 +30,19 @@ Implemented (Sprint 3A, ADR-027; reconciled by R1b, ADR-029), in this order:
 6. Surgical Hx — multiselect + free text (`surgical_history`), in the blue box.
 7. If FEMALE select the appropriate statement; otherwise disregard — select (`female_statement`), usable only when the patient's sex is F (disabled otherwise; server-enforced).
 
+## Initial US Exam
+Implemented (ADR-041), SonoSoft's Workup ultrasound tab (after Past Medical Hx, before Assessment Plan+), from the
+Product Owner's marked printouts. Right leg | middle | Left leg, mirrored:
+Deep Vessels With Reflux (Common Femoral, Femoral, Popliteal) | GSV Competent/Incompetent/Absent, Size at the femoral
+junction, Size at knee (mm), Tortuous, Reflux time, Dist Ext of Reflux | SSV Competent/Incompetent/Absent, Size at the
+popliteal junction, Rec. Time | Incompetent Accessories (anterior, posterior) | Incompetent perforators (Thigh, Proximal
+Calf, Mid Calf, Distal Calf, Ankle) and the perforators statement. Middle: Add'l Measurements, Create Diagram (new vein
+diagram of the visit). Below: Add'l Findings 1–3, Impression, "DVT? There [is NO | is] evidence of DVT found during this
+examination.", Location / Extent of DVT, superficial thrombophlebitis or flow characteristics.
+Not reproduced: Date of Service, Name of Exam, Add Charge, Leg Study, Tutorial, insurance guideline text, Branch
+Tributarie (Group 1 / 2). Field codes start with `ius_` (Post EVLT's ultrasound fields keep `us_`). Positions are
+approximate until a SonoSoft screenshot replaces the photos.
+
 ## Assessment Plan+
 Order: Impression → Recommendations → Stockings detail → Additional Comments.
 Stockings structured: type, compression, gender, color, measurements.

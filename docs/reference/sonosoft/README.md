@@ -82,7 +82,7 @@ Printed SonoSoft screens marked by hand (✓ = needed, X = not needed):
   of DVT found during this examination"; Location / Extent of DVT, superficial
   thrombophlebitis or flow characteristics. Drop: Date of Service, Name of Exam, Add Charge,
   Leg Study, Tutorial, insurance guideline text, and the Branch Tributarie section
-  (Group 1 / Group 2). Needs a clean screenshot before it is built.
+  (Group 1 / Group 2). Built from the photos (ADR-041); refine with a screenshot.
 
 Follow-up the same day (second set of marked printouts):
 

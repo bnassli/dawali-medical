@@ -144,6 +144,7 @@ export function assertExclusionRulesConsistent(
 export const SUBJ_COMPLAINTS_HABITS_SECTION_CODE = "subj_complaints_habits";
 export const PAST_VENOUS_HX_SECTION_CODE = "past_venous_hx";
 export const PAST_MEDICAL_HX_SECTION_CODE = "past_medical_hx";
+export const INITIAL_US_EXAM_SECTION_CODE = "initial_us_exam";
 export const ASSESSMENT_PLAN_SECTION_CODE = "assessment_plan";
 export const TREATMENT_PLAN_SECTION_CODE = "treatment_plan";
 
@@ -170,6 +171,37 @@ function rowFields(
   }));
 }
 
+
+/**
+ * Initial US Exam (ADR-041): one leg's fields, mirrored for Right ("r") and Left ("l").
+ * Option lists are shared between the legs, so a value added on one leg is offered on both.
+ */
+function usLegFields(side: "r" | "l"): FieldDefinitionSeed[] {
+  const leg = side === "r" ? "Right" : "Left";
+  const c = (name: string) => `ius_${side}_${name}`;
+  return [
+    { code: c("deep_cfv_reflux"), label: `${leg} deep reflux: Common Femoral`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("deep_fv_reflux"), label: `${leg} deep reflux: Femoral`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("deep_pop_reflux"), label: `${leg} deep reflux: Popliteal`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("gsv_status"), label: `${leg} GSV`, type: FIELD_TYPES.CHOICE },
+    { code: c("gsv_size_sfj"), label: `${leg} GSV size at the femoral junction`, type: FIELD_TYPES.SELECT, optionList: "ius_gsv_size_sfj" },
+    { code: c("gsv_size_knee"), label: `${leg} GSV size at knee`, type: FIELD_TYPES.NUMBER },
+    { code: c("gsv_tortuous"), label: `${leg} GSV tortuous`, type: FIELD_TYPES.SELECT, optionList: "ius_tortuous" },
+    { code: c("gsv_reflux_time"), label: `${leg} GSV reflux time`, type: FIELD_TYPES.SELECT, optionList: "ius_reflux_time" },
+    { code: c("gsv_reflux_extent"), label: `${leg} GSV distal extent of reflux`, type: FIELD_TYPES.SELECT, optionList: "ius_reflux_extent" },
+    { code: c("ssv_status"), label: `${leg} SSV`, type: FIELD_TYPES.CHOICE },
+    { code: c("ssv_size_spj"), label: `${leg} SSV size at the popliteal junction`, type: FIELD_TYPES.SELECT, optionList: "ius_ssv_size_spj" },
+    { code: c("ssv_reflux_time"), label: `${leg} SSV reflux time`, type: FIELD_TYPES.SELECT, optionList: "ius_reflux_time" },
+    { code: c("accessory_anterior"), label: `${leg} incompetent accessory: anterior`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("accessory_posterior"), label: `${leg} incompetent accessory: posterior`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("perf_thigh"), label: `${leg} incompetent perforator: Thigh`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("perf_proximal_calf"), label: `${leg} incompetent perforator: Proximal Calf`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("perf_mid_calf"), label: `${leg} incompetent perforator: Mid Calf`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("perf_distal_calf"), label: `${leg} incompetent perforator: Distal Calf`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("perf_ankle"), label: `${leg} incompetent perforator: Ankle`, type: FIELD_TYPES.CHECKBOX },
+    { code: c("perforators_statement"), label: `${leg} perforators statement`, type: FIELD_TYPES.SELECT, optionList: "ius_perforators_statement" },
+  ];
+}
 export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
   // --- Subj Complaints Habits. Labels are SonoSoft's, word for word (R1b, ADR-029). ---
   { code: "reason_for_visit", label: "Reason for visit", type: FIELD_TYPES.SELECT },
@@ -232,6 +264,21 @@ export const CLINICAL_FIELD_DEFINITIONS: FieldDefinitionSeed[] = [
   { code: "venous_hx_clotting_disorder", label: "Clotting Disorder", type: FIELD_TYPES.CHECKBOX },
   // Several sentences (picked from its list and/or typed), shown wrapped like SonoSoft's narrative box.
   { code: "vein_history_narrative", label: "Vein History Narrative", type: FIELD_TYPES.MULTISELECT },
+
+  // --- Initial US Exam (ADR-041) ---
+  ...usLegFields("r"),
+  ...usLegFields("l"),
+  { code: "ius_additional_measurements", label: "Add'l Measurements", type: FIELD_TYPES.TEXTAREA },
+  { code: "ius_addl_findings_1", label: "Add'l Findings", type: FIELD_TYPES.SELECT, optionList: "ius_addl_findings" },
+  { code: "ius_addl_findings_2", label: "Add'l Findings 2", type: FIELD_TYPES.SELECT, optionList: "ius_addl_findings" },
+  { code: "ius_addl_findings_3", label: "Add'l Findings 3", type: FIELD_TYPES.SELECT, optionList: "ius_addl_findings" },
+  { code: "ius_impression", label: "Initial US Impression", type: FIELD_TYPES.MULTISELECT },
+  { code: "ius_dvt", label: "DVT? There", type: FIELD_TYPES.CHOICE },
+  {
+    code: "ius_dvt_location",
+    label: "Location / Extent of DVT, superficial thrombophlebitis or flow characteristics",
+    type: FIELD_TYPES.MULTISELECT,
+  },
 
   // --- Past Medical Hx ---
   { code: "past_medical_history", label: "Past Medical Hx", type: FIELD_TYPES.MULTISELECT },
@@ -418,6 +465,43 @@ export const PAST_VENOUS_HX_FIELD_CODES = [
   "vein_history_narrative",
 ];
 
+const usLegCodes = (side: "r" | "l") =>
+  [
+    "deep_cfv_reflux",
+    "deep_fv_reflux",
+    "deep_pop_reflux",
+    "gsv_status",
+    "gsv_size_sfj",
+    "gsv_size_knee",
+    "gsv_tortuous",
+    "gsv_reflux_time",
+    "gsv_reflux_extent",
+    "ssv_status",
+    "ssv_size_spj",
+    "ssv_reflux_time",
+    "accessory_anterior",
+    "accessory_posterior",
+    "perf_thigh",
+    "perf_proximal_calf",
+    "perf_mid_calf",
+    "perf_distal_calf",
+    "perf_ankle",
+    "perforators_statement",
+  ].map((n) => `ius_${side}_${n}`);
+
+/** SonoSoft Initial US Exam (ADR-041): right leg, left leg, middle column, then the findings below. */
+export const INITIAL_US_EXAM_FIELD_CODES = [
+  ...usLegCodes("r"),
+  ...usLegCodes("l"),
+  "ius_additional_measurements",
+  "ius_addl_findings_1",
+  "ius_addl_findings_2",
+  "ius_addl_findings_3",
+  "ius_impression",
+  "ius_dvt",
+  "ius_dvt_location",
+];
+
 /** SonoSoft order (P1-P3): Unknown under Family Medical Hx; the female statement last. */
 export const PAST_MEDICAL_HX_FIELD_CODES = [
   "past_medical_history",
@@ -547,9 +631,16 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     labelOverrides: { family_history: "Family Medical Hx" },
   },
   {
+    // SonoSoft's Workup order continues: ..., Initial US Exam, CEAP VCSS, Assessment Plan+.
+    code: INITIAL_US_EXAM_SECTION_CODE,
+    name: "Initial US Exam",
+    sortOrder: 4,
+    fieldCodes: INITIAL_US_EXAM_FIELD_CODES,
+  },
+  {
     code: ASSESSMENT_PLAN_SECTION_CODE,
     name: "Assessment Plan+",
-    sortOrder: 4,
+    sortOrder: 5,
     fieldCodes: ASSESSMENT_PLAN_FIELD_CODES,
   },
   {
@@ -557,16 +648,16 @@ export const CLINICAL_SECTIONS: SectionDefinitionSeed[] = [
     // columns are TREATMENT_PLAN_COLUMN_CODES and its rows are plan items.
     code: TREATMENT_PLAN_SECTION_CODE,
     name: "Treatment Plan",
-    sortOrder: 5,
+    sortOrder: 6,
     fieldCodes: [],
   },
   // SonoSoft's Treatment set order: Treatment Plan, Laser Ablation, ..., Follow Up Office Visit.
-  { code: "laser_ablation", name: "Laser Ablation", sortOrder: 6, fieldCodes: LASER_ABLATION_FIELD_CODES },
-  { code: "follow_up_office_visit", name: "Follow Up Office Visit", sortOrder: 7, fieldCodes: FOLLOW_UP_FIELD_CODES },
+  { code: "laser_ablation", name: "Laser Ablation", sortOrder: 7, fieldCodes: LASER_ABLATION_FIELD_CODES },
+  { code: "follow_up_office_visit", name: "Follow Up Office Visit", sortOrder: 8, fieldCodes: FOLLOW_UP_FIELD_CODES },
   {
     code: "post_evlt_follow_up",
     name: "Post EVLT Comp Follow Up",
-    sortOrder: 8,
+    sortOrder: 9,
     fieldCodes: POST_EVLT_FIELD_CODES,
   },
 ];
@@ -620,7 +711,12 @@ export interface NumericFieldRule {
 export const STOCKING_MEASUREMENT_UNIT = "cm";
 const STOCKING_RULE: NumericFieldRule = { min: 0, max: 200, decimals: 1, unit: STOCKING_MEASUREMENT_UNIT };
 
+/** Vein diameters on ultrasound, millimetres (ADR-041). */
+const VEIN_DIAMETER_RULE: NumericFieldRule = { min: 0, max: 40, decimals: 1, unit: "mm" };
+
 export const NUMERIC_FIELD_RULES: Record<string, NumericFieldRule> = {
+  ius_r_gsv_size_knee: VEIN_DIAMETER_RULE,
+  ius_l_gsv_size_knee: VEIN_DIAMETER_RULE,
   stockings_mid_thigh: STOCKING_RULE,
   stockings_mid_calf: STOCKING_RULE,
   stockings_mid_ankle: STOCKING_RULE,
@@ -629,7 +725,23 @@ export const NUMERIC_FIELD_RULES: Record<string, NumericFieldRule> = {
 };
 
 /** Fixed values of `choice` fields (presentation only, never clinical options). */
+// SonoSoft's three radio buttons for a saphenous vein (ADR-041).
+const VEIN_STATUS = [
+  { value: "competent", label: "Competent" },
+  { value: "incompetent", label: "Incompetent" },
+  { value: "absent", label: "Absent" },
+] as const;
+
 export const FIXED_CHOICES: Record<string, readonly { value: string; label: string }[]> = {
+  ius_r_gsv_status: VEIN_STATUS,
+  ius_l_gsv_status: VEIN_STATUS,
+  ius_r_ssv_status: VEIN_STATUS,
+  ius_l_ssv_status: VEIN_STATUS,
+  // "There [is NO | is] evidence of DVT found during this examination."
+  ius_dvt: [
+    { value: "no", label: "is NO" },
+    { value: "yes", label: "is" },
+  ],
   // Fixed by the requirements (§6.5) and SonoSoft's three radio buttons.
   followup_patient_feels: [
     { value: "better", label: "Better" },

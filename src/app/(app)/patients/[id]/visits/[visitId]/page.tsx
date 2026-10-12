@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
@@ -167,6 +168,14 @@ export default async function VisitChartPage({
               canWrite={canWrite}
               canAddOption={canAddOption}
               patientSex={section.patientSex}
+              diagramLinks={
+                canWrite && visitOpen
+                  ? {
+                      leg: `/patients/${patient.id}/visits/${visit.id}/diagrams/${randomUUID()}?type=leg`,
+                      vein: `/patients/${patient.id}/visits/${visit.id}/diagrams/${randomUUID()}?type=vein`,
+                    }
+                  : undefined
+              }
             />
           </>
         ) : (

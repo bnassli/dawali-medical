@@ -861,3 +861,22 @@ the doctor picks or types them instead. Calculate Caprini Score and Tutorial are
 reproduced. Seed only, no migration. Layout measured on a photo of the printout; refine it
 when a screenshot is available. Review of Systems, Vascular Findings, Physical Exam and
 CEAP VCSS are not part of V1 (same decision).
+
+ADR-041: Initial US Exam tab. Product Owner decision 2026-10-12 (marked printouts of
+SonoSoft's Initial US Exam, top and bottom). New section `initial_us_exam`, sort order 4
+(SonoSoft's Workup order: after Past Medical Hx, before Assessment Plan+; the later tabs
+move down by one). 47 fields, prefix `ius_` so they never collide with Post EVLT Comp
+Follow Up's `us_*` ultrasound fields: per leg (`ius_r_*` / `ius_l_*`, mirrored) three deep
+reflux checkboxes, GSV and SSV status as `choice` fields with SonoSoft's three radio values
+(Competent / Incompetent / Absent, FIXED_CHOICES like "Patient feels"), size at knee as a
+number in mm (0–40, one decimal), the combo fields (sizes at the junctions, tortuous,
+reflux times, distal extent, perforators statement) as selects whose option lists are
+shared by both legs, accessories and five perforator checkboxes; then Add'l Measurements
+(text), Add'l Findings 1–3 (one shared list), Impression, the DVT statement as a choice
+("is NO" / "is") and Location / Extent of DVT. "Create Diagram" inside the tab is a link to
+a new vein diagram of the visit, built on the server like the Diagrams section (no new
+diagram logic; disabled when the user may not write or the visit is closed). Dropped
+(Product Owner): Date of Service, Name of Exam, Add Charge, Leg Study, Tutorial, the
+insurance text and Branch Tributarie. Seed only, no migration. The reports do not read
+these fields yet (Template 2 still uses its own text); layout measured on photos of the
+printouts, to refine when a screenshot is available.
