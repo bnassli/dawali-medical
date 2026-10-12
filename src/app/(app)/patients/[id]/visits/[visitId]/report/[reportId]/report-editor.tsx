@@ -240,10 +240,13 @@ function ReportPreview(props: {
                 <List>{items.map((l, i) => <li key={i}>{l}</li>)}</List>
               </>
             ) : text ? (
-              <p>
-                {s.heading ? <strong>{s.heading} </strong> : null}
-                {text}
-              </p>
+              // A blank line starts a new paragraph, as in the .docx (docx.ts).
+              text.split(/\n{2,}/).map((para, i) => (
+                <p key={i}>
+                  {i === 0 && s.heading ? <strong>{s.heading} </strong> : null}
+                  {para.replace(/\n/g, " ")}
+                </p>
+              ))
             ) : null}
             {/* eslint-disable-next-line @next/next/no-img-element -- private, authenticated image */}
             {diagram ? <img className="report-diagram-img" src={`/api/files/${diagram}`} alt={`${s.diagramAfter} diagram`} /> : null}

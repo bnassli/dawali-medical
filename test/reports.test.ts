@@ -10,7 +10,14 @@ import { clinicalFieldDefinitions, patients } from "@/db/schema";
 import { LocalFileStorage } from "@/lib/file-storage";
 import { saveClinicalEntry } from "@/modules/clinical/service";
 import { saveDiagramVersion, readPatientFile } from "@/modules/diagrams/service";
-import { composeHistory, composePastMedicalHistory, composeSections } from "@/modules/report-engine/compose";
+import {
+  composeHistory,
+  composePastMedicalHistory,
+  composeSections,
+  composeUltrasoundGeneral,
+  composeUltrasoundLeg,
+  composeVenousHistory,
+} from "@/modules/report-engine/compose";
 import {
   getReportEditorData,
   InvalidReportError,
@@ -54,6 +61,64 @@ describe("report composer (no broken sentences)", () => {
     expect(s.impression).toBe("CVD C1");
     expect(s.recommendations).toBe("");
     expect(s.physical_examination).toBe("");
+  });
+
+  const on = { text: "", checked: true };
+  const v = (t: string) => ({ text: t, checked: false });
+
+  it("Past Venous Hx goes into HISTORY (ADR-040)", () => {
+    expect(
+      composeHistory({
+        ...base,
+        values: {
+          venous_hx_phlebitis: on,
+          venous_hx_dvt: on,
+          venous_hx_prior_vein_surgery: on,
+          venous_hx_sonogram: { text: "", checked: false },
+          vein_history_narrative: v("stripping of the right GSV in 2015"),
+          current_meds_none: on,
+        },
+      }),
+    ).toBe(
+      "Sara Ali is a 40-year-old female. Past venous history of phlebitis, DVT and prior vein surgery. Stripping of the right GSV in 2015. The patient takes no medications.",
+    );
+    expect(composeVenousHistory({ venous_hx_clotting_disorder: on })).toBe("Past venous history of a clotting disorder.");
+    expect(composeVenousHistory({})).toBe("");
+  });
+
+  it("Initial US Exam goes into ULTRASOUND FINDINGS: a paragraph per leg, then findings and the DVT statement (ADR-041)", () => {
+    const values = {
+      ius_r_deep_cfv_reflux: on,
+      ius_r_deep_pop_reflux: on,
+      ius_r_gsv_status: v("incompetent"),
+      ius_r_gsv_size_sfj: v("8 mm"),
+      ius_r_gsv_size_knee: v("5.5"),
+      ius_r_gsv_tortuous: v("Tortuous"),
+      ius_r_gsv_reflux_time: v("> 3 sec"),
+      ius_r_gsv_reflux_extent: v("mid calf"),
+      ius_r_ssv_status: v("competent"),
+      ius_r_accessory_anterior: on,
+      ius_r_perf_mid_calf: on,
+      ius_r_perf_ankle: on,
+      ius_l_ssv_status: v("absent"),
+      ius_addl_findings_1: v("Spider veins of both ankles"),
+      ius_dvt: v("no"),
+      ius_impression: v("Right GSV insufficiency"),
+      us_findings: v("Post EVLT: GSV closed"),
+    };
+    const s = composeSections({ ...base, values });
+    expect((s.ultrasound_findings ?? "").split("\n\n")).toEqual([
+      "Right leg: Deep venous reflux in the common femoral and popliteal veins. GSV incompetent: size at the femoral junction 8 mm, size at the knee 5.5 mm, tortuous, reflux time > 3 sec, distal extent of reflux mid calf. SSV competent. Incompetent anterior accessory saphenous vein. Incompetent perforators: mid calf, ankle.",
+      "Left leg: SSV absent.",
+      "Spider veins of both ankles. There is NO evidence of DVT found during this examination. Ultrasound impression: Right GSV insufficiency.",
+      "Post EVLT: GSV closed.",
+    ]);
+    expect(composeUltrasoundGeneral({ ius_dvt: v("yes"), ius_dvt_location: v("thrombus in the left popliteal vein") })).toBe(
+      "There is evidence of DVT found during this examination. Thrombus in the left popliteal vein.",
+    );
+    // Nothing recorded on a leg: no paragraph, no empty heading.
+    expect(composeUltrasoundLeg({}, "l")).toBe("");
+    expect(composeSections({ ...base, values: {} }).ultrasound_findings).toBe("");
   });
 });
 
@@ -120,6 +185,24 @@ describe("reports (R5, ADR-034)", () => {
     expect(data.content.sections.history).toMatch(/is a \d+-year-old female\.$/);
     expect(data.content.sections.impression).toBe("CVD C1");
     expect(data.content.diagramFileIds).toEqual({ leg: leg.fileId, vein: null });
+  });
+
+  it("the first draft includes what was recorded in Past Venous Hx and Initial US Exam", async () => {
+    const { visitId } = await setup();
+    const save = async (code: string, value: { freeText?: string; checked?: boolean }) => {
+      const [field] = await db.select().from(clinicalFieldDefinitions).where(eq(clinicalFieldDefinitions.code, code));
+      await saveClinicalEntry(db, doctor, { visitId, fieldId: field!.id, optionIds: [], freeText: value.freeText ?? "", checked: value.checked, expectedVersion: 0, clientMutationId: randomUUID() });
+    };
+    await save("venous_hx_dvt", { checked: true });
+    await save("venous_hx_sclerotherapy", { checked: true });
+    await save("ius_l_gsv_status", { freeText: "incompetent" });
+    await save("ius_l_gsv_size_knee", { freeText: "6.2" });
+    await save("ius_dvt", { freeText: "no" });
+    const data = await getReportEditorData(db, doctor, { visitId, reportId: randomUUID(), templateCode: "venous_evaluation" }, TZ);
+    expect(data.content.sections.history).toMatch(/female\. Past venous history of DVT and sclerotherapy\.$/);
+    expect(data.content.sections.ultrasound_findings).toBe(
+      "Left leg: GSV incompetent: size at the knee 6.2 mm.\n\nThere is NO evidence of DVT found during this examination.",
+    );
   });
 
   it("draft -> final (.docx with data and diagrams) -> amended; finalized versions are kept", async () => {
