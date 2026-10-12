@@ -79,8 +79,8 @@ describe("clinical entries (Subj Complaints Habits)", () => {
     expect(view.fields.map((f) => f.code).slice(0, 4)).toEqual([
       "reason_for_visit",
       "problem_list",
+      "problem_list_none",
       "chief_complaints",
-      "characteristics",
     ]);
     expect(view.fields.at(-1)?.code).toBe("allergies_no_known");
     expect(view.fields.every((f) => f.version === 0)).toBe(true);

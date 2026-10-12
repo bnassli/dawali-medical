@@ -830,3 +830,53 @@ as `stock_count` movements linked to the count; balances are read under the batc
 at posting time; replaying a count is a no-op; counts are append-only. Migration 0012 is
 additive (rollback plan in its header). Barcode scanning and the nurse's quick issue
 screen (FEFO) follow in I3b.
+
+ADR-039: Visit doctor and nurse; "None" for Problem List; SonoSoft shell. Product Owner
+requests of 2026-10-12. (1) Each visit records its doctor and its nurse as references to
+user accounts (`visits.doctor_user_id`, `visits.nurse_user_id`, migration 0013, additive):
+the doctor is chosen from active users with the DOCTOR role, the nurse from active users
+with the NURSE_ASSISTANT role, so reports and inventory can later use the real accounts.
+Shown on every tab, above the clinical tabs, where SonoSoft has "Interp Phys/Surgeon" and
+"Technologist" (labels "Doctor" / "Nurse"). Same rules as clinical entries: clinical.write
+(Admin and Reception read only), open visit only, optimistic check against the value the
+page showed (a stale change is refused and the current value shown, never
+last-write-wins), audited as `visit.staff`. A person who later loses the role stays shown
+on old visits. (2) Problem List gets SonoSoft's "None" checkbox (`problem_list_none`,
+seed-only, no migration) with the same exclusion as Current Meds / None (ADR-027
+mechanism). (3) The patient header, tabs and visit panel follow SonoSoft's geometry and
+the SonoSoft form is drawn at 1:1 (its layout coordinates are SonoSoft screen pixels)
+instead of being enlarged up to 1.6x; the excluded legacy areas (§3, §14: Workup/Check
+Out, photo, Time Card, billing, the grey navigation row) leave no gap.
+
+ADR-040: Past Venous Hx tab. Product Owner decision 2026-10-12 (marked printout of
+SonoSoft's Past Venous Hx; rule of the same day: built tabs keep every field, only new tabs
+and missing items are added). New section `past_venous_hx`, sort order 2 (SonoSoft's
+Workup order; the later tabs move down by one). Twelve independent checkbox fields
+(`venous_hx_*`), each its own version stream and audit trail, and
+`vein_history_narrative` (multiselect: sentences from its option list, + Add New, plus
+visit-only free text; shown wrapped like SonoSoft's narrative box). The narrative is not
+generated from the checkboxes: SonoSoft's automatic sentences turn every unticked box into
+a negative statement ("does not have phlebitis"), which records findings nobody entered;
+the doctor picks or types them instead. Calculate Caprini Score and Tutorial are not
+reproduced. Seed only, no migration. Layout measured on a photo of the printout; refine it
+when a screenshot is available. Review of Systems, Vascular Findings, Physical Exam and
+CEAP VCSS are not part of V1 (same decision).
+
+ADR-041: Initial US Exam tab. Product Owner decision 2026-10-12 (marked printouts of
+SonoSoft's Initial US Exam, top and bottom). New section `initial_us_exam`, sort order 4
+(SonoSoft's Workup order: after Past Medical Hx, before Assessment Plan+; the later tabs
+move down by one). 47 fields, prefix `ius_` so they never collide with Post EVLT Comp
+Follow Up's `us_*` ultrasound fields: per leg (`ius_r_*` / `ius_l_*`, mirrored) three deep
+reflux checkboxes, GSV and SSV status as `choice` fields with SonoSoft's three radio values
+(Competent / Incompetent / Absent, FIXED_CHOICES like "Patient feels"), size at knee as a
+number in mm (0–40, one decimal), the combo fields (sizes at the junctions, tortuous,
+reflux times, distal extent, perforators statement) as selects whose option lists are
+shared by both legs, accessories and five perforator checkboxes; then Add'l Measurements
+(text), Add'l Findings 1–3 (one shared list), Impression, the DVT statement as a choice
+("is NO" / "is") and Location / Extent of DVT. "Create Diagram" inside the tab is a link to
+a new vein diagram of the visit, built on the server like the Diagrams section (no new
+diagram logic; disabled when the user may not write or the visit is closed). Dropped
+(Product Owner): Date of Service, Name of Exam, Add Charge, Leg Study, Tutorial, the
+insurance text and Branch Tributarie. Seed only, no migration. The reports do not read
+these fields yet (Template 2 still uses its own text); layout measured on photos of the
+printouts, to refine when a screenshot is available.

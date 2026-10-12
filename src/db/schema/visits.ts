@@ -26,6 +26,10 @@ export const visits = pgTable(
      */
     reason: text("reason"),
     status: text("status").notNull().default("open"),
+    /** Doctor of this visit: a user with the DOCTOR role (ADR-039). Optional. */
+    doctorUserId: uuid("doctor_user_id").references(() => users.id, { onDelete: "restrict" }),
+    /** Nurse / assistant of this visit: a user with the NURSE_ASSISTANT role (ADR-039). Optional. */
+    nurseUserId: uuid("nurse_user_id").references(() => users.id, { onDelete: "restrict" }),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),

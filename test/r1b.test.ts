@@ -14,7 +14,6 @@ import {
   clinicalSectionFields,
   clinicalSections,
   patients,
-  visits,
 } from "@/db/schema";
 import { seed, seedClinicalDefinitions } from "@/db/seed";
 import {
@@ -197,6 +196,7 @@ describe("R1b: new field types and rules (ADR-029)", () => {
 
   describe("None / No known (S5, S6)", () => {
     for (const [flag, list] of [
+      ["problem_list_none", "problem_list"],
       ["current_meds_none", "current_meds"],
       ["allergies_no_known", "allergies"],
     ] as const) {
@@ -315,7 +315,12 @@ describe("R1b: migration 0007 on existing data", () => {
 
     await seedClinicalDefinitions(db, LEGACY);
     const [patient] = await db.insert(patients).values({ firstName: "Old", lastName: "Data" }).returning();
-    const [visit] = await db.insert(visits).values({ patientId: patient!.id }).returning();
+    // Plain SQL: this database is at the pre-0007 schema, and the ORM's visits
+    // table has columns added by later migrations (0013: doctor/nurse).
+    const inserted = await db.execute<{ id: string }>(
+      sql`insert into visits (patient_id) values (${patient!.id}) returning id`,
+    );
+    const visit = inserted.rows[0];
     ids.visit = visit!.id;
     const rows = await db.select().from(clinicalFieldDefinitions);
     for (const r of rows) ids[r.code] = r.id;
