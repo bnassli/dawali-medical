@@ -44,6 +44,8 @@ const EXPECTED_TABLES = [
   "stock_movements",
   "stock_counts",
   "stock_count_lines",
+  "procedure_kits",
+  "procedure_kit_items",
 ];
 
 async function checkTablesExist(connectionString: string): Promise<string[]> {

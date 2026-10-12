@@ -33,6 +33,7 @@ import {
  */
 
 export const EXPIRY_WARNING_DAYS = 60;
+export { USE_WARNING_DAYS } from "./fefo";
 
 // ---------------------------------------------------------------- catalogue
 

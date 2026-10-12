@@ -880,3 +880,44 @@ diagram logic; disabled when the user may not write or the visit is closed). Dro
 insurance text and Branch Tributarie. Seed only, no migration. The reports do not read
 these fields yet (Template 2 still uses its own text); layout measured on photos of the
 printouts, to refine when a screenshot is available.
+
+**Addendum (inventory review fixes).** (1) An invoice may list the same product, lot and
+expiry on more than one line (paid + free bonus): every `purchase_receipt_lines` row is
+kept, and the units of lines resolving to the same batch are summed into one `receipt`
+movement for that batch (the idempotency index is one movement per receipt, type and
+batch). Unit cost stays the weighted average of the priced lines, so a free line lowers it.
+(2) Inventory dates are typed day/month/year (dd/mm/yyyy), as on invoices and boxes; the
+browser date picker showed the US order. A date that is not real is refused before
+anything is sent; the materials-used report also accepts yyyy-mm-dd in links. No schema
+change.
+(3) Expired batches (PO decision, option A): a batch is usable on a patient through its
+expiry day (clinic time zone) and refused from the next day (`ExpiredBatchError`, nothing
+recorded). The visit's materials panel lists expired batches last, in red, not selectable,
+with a note to tell the storekeeper; a batch within 30 days of expiry (`USE_WARNING_DAYS`)
+is flagged with the days left. The store screens keep their 60-day "expiring soon" list
+(`EXPIRY_WARNING_DAYS`) and red expired rows; an expired batch is written off with an
+adjustment. Transfers are not blocked (e.g. moving it to be returned). No controlled
+drugs, no tablets, no barcode scanners for now (PO).
+
+ADR-042: I4 — Procedure kits. Product Owner request of 2026-10-12 (after the inventory
+review): the nurse picks the procedure (e.g. EVLT) and records all its materials in one
+step instead of item by item. A kit (`procedure_kits`, `procedure_kit_items`) is
+configuration kept by the storekeeper under Inventory → Procedure kits (needs
+`inventory.manage`; everyone with `inventory.read` sees the list): a name, active flag and
+the usual quantity of each product, in the product's unit. Kits are not seeded (products
+differ per clinic; CLAUDE.md rule #10). Edits are audited with before/after
+(`procedure_kit.create` / `.update`) and use an optimistic check on `updated_at` — a stale
+edit is refused, never last-write-wins; the screen chooses the id of a new kit so a
+repeated save is not a second kit. A kit is deactivated, not deleted, once used
+(movements reference it). On the visit, the materials panel offers the active kits: the
+nurse chooses the kit and store (Operations first), may change a quantity or drop a line
+for this case, and sees the batches each line will be taken from. Allocation is
+first-expiry-first, never an expired batch (ADR addendum above), batches without expiry
+last; the same pure function (`src/modules/inventory/fefo.ts`) previews on the screen and
+allocates on the server under the per-batch locks. Recording is all or nothing: if any
+line lacks usable stock in that store nothing is recorded and the shortage is listed.
+Each batch taken is one `consumption` movement (patient, visit, doctor, `kit_id`), sharing
+one client mutation id, so a retry is a no-op; one audit entry `stock.consume_kit` lists
+the lines. The visit list shows "(kit …)" on those lines. Migration 0014 is additive
+(rollback in its header). It must be applied after 0013 (PR #15): drizzle's migrator only
+applies migrations newer than the last applied one, so PR #15 is merged first.

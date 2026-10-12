@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { parseDayMonthYear } from "@/lib/day-month-year";
 import { newMutationId } from "@/modules/clinical/autosave-client";
 import type { CountSheet } from "@/modules/inventory/catalog";
 import type { Dict } from "@/modules/inventory/i18n";
+import { DateInput } from "../_ui/date-input";
 import { stockCountAction, type ActionResult } from "../actions";
 
 interface NewLine {
@@ -30,6 +32,7 @@ export function StocktakeForm({ d, warehouseId, sheet }: { d: Dict; warehouseId:
   const setLine = (i: number, p: Partial<NewLine>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...p } : l)));
 
   async function post() {
+    if (lines.some((l) => parseDayMonthYear(l.expiryDate) === null)) return setResult({ ok: false, message: d.err_badDate });
     const payload = [
       ...sheet.batches.flatMap((b) => {
         const c = num(counted[b.batchId] ?? "");
@@ -39,7 +42,7 @@ export function StocktakeForm({ d, warehouseId, sheet }: { d: Dict; warehouseId:
         const c = num(l.counted);
         return c === null
           ? []
-          : [{ batchId: null, productName: l.productName, unit: l.unit, lotNumber: l.lotNumber, expiryDate: l.expiryDate || null, countedQuantity: c }];
+          : [{ batchId: null, productName: l.productName, unit: l.unit, lotNumber: l.lotNumber, expiryDate: parseDayMonthYear(l.expiryDate) || null, countedQuantity: c }];
       }),
     ];
     if (payload.length === 0) return setResult({ ok: false, message: d.countEmpty });
@@ -98,7 +101,7 @@ export function StocktakeForm({ d, warehouseId, sheet }: { d: Dict; warehouseId:
                 <input aria-label={`${d.unit} ${d.newLine} ${i + 1}`} placeholder={d.unit} size={6} value={l.unit} onChange={(e) => setLine(i, { unit: e.target.value })} />
               </td>
               <td><input aria-label={`${d.lot} ${d.newLine} ${i + 1}`} size={8} value={l.lotNumber} onChange={(e) => setLine(i, { lotNumber: e.target.value })} /></td>
-              <td><input aria-label={`${d.expiry} ${d.newLine} ${i + 1}`} type="date" value={l.expiryDate} onChange={(e) => setLine(i, { expiryDate: e.target.value })} /></td>
+              <td><DateInput label={`${d.expiry} ${d.newLine} ${i + 1}`} value={l.expiryDate} onChange={(v) => setLine(i, { expiryDate: v })} /></td>
               <td>0</td>
               <td><input aria-label={`${d.countedQty} ${d.newLine} ${i + 1}`} inputMode="decimal" size={6} value={l.counted} onChange={(e) => setLine(i, { counted: e.target.value })} /></td>
               <td>

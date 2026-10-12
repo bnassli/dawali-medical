@@ -14,6 +14,7 @@ export default async function InventoryLayout({ children }: { children: React.Re
     { href: "/inventory", label: d.navDashboard, exact: true },
     { href: "/inventory/stock", label: d.navStock },
     { href: "/inventory/products", label: d.navProducts },
+    { href: "/inventory/kits", label: d.navKits },
     ...(manage
       ? [
           { href: "/inventory/stocktake", label: d.navStocktake },

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
+import { todayIn } from "@/lib/age";
+import { getEnv } from "@/lib/env";
 import { requireActor } from "@/modules/auth/current-actor";
 import {
   getClinicalSectionForVisit,
@@ -19,6 +21,8 @@ import { DiagramsPanel } from "./diagrams-panel";
 import { ReportsPanel } from "./reports-panel";
 import { MaterialsPanel } from "./materials-panel";
 import { VisitStaffRow } from "./visit-staff-row";
+import { daysUntil, USE_WARNING_DAYS } from "@/modules/inventory/fefo";
+import { listKits } from "@/modules/inventory/kits";
 import { listDoctors, listWarehouses, stockLevels, visitConsumption } from "@/modules/inventory/service";
 import { listReportsForVisit } from "@/modules/report-engine/service";
 import { listDiagramsForVisit } from "@/modules/diagrams/service";
@@ -72,7 +76,8 @@ export default async function VisitChartPage({
   const diagrams = canRead ? await listDiagramsForVisit(getDb(), actor, visit.id) : [];
   const reportList = canRead ? await listReportsForVisit(getDb(), actor, visit.id) : [];
 
-  // Materials used (I1, ADR-035): Operations store first, earliest expiry first.
+  // Materials used (I1, ADR-035): Operations store first, earliest expiry first;
+  // expired batches last, shown but not selectable (PO decision).
   const canSeeStock = actor.permissions.has(PERMISSIONS.INVENTORY_READ);
   const canConsume = actor.permissions.has(PERMISSIONS.INVENTORY_CONSUME) && visitOpen;
   const materials = canSeeStock
@@ -84,17 +89,37 @@ export default async function VisitChartPage({
         const used = await visitConsumption(getDb(), actor, visit.id);
         const doctors = canConsume ? await listDoctors(getDb()) : [];
         const dmy = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "no expiry");
-        return {
-          batches: stock.map((r) => ({
+        const today = todayIn(getEnv().APP_TIME_ZONE);
+        const batches = stock.map((r) => {
+          const left = r.expiryDate === null ? null : daysUntil(r.expiryDate, today);
+          return {
             warehouseId: r.warehouseId,
             warehouseName: r.warehouseName,
             batchId: r.batchId,
             label: `${r.productName} — lot ${r.lotNumber || "—"}, exp ${dmy(r.expiryDate)} (${r.quantity} ${r.unit} left)`,
+            expiry: dmy(r.expiryDate),
+            expired: left !== null && left < 0,
+            expiresInDays: left !== null && left >= 0 && left <= USE_WARNING_DAYS ? left : null,
+          };
+        });
+        return {
+          batches: [...batches.filter((b) => !b.expired), ...batches.filter((b) => b.expired)],
+          // I4 (ADR-042): procedure kits, previewed against the same stock.
+          kits: canConsume ? await listKits(getDb(), actor, { activeOnly: true }) : [],
+          stores: stores.map((w) => ({ id: w.id, name: w.name })),
+          stock: stock.map((r) => ({
+            warehouseId: r.warehouseId,
+            productId: r.productId,
+            batchId: r.batchId,
+            lotNumber: r.lotNumber,
+            expiryDate: r.expiryDate,
+            quantity: r.quantity,
           })),
+          today,
           doctors,
           used: used.map((u) => ({
             id: u.id,
-            text: `${u.quantity} ${u.unit} ${u.productName} (lot ${u.lotNumber || "—"}) — Dr. ${u.doctorName ?? "?"}, recorded by ${u.recordedBy ?? "?"}`,
+            text: `${u.quantity} ${u.unit} ${u.productName} (lot ${u.lotNumber || "—"}) — Dr. ${u.doctorName ?? "?"}, recorded by ${u.recordedBy ?? "?"}${u.kitName ? ` (kit ${u.kitName})` : ""}`,
           })),
         };
       })()
@@ -207,6 +232,10 @@ export default async function VisitChartPage({
           defaultDoctorId={materials.doctors.some((d) => d.id === actor.userId) ? actor.userId : null}
           canRecord={canConsume}
           used={materials.used}
+          kits={materials.kits}
+          stores={materials.stores}
+          stock={materials.stock}
+          today={materials.today}
         />
       ) : null}
 

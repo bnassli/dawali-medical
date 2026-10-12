@@ -18,6 +18,8 @@ import {
   warehouses,
   type ExtractedInvoice,
 } from "@/db/schema";
+import { todayIn } from "@/lib/age";
+import { getEnv } from "@/lib/env";
 import type { FileStorage } from "@/lib/file-storage";
 import { writeAudit } from "@/modules/audit/service";
 import { isUniqueViolation, VisitNotFoundError, VisitNotOpenError } from "@/modules/clinical/service";
@@ -50,6 +52,14 @@ export class InsufficientStockError extends InventoryError {
   ) {
     super(`Not enough stock: only ${available} ${unit} available in this store.`);
     this.name = "InsufficientStockError";
+  }
+}
+
+/** An expired batch is never used on a patient (PO decision); it stays in stock until written off. */
+export class ExpiredBatchError extends InventoryError {
+  constructor(readonly expiryDate: string) {
+    super(`This batch expired on ${expiryDate.split("-").reverse().join("/")} and cannot be used on a patient.`, "expiredBatch");
+    this.name = "ExpiredBatchError";
   }
 }
 
@@ -147,7 +157,13 @@ export async function lockedBalance(tx: Database, warehouseId: string, batchId: 
 
 async function batchInfo(tx: Database, batchId: string) {
   const [b] = await tx
-    .select({ id: inventoryBatches.id, productId: inventoryBatches.productId, unit: inventoryProducts.unit, name: inventoryProducts.name })
+    .select({
+      id: inventoryBatches.id,
+      productId: inventoryBatches.productId,
+      expiryDate: inventoryBatches.expiryDate,
+      unit: inventoryProducts.unit,
+      name: inventoryProducts.name,
+    })
     .from(inventoryBatches)
     .innerJoin(inventoryProducts, eq(inventoryProducts.id, inventoryBatches.productId))
     .where(eq(inventoryBatches.id, batchId))
@@ -295,6 +311,9 @@ export async function receiveStock(db: Database, actor: ActorContext, raw: Recei
       scanId: input.scanId,
       createdBy: actor.userId,
     });
+    // Every invoice line is kept; lines of the same batch (e.g. paid + free
+    // bonus of one lot) add up to one receipt movement for that batch.
+    const unitsByBatch = new Map<string, number>();
     for (const line of input.lines) {
       const productId = await findOrCreateProduct(tx, actor, line.productName, line.unit);
       const batchId = await findOrCreateBatch(tx, productId, line.lotNumber, line.expiryDate);
@@ -306,11 +325,13 @@ export async function receiveStock(db: Database, actor: ActorContext, raw: Recei
         unitCost: line.unitCost === null ? null : String(line.unitCost),
       });
       // Stock is counted in units: 10 boxes of 5 = 50.
-      const units = Math.round(line.quantity * line.packSize * 100) / 100;
+      unitsByBatch.set(batchId, (unitsByBatch.get(batchId) ?? 0) + line.quantity * line.packSize);
+    }
+    for (const [batchId, units] of unitsByBatch) {
       await tx.insert(stockMovements).values({
         warehouseId: wh.id,
         batchId,
-        quantity: String(units),
+        quantity: String(Math.round(units * 100) / 100),
         movementType: "receipt",
         receiptId: input.receiptId,
         clientMutationId: input.receiptId,
@@ -423,6 +444,8 @@ export async function consumeForVisit(db: Database, actor: ActorContext, raw: z.
       if (!visit) throw new VisitNotFoundError(input.visitId);
       if (visit.status !== "open") throw new VisitNotOpenError(visit.id, visit.status);
       const b = await batchInfo(tx, input.batchId);
+      // Usable through its expiry day (clinic time zone), refused from the day after.
+      if (b.expiryDate !== null && b.expiryDate < todayIn(getEnv().APP_TIME_ZONE)) throw new ExpiredBatchError(b.expiryDate);
       const balance = await lockedBalance(tx, input.warehouseId, input.batchId);
       if (balance < input.quantity) throw new InsufficientStockError(balance, b.unit);
       await tx.insert(stockMovements).values({
@@ -460,6 +483,7 @@ export interface StockRow {
   warehouseId: string;
   warehouseName: string;
   batchId: string;
+  productId: string;
   productName: string;
   unit: string;
   lotNumber: string;
@@ -476,6 +500,7 @@ export async function stockLevels(db: Database, actor: ActorContext, warehouseId
       warehouseId: warehouses.id,
       warehouseName: warehouses.name,
       batchId: inventoryBatches.id,
+      productId: inventoryProducts.id,
       productName: inventoryProducts.name,
       unit: inventoryProducts.unit,
       lotNumber: inventoryBatches.lotNumber,
@@ -506,6 +531,8 @@ export interface ConsumptionRow {
   recordedBy: string | null;
   patientName: string;
   visitId: string | null;
+  /** I4: the procedure kit it was recorded with, if any. */
+  kitName: string | null;
 }
 
 async function consumptionRows(db: Database, where: ReturnType<typeof and>): Promise<ConsumptionRow[]> {
@@ -525,6 +552,7 @@ async function consumptionRows(db: Database, where: ReturnType<typeof and>): Pro
       firstName: patients.firstName,
       lastName: patients.lastName,
       visitId: stockMovements.visitId,
+      kitName: sql<string | null>`(SELECT k.name FROM procedure_kits k WHERE k.id = ${stockMovements.kitId})`,
     })
     .from(stockMovements)
     .innerJoin(inventoryBatches, eq(inventoryBatches.id, stockMovements.batchId))

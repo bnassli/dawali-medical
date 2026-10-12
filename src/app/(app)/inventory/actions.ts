@@ -11,6 +11,7 @@ import { requireActor } from "@/modules/auth/current-actor";
 import { VisitNotOpenError } from "@/modules/clinical/service";
 import { postStockCount, saveProduct, type ProductInput, type StockCountInput } from "@/modules/inventory/catalog";
 import { AnthropicInvoiceExtractor } from "@/modules/inventory/extractor";
+import { issueToVisit, KitShortageError, saveKit, type IssueInput, type KitInput } from "@/modules/inventory/kits";
 import { DICTS, fill, LANG_COOKIE, parseLang, type Dict, type DictKey } from "@/modules/inventory/i18n";
 import {
   adjustStock,
@@ -128,6 +129,33 @@ export async function stockCountAction(input: StockCountInput): Promise<ActionRe
     return { ok: true, message: fill(d.countPosted, { lines: r.lines, changes: r.changes }) };
   } catch (err) {
     return failure(d, err);
+  }
+}
+
+/** I4: create or edit a procedure kit. */
+export async function saveKitAction(input: KitInput): Promise<ActionResult> {
+  const actor = await requireActor();
+  const d = await dict();
+  try {
+    await saveKit(getDb(), actor, input);
+    revalidatePath("/inventory/kits");
+    return { ok: true, message: d.saved };
+  } catch (err) {
+    return failure(d, err);
+  }
+}
+
+/** I4: record a procedure kit (or several items) on the visit — all or nothing. */
+export async function issueKitAction(input: IssueInput, path: string): Promise<ActionResult> {
+  const actor = await requireActor();
+  try {
+    const r = await issueToVisit(getDb(), actor, input);
+    revalidatePath(path);
+    const n = r.lines.length;
+    return { ok: true, message: r.replayed ? "Already recorded." : `Recorded ${n} ${n === 1 ? "line" : "lines"}.` };
+  } catch (err) {
+    if (err instanceof KitShortageError) return { ok: false, message: err.message };
+    return failure(DICTS.en, err);
   }
 }
 

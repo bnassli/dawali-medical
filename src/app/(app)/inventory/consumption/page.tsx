@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { todayIn } from "@/lib/age";
+import { isoToDayMonthYear, parseDateInput } from "@/lib/day-month-year";
 import { getEnv } from "@/lib/env";
 import { requireActor } from "@/modules/auth/current-actor";
 import { ConsumptionFilterError, consumptionReport, type ConsumptionFilter } from "@/modules/inventory/consumption-report";
@@ -22,20 +23,26 @@ export default async function ConsumptionPage({
   const timeZone = getEnv().APP_TIME_ZONE;
   const today = todayIn(timeZone);
   const q = await searchParams;
+  // Typed day/month/year in the form; yyyy-mm-dd in links. A wrong date is reported, not guessed.
+  const from = parseDateInput(q.from ?? "") || `${today.slice(0, 8)}01`;
+  const to = parseDateInput(q.to ?? "") || today;
+  const badDate = [q.from, q.to].some((v) => v !== undefined && parseDateInput(v) === null);
   const filter: ConsumptionFilter = {
-    from: q.from || `${today.slice(0, 8)}01`,
-    to: q.to || today,
+    from,
+    to,
     doctorId: q.doctor && UUID.test(q.doctor) ? q.doctor : undefined,
     warehouseId: q.store && UUID.test(q.store) ? q.store : undefined,
   };
   const [doctors, warehouses] = await Promise.all([listDoctors(db), listWarehouses(db, actor)]);
   let report = null;
-  let error: string | null = null;
-  try {
-    report = await consumptionReport(db, actor, filter, timeZone);
-  } catch (err) {
-    if (!(err instanceof ConsumptionFilterError)) throw err;
-    error = err.message;
+  let error: string | null = badDate ? "Write dates as day/month/year, e.g. 31/12/2027." : null;
+  if (!badDate) {
+    try {
+      report = await consumptionReport(db, actor, filter, timeZone);
+    } catch (err) {
+      if (!(err instanceof ConsumptionFilterError)) throw err;
+      error = err.message;
+    }
   }
   const exportParams = new URLSearchParams({ from: filter.from, to: filter.to });
   if (filter.doctorId) exportParams.set("doctor", filter.doctorId);
@@ -46,8 +53,8 @@ export default async function ConsumptionPage({
       <p><a href="/inventory">← Inventory</a></p>
       <h1>Materials used</h1>
       <form method="get" className="card inv-filter" aria-label="Report filter">
-        <label>From <input type="date" name="from" defaultValue={filter.from} required /></label>
-        <label>To <input type="date" name="to" defaultValue={filter.to} required /></label>
+        <label>From <input name="from" dir="ltr" inputMode="numeric" placeholder="dd/mm/yyyy" size={10} defaultValue={badDate ? q.from : isoToDayMonthYear(filter.from)} required /></label>
+        <label>To <input name="to" dir="ltr" inputMode="numeric" placeholder="dd/mm/yyyy" size={10} defaultValue={badDate ? q.to : isoToDayMonthYear(filter.to)} required /></label>
         <label>
           Doctor{" "}
           <select name="doctor" defaultValue={filter.doctorId ?? ""}>
