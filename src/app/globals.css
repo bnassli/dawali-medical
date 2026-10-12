@@ -919,6 +919,9 @@ output.derived {
 .inv-table th, .inv-table td { border-bottom: 1px solid var(--border); padding: 0.35rem 0.5rem; text-align: start; vertical-align: top; }
 .inv-table input { width: 100%; min-width: 4rem; }
 .inventory input.invalid, .inv-shell input.invalid { outline: 1px solid var(--danger); outline-offset: -1px; }
+.inv-option-expired { color: var(--danger); }
+.inv-use-warning { margin: 0.25rem 0; padding: 0.35rem 0.6rem; border-inline-start: 4px solid #d98e04; background: #fff4d6; color: #6b4500; }
+.inv-use-expired { margin: 0.25rem 0; padding: 0.35rem 0.6rem; border-inline-start: 4px solid var(--danger); background: #fde2e1; color: var(--danger); }
 .inv-filter { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; }
 .inv-table + .inv-table { margin-top: 1rem; }
 .inv-expiring td { background: #fff4d6; }

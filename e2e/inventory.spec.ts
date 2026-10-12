@@ -64,6 +64,52 @@ test("storekeeper receives a scanned invoice (reviewed), nurse charges usage to 
   await expect(page.getByRole("region", { name: "Latest movements" })).toContainText(product);
 });
 
+test("expired batches are shown in red and cannot be used; a batch near its expiry is flagged", async ({ page, browser }) => {
+  const s = uniq();
+  // Days away from today, far enough from the boundary to be the same in any time zone.
+  const dmy = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10).split("-").reverse().join("/");
+  await loginAs(page, "store");
+  await english(page);
+  await page.goto("/inventory/receive");
+  await page.getByLabel("Supplier").fill(`Pharma ${s}`);
+  await page.getByLabel("Invoice number").fill(`EXP-${s}`);
+  await page.getByLabel("Invoice date").fill(dmy(-30));
+  await page.getByRole("button", { name: "+ Add line" }).click();
+  for (const [i, name, lot, days] of [[1, `Old foam ${s}`, "X1", -3], [2, `Soon foam ${s}`, "S1", 10]] as const) {
+    await page.getByLabel(`Product ${i}`).fill(name);
+    await page.getByLabel(`Unit ${i}`).fill("vial");
+    await page.getByLabel(`Lot ${i}`).fill(lot);
+    await page.getByLabel(`Expiry ${i}`).fill(dmy(days));
+    await page.getByLabel(`Quantity ${i}`).fill("5");
+  }
+  await page.getByRole("button", { name: "Confirm and add to stock" }).click();
+  await expect(page.getByText(`Invoice EXP-${s} received into stock.`)).toBeVisible();
+
+  const visit = await createVisitFixture();
+  const nurseCtx = await browser.newContext();
+  try {
+    const nurse = await nurseCtx.newPage();
+    await loginAs(nurse, "nurse");
+    await nurse.goto(visitUrl(visit));
+    const panel = nurse.getByRole("region", { name: "Materials used" });
+    const select = panel.getByLabel("Item and batch");
+    const old = select.locator("option", { hasText: `Old foam ${s}` });
+    await expect(old).toHaveText(/^EXPIRED — /);
+    await expect(old).toBeDisabled();
+    await expect(panel.getByRole("note")).toContainText("cannot be used");
+    const soon = select.locator("option", { hasText: `Soon foam ${s}` });
+    await expect(soon).toHaveText(/⚠ expires in \d+ days$/);
+    await select.selectOption({ value: (await soon.getAttribute("value"))! });
+    await expect(panel.getByRole("status")).toContainText(/This batch expires in \d+ days \(\d{2}\/\d{2}\/\d{4}\)/);
+    await panel.getByLabel("Quantity used").fill("1");
+    await panel.getByLabel("Doctor").selectOption({ label: "E2E doctor" });
+    await panel.getByRole("button", { name: "Record" }).click();
+    await expect(panel.getByText(new RegExp(`1 vial Soon foam ${s} \\(lot S1\\)`))).toBeVisible();
+  } finally {
+    await nurseCtx.close();
+  }
+});
+
 test("materials-used report: storekeeper filters and exports to Excel; nurse has no access", async ({ page, browser }) => {
   await loginAs(page, "store");
   await english(page);

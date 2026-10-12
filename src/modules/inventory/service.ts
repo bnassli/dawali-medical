@@ -18,6 +18,8 @@ import {
   warehouses,
   type ExtractedInvoice,
 } from "@/db/schema";
+import { todayIn } from "@/lib/age";
+import { getEnv } from "@/lib/env";
 import type { FileStorage } from "@/lib/file-storage";
 import { writeAudit } from "@/modules/audit/service";
 import { isUniqueViolation, VisitNotFoundError, VisitNotOpenError } from "@/modules/clinical/service";
@@ -50,6 +52,14 @@ export class InsufficientStockError extends InventoryError {
   ) {
     super(`Not enough stock: only ${available} ${unit} available in this store.`);
     this.name = "InsufficientStockError";
+  }
+}
+
+/** An expired batch is never used on a patient (PO decision); it stays in stock until written off. */
+export class ExpiredBatchError extends InventoryError {
+  constructor(readonly expiryDate: string) {
+    super(`This batch expired on ${expiryDate.split("-").reverse().join("/")} and cannot be used on a patient.`, "expiredBatch");
+    this.name = "ExpiredBatchError";
   }
 }
 
@@ -147,7 +157,13 @@ export async function lockedBalance(tx: Database, warehouseId: string, batchId: 
 
 async function batchInfo(tx: Database, batchId: string) {
   const [b] = await tx
-    .select({ id: inventoryBatches.id, productId: inventoryBatches.productId, unit: inventoryProducts.unit, name: inventoryProducts.name })
+    .select({
+      id: inventoryBatches.id,
+      productId: inventoryBatches.productId,
+      expiryDate: inventoryBatches.expiryDate,
+      unit: inventoryProducts.unit,
+      name: inventoryProducts.name,
+    })
     .from(inventoryBatches)
     .innerJoin(inventoryProducts, eq(inventoryProducts.id, inventoryBatches.productId))
     .where(eq(inventoryBatches.id, batchId))
@@ -428,6 +444,8 @@ export async function consumeForVisit(db: Database, actor: ActorContext, raw: z.
       if (!visit) throw new VisitNotFoundError(input.visitId);
       if (visit.status !== "open") throw new VisitNotOpenError(visit.id, visit.status);
       const b = await batchInfo(tx, input.batchId);
+      // Usable through its expiry day (clinic time zone), refused from the day after.
+      if (b.expiryDate !== null && b.expiryDate < todayIn(getEnv().APP_TIME_ZONE)) throw new ExpiredBatchError(b.expiryDate);
       const balance = await lockedBalance(tx, input.warehouseId, input.batchId);
       if (balance < input.quantity) throw new InsufficientStockError(balance, b.unit);
       await tx.insert(stockMovements).values({

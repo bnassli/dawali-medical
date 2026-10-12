@@ -840,3 +840,11 @@ batch). Unit cost stays the weighted average of the priced lines, so a free line
 browser date picker showed the US order. A date that is not real is refused before
 anything is sent; the materials-used report also accepts yyyy-mm-dd in links. No schema
 change.
+(3) Expired batches (PO decision, option A): a batch is usable on a patient through its
+expiry day (clinic time zone) and refused from the next day (`ExpiredBatchError`, nothing
+recorded). The visit's materials panel lists expired batches last, in red, not selectable,
+with a note to tell the storekeeper; a batch within 30 days of expiry (`USE_WARNING_DAYS`)
+is flagged with the days left. The store screens keep their 60-day "expiring soon" list
+(`EXPIRY_WARNING_DAYS`) and red expired rows; an expired batch is written off with an
+adjustment. Transfers are not blocked (e.g. moving it to be returned). No controlled
+drugs, no tablets, no barcode scanners for now (PO).

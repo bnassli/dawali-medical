@@ -146,6 +146,7 @@ const en = {
   err_countLineIncomplete: "Give the product name and unit of every new line.",
   err_countDuplicate: "The same product, lot and expiry is counted twice.",
   err_badDate: "Write dates as day/month/year, e.g. 31/12/2027.",
+  err_expiredBatch: "This batch has expired and cannot be used on a patient. Choose another batch.",
 } as const;
 
 export type DictKey = keyof typeof en;
@@ -282,6 +283,7 @@ const ar: Dict = {
   err_countLineIncomplete: "اكتب اسم المادة ووحدتها لكل سطر جديد.",
   err_countDuplicate: "نفس المادة والتشغيلة وتاريخ الانتهاء معدودة مرتين.",
   err_badDate: "اكتب التاريخ بصيغة يوم/شهر/سنة، مثل 31/12/2027.",
+  err_expiredBatch: "هذه التشغيلة منتهية الصلاحية ولا يجوز استعمالها على مريض. اختر تشغيلة أخرى.",
 };
 
 export const DICTS: Record<Lang, Dict> = { en, ar };

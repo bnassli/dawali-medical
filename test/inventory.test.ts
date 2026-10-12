@@ -6,14 +6,18 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { auditLogs, purchaseReceiptLines, stockMovements, visits } from "@/db/schema";
+import { todayIn } from "@/lib/age";
 import { parseDateInput } from "@/lib/day-month-year";
+import { getEnv } from "@/lib/env";
 import { LocalFileStorage } from "@/lib/file-storage";
 import { VisitNotOpenError } from "@/modules/clinical/service";
+import { addDays } from "@/modules/inventory/catalog";
 import { AnthropicInvoiceExtractor, parseExtraction, type InvoiceExtractor } from "@/modules/inventory/extractor";
 import {
   adjustStock,
   consumeForVisit,
   consumptionBetween,
+  ExpiredBatchError,
   InsufficientStockError,
   InventoryError,
   listWarehouses,
@@ -206,6 +210,32 @@ describe("Inventory I1 (ADR-035)", () => {
 
     await db.update(visits).set({ status: "closed" }).where(eq(visits.id, visitId));
     await expect(use(0.5)).rejects.toBeInstanceOf(VisitNotOpenError);
+  });
+
+  it("an expired batch is never used on a patient; a batch is usable through its expiry day", async () => {
+    const s = uniqueSuffix();
+    const product = `Sclero ${s}`;
+    const today = todayIn(getEnv().APP_TIME_ZONE);
+    await receiveStock(db, store, receipt(s, [
+      { productName: product, quantity: 3, lotNumber: "OLD", expiryDate: addDays(today, -1) },
+      { productName: product, quantity: 3, lotNumber: "TODAY", expiryDate: today },
+    ]));
+    const lot = async (l: string) => (await stockLevels(db, store, ops)).find((r) => r.productName === product && r.lotNumber === l)!;
+    const visitId = await openVisit();
+    const use = async (l: string) =>
+      consumeForVisit(db, nurse, { clientMutationId: randomUUID(), visitId, warehouseId: ops, batchId: (await lot(l)).batchId, doctorId: doctor.userId, quantity: 1 });
+    await expect(use("OLD")).rejects.toBeInstanceOf(ExpiredBatchError);
+    await expect(use("OLD")).rejects.toThrow(/expired on .* cannot be used on a patient/);
+    expect((await lot("OLD")).quantity).toBe(3);
+    await expect(use("TODAY")).resolves.toMatchObject({ replayed: false });
+    expect((await lot("TODAY")).quantity).toBe(2);
+    expect(await visitConsumption(db, nurse, visitId)).toHaveLength(1);
+    // The storekeeper can still write the expired batch off.
+    await adjustStock(db, store, {
+      clientMutationId: randomUUID(), warehouseId: ops, productName: product, unit: "vial", lotNumber: "OLD",
+      expiryDate: addDays(today, -1), quantity: -3, reason: "Expired, discarded",
+    });
+    expect(await lot("OLD")).toBeUndefined();
   });
 
   it("opening balance, transfer between stores, and the ledger is append-only", async () => {
