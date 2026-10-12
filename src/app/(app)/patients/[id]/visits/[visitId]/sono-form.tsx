@@ -24,6 +24,7 @@ import {
 } from "@/modules/clinical/autosave-client";
 import { FIXED_CHOICES, NUMERIC_FIELD_RULES } from "@/modules/clinical/definitions";
 import type {
+  DiagramItem,
   FieldItem,
   FillerItem,
   LabelItem,
@@ -50,6 +51,9 @@ export interface SonoFieldContext {
   shareOption?: (option: OptionView) => void;
 }
 
+/** Pre-built links (new diagram id from the server) per diagram type. */
+export type DiagramLinks = Record<DiagramItem["diagramType"], string>;
+
 interface SonoFormProps {
   layout: SectionLayout;
   sectionCode: string;
@@ -58,6 +62,7 @@ interface SonoFormProps {
   readOnly: boolean;
   canWrite: boolean;
   canAddOption: boolean;
+  diagramLinks?: DiagramLinks;
 }
 
 function place(rect: Rect, origin: { x: number; y: number }): CSSProperties {
@@ -65,10 +70,21 @@ function place(rect: Rect, origin: { x: number; y: number }): CSSProperties {
 }
 
 const controlId = (code: string) => `field-${code}`;
-const MAX_ZOOM = 1.6;
+// Layout coordinates are SonoSoft's own screen pixels, so 1 draws the form at
+// exactly SonoSoft's size (Product Owner: "same as SonoSoft").
+const MAX_ZOOM = 1;
 const MIN_ZOOM = 1;
 
-export function SonoForm({ layout, sectionCode, fieldFor, actorId, readOnly, canWrite, canAddOption }: SonoFormProps) {
+export function SonoForm({
+  layout,
+  sectionCode,
+  fieldFor,
+  actorId,
+  readOnly,
+  canWrite,
+  canAddOption,
+  diagramLinks,
+}: SonoFormProps) {
   // One open list at a time, like a desktop combo box.
   const [openCode, setOpenCode] = useState<string | null>(null);
 
@@ -114,6 +130,7 @@ export function SonoForm({ layout, sectionCode, fieldFor, actorId, readOnly, can
             readOnly={readOnly}
             canWrite={canWrite}
             canAddOption={canAddOption}
+            diagramLinks={diagramLinks}
             openCode={openCode}
             setOpenCode={setOpenCode}
             focusField={focusField}
@@ -132,6 +149,7 @@ function SonoItem({
   readOnly,
   canWrite,
   canAddOption,
+  diagramLinks,
   openCode,
   setOpenCode,
   focusField,
@@ -143,12 +161,27 @@ function SonoItem({
   readOnly: boolean;
   canWrite: boolean;
   canAddOption: boolean;
+  diagramLinks?: DiagramLinks;
   openCode: string | null;
   setOpenCode: React.Dispatch<React.SetStateAction<string | null>>;
   focusField: (code: string) => void;
 }) {
   const o = layout.origin;
   switch (item.kind) {
+    case "diagram": {
+      // A link (not a button) so the unsaved-changes guard intercepts it like any navigation.
+      const href = readOnly ? undefined : diagramLinks?.[item.diagramType];
+      const style = { ...place(item.rect, o), fontSize: 10.5 };
+      return href ? (
+        <a className="sono-btn sono-diagram" href={href} style={style}>
+          {item.text}
+        </a>
+      ) : (
+        <button type="button" className="sono-btn sono-diagram" disabled style={style}>
+          {item.text}
+        </button>
+      );
+    }
     case "box":
       return (
         <div

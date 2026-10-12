@@ -8,8 +8,15 @@ Visual reference: redacted SonoSoft screenshots of each tab and of the reports a
 Reason for visit; Problem List; Chief Complaints; characteristics; duration; progression; daily-activity impact; chest comments; comments; aggravating factors; relieving factors; previous conservative therapy + duration; family history; alcohol/exercise/tobacco; pain meds; current meds; allergies.
 
 Implemented (R1b, ADR-029), SonoSoft labels and boxes (`workup-01-subj-complaints-habits.jpg`):
-Reason for visit, Problem List | box "Add Chief Complaints with characteristics and Associated conditions": Chief Complaints, associated with, How long?, Symptoms getting worse over time? (checkbox), Progression, Affects daily living activities?, Chest comments, Comment | red box: Aggravating Factors, Relieving Factors | blue box: Previous conservative therapy, How long?, Family history of VV? | Habits: Alcohol, Exercise, Tobacco use | Pain Meds for CC, Current Meds + None, Allergies + No known.
+Reason for visit, Problem List + None | box "Add Chief Complaints with characteristics and Associated conditions": Chief Complaints, associated with, How long?, Symptoms getting worse over time? (checkbox), Progression, Affects daily living activities?, Chest comments, Comment | red box: Aggravating Factors, Relieving Factors | blue box: Previous conservative therapy, How long?, Family history of VV? | Habits: Alcohol, Exercise, Tobacco use | Pain Meds for CC, Current Meds + None, Allergies + No known.
 None / No known exclude Current Meds / Allergies. The general family history is no longer on this tab (S1): it is "Family Medical Hx" in Past Medical Hx.
+
+## Past Venous Hx
+Implemented (ADR-040), SonoSoft's second Workup tab (between Subj Complaints Habits and Past Medical Hx), from the
+Product Owner's marked printout: Venous History checkboxes — Phlebitis, DVT, Pulmonary Embolism, Bleeding from veins |
+Sclerotherapy, Sonogram, Prior Vein Surgery, Hemorrhoids | IV drug use, AIDS/HIV/Hepatitis, Previous Trauma, Clotting
+Disorder — then Vein History Narrative (several sentences picked from its list and/or typed, + Add New). Not reproduced:
+Calculate Caprini Score, Tutorial. Positions are approximate until a SonoSoft screenshot replaces the photo.
 
 ## Past Medical Hx
 Past Medical Hx; Family Medical Hx; Unknown; Prior Test Results; Additional Comments; Surgical Hx; female-specific option/field from reference screen.
@@ -22,6 +29,19 @@ Implemented (Sprint 3A, ADR-027; reconciled by R1b, ADR-029), in this order:
 5. Additional Comments — dropdown + free text (`past_medical_additional_comments`, own list, distinct from the Assessment one).
 6. Surgical Hx — multiselect + free text (`surgical_history`), in the blue box.
 7. If FEMALE select the appropriate statement; otherwise disregard — select (`female_statement`), usable only when the patient's sex is F (disabled otherwise; server-enforced).
+
+## Initial US Exam
+Implemented (ADR-041), SonoSoft's Workup ultrasound tab (after Past Medical Hx, before Assessment Plan+), from the
+Product Owner's marked printouts. Right leg | middle | Left leg, mirrored:
+Deep Vessels With Reflux (Common Femoral, Femoral, Popliteal) | GSV Competent/Incompetent/Absent, Size at the femoral
+junction, Size at knee (mm), Tortuous, Reflux time, Dist Ext of Reflux | SSV Competent/Incompetent/Absent, Size at the
+popliteal junction, Rec. Time | Incompetent Accessories (anterior, posterior) | Incompetent perforators (Thigh, Proximal
+Calf, Mid Calf, Distal Calf, Ankle) and the perforators statement. Middle: Add'l Measurements, Create Diagram (new vein
+diagram of the visit). Below: Add'l Findings 1–3, Impression, "DVT? There [is NO | is] evidence of DVT found during this
+examination.", Location / Extent of DVT, superficial thrombophlebitis or flow characteristics.
+Not reproduced: Date of Service, Name of Exam, Add Charge, Leg Study, Tutorial, insurance guideline text, Branch
+Tributarie (Group 1 / 2). Field codes start with `ius_` (Post EVLT's ultrasound fields keep `us_`). Positions are
+approximate until a SonoSoft screenshot replaces the photos.
 
 ## Assessment Plan+
 Order: Impression → Recommendations → Stockings detail → Additional Comments.

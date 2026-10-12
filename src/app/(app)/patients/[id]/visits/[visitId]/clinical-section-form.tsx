@@ -27,7 +27,7 @@ import {
   useSaver,
   type Exclusion,
 } from "./clinical-field-helpers";
-import { SonoForm, type SonoFieldContext } from "./sono-form";
+import { SonoForm, type DiagramLinks, type SonoFieldContext } from "./sono-form";
 import type { ClinicalFieldView } from "@/modules/clinical/service";
 
 function FieldEditor({
@@ -432,6 +432,7 @@ function ClinicalSectionFormInner({
   canWrite,
   canAddOption,
   patientSex,
+  diagramLinks,
 }: {
   visitId: string;
   actorId: string;
@@ -441,6 +442,7 @@ function ClinicalSectionFormInner({
   canWrite: boolean;
   canAddOption: boolean;
   patientSex: string | null;
+  diagramLinks?: DiagramLinks;
 }) {
   const [group] = useState(() => {
     const g = new SaverGroup(visitId, actorId);
@@ -725,6 +727,7 @@ function ClinicalSectionFormInner({
             readOnly={readOnly}
             canWrite={canWrite}
             canAddOption={canAddOption}
+            diagramLinks={diagramLinks}
           />
           {unplaced.length > 0 ? (
             <div className="sono-extra" data-box="other">
@@ -757,6 +760,8 @@ export function ClinicalSectionForm(props: {
   canWrite: boolean;
   canAddOption: boolean;
   patientSex: string | null;
+  /** Links that open a new diagram of this visit; absent when the user may not create one. */
+  diagramLinks?: DiagramLinks;
 }) {
   return (
     <ClinicalSectionFormInner key={`${props.visitId}:${props.sectionCode}:${props.actorId}`} {...props} />

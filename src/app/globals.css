@@ -968,6 +968,526 @@ output.derived {
 }
 .inv-q { unicode-bidi: isolate; direction: ltr; display: inline-block; }
 
+/* ---- SonoSoft shell (patient header, tabs, visit panel) ----
+   Geometry measured on the user's SonoSoft screen at 1600x902: header items
+   sit at SonoSoft's pixel positions (relative to the header box) and the
+   clinical form is drawn at 1:1 (sono-form.tsx). Like the form, the shell is a
+   picture of the desktop window, so it keeps SonoSoft's light colours in dark
+   mode. Excluded legacy areas (FINAL_V1_REQUIREMENTS §3, §14) leave no gap:
+   the tabs follow the header directly. */
+body:has(.sono-shell) {
+  background: #f0f0f0;
+}
+
+body:has(.sono-shell) .top-nav {
+  padding: 2px 8px;
+  min-height: 22px;
+  background: #fff;
+  border-bottom: 1px solid #c8c8c8;
+  color: #000;
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-size: 11px;
+}
+
+body:has(.sono-shell) .top-nav .links {
+  gap: 12px;
+}
+
+body:has(.sono-shell) .top-nav a {
+  color: #000;
+  text-decoration: none;
+}
+
+body:has(.sono-shell) .top-nav a:hover {
+  text-decoration: underline;
+}
+
+body:has(.sono-shell) .top-nav .badge {
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  font-size: 11px;
+}
+
+body:has(.sono-shell) .top-nav button {
+  padding: 1px 10px;
+  border-radius: 0;
+  font-size: 11px;
+  background: #e1e1e1;
+  color: #000;
+  border: 1px solid #adadad;
+}
+
+.container:has(.sono-shell) {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sono-shell {
+  --background: #fff;
+  --foreground: #000;
+  --border: #a0a0a0;
+  --muted: #f0f0f0;
+  --accent: #1d4ed8;
+  --danger: #c62828;
+  color: #000;
+  color-scheme: light;
+  font-family: Tahoma, "Segoe UI", Arial, "Liberation Sans", FreeSans, sans-serif;
+}
+
+.sono-shell-body {
+  padding: 0 4px 12px 4px;
+}
+
+/* Header box: 985 x 190 SonoSoft pixels. */
+.patient-header.sono-header {
+  display: block;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: 985px;
+  max-width: 100%;
+  height: 186px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #f0f0f0;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.sono-header > *,
+.sono-header .sh-f {
+  position: absolute;
+  margin: 0;
+}
+
+.sh-date {
+  left: 8px;
+  top: 4px;
+  width: 141px;
+  height: 27px;
+  padding: 2px 0 0 18px;
+  border: 1px solid #7a7a7a;
+  background: #fff;
+  font-size: 20px;
+  line-height: 22px;
+}
+
+.sh-name {
+  left: 160px;
+  top: 7px;
+  width: 385px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sh-file {
+  left: 556px;
+  top: 7px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* SonoSoft push buttons: square, grey face, thin border. */
+.sono-header .sh-btn,
+.sh-search > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  padding: 0 4px;
+  border: 1px solid #adadad;
+  border-radius: 0;
+  background: #fdfdfd;
+  color: #000;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.1;
+  text-decoration: none;
+  text-align: center;
+  cursor: pointer;
+}
+
+.sono-header .sh-btn:hover:not(:disabled),
+.sh-search > button:hover:not(:disabled) {
+  background: #e5f1fb;
+  border-color: #0078d7;
+}
+
+.sono-header .sh-btn:disabled {
+  opacity: 1;
+  color: #6d6d6d;
+  cursor: not-allowed;
+}
+
+.sh-top-actions {
+  left: 663px;
+  top: 2px;
+  width: 285px;
+  height: 30px;
+}
+
+.sh-top-actions .sh-btn {
+  position: absolute;
+  top: 0;
+}
+
+.sh-btn-small {
+  left: 0;
+  width: 56px;
+  height: 27px;
+  font-size: 9px !important;
+  font-weight: 700;
+}
+
+.sh-home {
+  left: 165px;
+  width: 115px;
+  height: 28px;
+  color: #2d3f8f !important;
+  font-size: 12px !important;
+  font-weight: 700;
+}
+
+.sh-left-box {
+  left: 6px;
+  top: 40px;
+  width: 147px;
+  height: 52px;
+  border: 1px solid #c8c8c8;
+  background: #f0f0f0;
+}
+
+.sh-left-box .sh-btn,
+.sh-search > button {
+  position: absolute;
+  left: 4px;
+  width: 137px;
+  height: 15px;
+  font-size: 9.5px;
+}
+
+.sh-left-box .sh-red-text {
+  top: 4px;
+  color: #c62828;
+}
+
+.sh-search > button {
+  top: 21px;
+}
+
+.sono-header .sh-big {
+  top: 73px;
+  height: 23px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #c62828;
+  background: #fff;
+}
+
+.sono-header .sh-report {
+  left: 247px;
+  width: 155px;
+}
+
+.sono-header .sh-report:disabled {
+  color: #c62828;
+  opacity: 0.55;
+}
+
+.sono-header .sh-chart {
+  left: 428px;
+  width: 152px;
+}
+
+.sh-user {
+  left: 884px;
+  top: 41px;
+  width: 80px;
+}
+
+.sh-user-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.sh-user-box {
+  display: block;
+  margin-top: 3px;
+  min-width: 72px;
+  width: max-content;
+  max-width: 100px;
+  height: 16px;
+  padding: 1px 3px;
+  border: 1px solid #7a7a7a;
+  background: #f0f0f0;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Demographic strip: ID#, First Name, MI, Last Name, Race, Sex, Birthdate, Age. */
+.sh-strip {
+  left: 0;
+  top: 101px;
+  width: 985px;
+  height: 20px;
+}
+
+.sh-f {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  top: 0;
+  height: 18px;
+}
+
+.sh-f dt {
+  font-size: 9.5px;
+}
+
+.sh-f dd {
+  margin: 0;
+  height: 17px;
+  padding: 1px 3px;
+  border: 1px solid #7a7a7a;
+  background: #fff;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sh-f-id { left: 2px; }
+.sh-f-id dd { width: 50px; background: #f0f0f0; }
+.sh-f-first { left: 152px; }
+.sh-f-first dd { width: 76px; }
+.sh-f-mi { left: 285px; }
+.sh-f-mi dd { width: 16px; background: #f0f0f0; }
+.sh-f-last { left: 318px; }
+.sh-f-last dd { width: 102px; }
+.sh-f-race { left: 487px; }
+.sh-f-race dd { width: 140px; }
+.sh-f-sex { left: 655px; }
+.sh-f-sex dd { width: 58px; }
+.sh-f-dob { left: 735px; }
+.sh-f-dob dd { width: 66px; text-align: right; }
+.sh-f-age { left: 846px; }
+.sh-f-age dd { width: 30px; text-align: right; background: #f0f0f0; }
+
+.sono-header .search-dialog {
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+  font-size: 1rem;
+  line-height: normal;
+}
+
+.sh-clinic {
+  left: 0;
+  top: 146px;
+  width: 930px;
+  text-align: center;
+  font-family: Cambria, Georgia, "Times New Roman", serif;
+  font-size: 25px;
+  font-weight: 700;
+  color: #3b3b8f;
+}
+
+/* Visit line, tabs and the tab panel. */
+.sono-shell .visit-context {
+  width: 985px;
+  max-width: 100%;
+  margin: 0 0 2px;
+  font-size: 10px;
+  color: #444;
+}
+
+.sono-shell .tabs {
+  gap: 0;
+  width: 985px;
+  max-width: 100%;
+  margin: 0;
+  border-bottom: 1px solid #a0a0a0;
+  font-size: 9.5px;
+}
+
+.sono-shell .tab {
+  padding: 2px 5px 2px;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 0;
+  color: #000;
+  font-size: 9.5px;
+  text-decoration: none;
+}
+
+.sono-shell a.tab:hover {
+  background: #e5f1fb;
+}
+
+.sono-shell .tab.active {
+  position: relative;
+  top: -1px;
+  padding-bottom: 4px;
+  border-color: #a0a0a0;
+  background: #fff;
+  font-weight: 400;
+}
+
+.sono-shell .card {
+  max-width: 985px;
+  border-radius: 0;
+  padding: 6px 8px;
+}
+
+.sono-shell .visit-panel {
+  margin: 0 0 8px;
+  padding: 0;
+  border: 1px solid #a0a0a0;
+  border-top: 0;
+  background: #fff;
+}
+
+.sono-shell .visit-panel > .muted {
+  margin: 0;
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.visit-panel .clinical-form.sono-form {
+  border: 0;
+}
+
+/* The unsaved warning floats in the panel's empty top-right corner instead of
+   reserving a row above the form (SonoSoft has nothing there). */
+.sono-shell .visit-panel {
+  position: relative;
+}
+
+.sono-shell .visit-panel .unsaved-banner {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  z-index: 5;
+  max-width: 290px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  font-size: 10px;
+}
+
+.sono-shell .visit-panel .unsaved-banner.visible {
+  padding: 2px 6px;
+  background: #fff4f4;
+}
+
+/* Diagrams / Reports / Materials under the tab panel: SonoSoft-sized text. */
+.sono-shell .card h2 {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.sono-shell .card,
+.sono-shell .card p,
+.sono-shell .card li {
+  font-size: 11px;
+}
+
+.sono-shell .card .button,
+.sono-shell .card button,
+.sono-shell .action-bar .button {
+  padding: 2px 8px;
+  border-radius: 0;
+  font-size: 11px;
+}
+
+.sono-shell .action-bar {
+  margin-top: 6px;
+}
+
+/* Doctor / Nurse of the visit (ADR-039), at SonoSoft's Interp Phys/Surgeon and
+   Technologist positions: label ends at x 393, combo at x 400, 205 x 17. */
+.visit-staff {
+  position: relative;
+  width: 985px;
+  max-width: 100%;
+  height: 44px;
+  margin: 0 0 4px;
+  font-family: Tahoma, "Segoe UI", Arial, "Liberation Sans", FreeSans, sans-serif;
+  font-size: 10.5px;
+}
+
+.vs-slot {
+  position: absolute;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.vs-doctor { top: 2px; }
+.vs-nurse { top: 23px; }
+
+.vs-slot label {
+  width: 393px;
+  text-align: right;
+  font-weight: 400;
+}
+
+.vs-slot select {
+  width: 205px;
+  height: 18px;
+  padding: 0 2px;
+  border: 1px solid #7a7a7a;
+  border-radius: 0;
+  background: #dcdcdc;
+  color: #000;
+  font: inherit;
+  font-size: 10px;
+}
+
+.vs-slot select:disabled {
+  background: #ececec;
+  color: #555;
+}
+
+.vs-status {
+  font-size: 9.5px;
+  color: #555;
+  white-space: nowrap;
+}
+
+.vs-status.error {
+  color: #c62828;
+}
+
+/* Inputs in the panels under the tab (Materials used, ...) at SonoSoft size. */
+.sono-shell .card select,
+.sono-shell .card input:not([type="checkbox"]):not([type="radio"]) {
+  height: 20px;
+  padding: 1px 4px;
+  border-radius: 0;
+  font-size: 11px;
+}
+
+/* "Create Diagram" inside a SonoSoft tab (ADR-041): a link drawn as SonoSoft's push button. */
+a.sono-btn.sono-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  text-decoration: none;
+}
+
 /* I4 (ADR-042): procedure kits */
 .inv-kits { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
 .inv-kit { border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.8rem; }

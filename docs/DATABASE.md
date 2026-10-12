@@ -247,6 +247,15 @@ insert-only, CHECKs on type and non-zero quantity). New env: `ANTHROPIC_API_KEY`
 - Additive only. Rollback: drop `stock_movements.count_id`, the two tables and the two columns,
   and restore the previous `stock_movements_type_check`.
 
+## Visit doctor / nurse (ADR-039) — migration `0013_visit_staff.sql`
+- `visits.doctor_user_id` and `visits.nurse_user_id` (uuid, nullable, FK `users`, `ON DELETE RESTRICT`).
+  The doctor must be an active user with the DOCTOR role, the nurse one with NURSE_ASSISTANT
+  (checked by `src/modules/visits/staff.ts`, not by a constraint, so a later role change
+  never invalidates a stored visit).
+- Every change is audited as `visit.staff` with `before`/`after` = `{ slot, userId }`.
+- Additive only. Rollback: `ALTER TABLE visits DROP COLUMN doctor_user_id, DROP COLUMN nurse_user_id;`
+  (the audit rows keep the history).
+
 ## I4 additions (ADR-042) — migration `0014_procedure_kits.sql`
 - `procedure_kits` (id chosen by the client, name unique case-insensitive, is_active,
   created_by, created_at, updated_at — the optimistic-check token).

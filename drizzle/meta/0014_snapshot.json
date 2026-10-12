@@ -1,6 +1,6 @@
 {
   "id": "1a660f24-4d2a-4d86-82ba-7305809e3f26",
-  "prevId": "25fd0c64-f5ec-4d3e-88cc-c20e76b4f0e7",
+  "prevId": "99a89a78-84ad-4f99-b917-c5010b4beb33",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -917,6 +917,18 @@
           "notNull": true,
           "default": "'open'"
         },
+        "doctor_user_id": {
+          "name": "doctor_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nurse_user_id": {
+          "name": "nurse_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_by": {
           "name": "created_by",
           "type": "uuid",
@@ -968,6 +980,32 @@
           "tableTo": "patients",
           "columnsFrom": [
             "patient_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "visits_doctor_user_id_users_id_fk": {
+          "name": "visits_doctor_user_id_users_id_fk",
+          "tableFrom": "visits",
+          "tableTo": "users",
+          "columnsFrom": [
+            "doctor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "visits_nurse_user_id_users_id_fk": {
+          "name": "visits_nurse_user_id_users_id_fk",
+          "tableFrom": "visits",
+          "tableTo": "users",
+          "columnsFrom": [
+            "nurse_user_id"
           ],
           "columnsTo": [
             "id"

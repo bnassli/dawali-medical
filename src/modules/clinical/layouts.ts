@@ -92,7 +92,15 @@ export interface ClearItem {
   forCode: string;
 }
 
-export type LayoutItem = FieldItem | LabelItem | OpenerItem | BoxItem | FillerItem | ClearItem;
+/** SonoSoft's "Create Diagram" button inside a tab: opens a new diagram of this visit (R4). */
+export interface DiagramItem {
+  kind: "diagram";
+  text: string;
+  rect: Rect;
+  diagramType: "leg" | "vein";
+}
+
+export type LayoutItem = FieldItem | LabelItem | OpenerItem | BoxItem | FillerItem | ClearItem | DiagramItem;
 
 export interface SectionLayout {
   width: number;
@@ -140,6 +148,8 @@ const SUBJ: SectionLayout = {
     l("Reason for visit", 95, 309, { size: 11, forCode: "reason_for_visit" }),
     f("reason_for_visit", r(180, 308, 381, 16)),
     f("problem_list", r(5, 336, 85, 21), { buttonOnly: { text: "Problem List", color: "red" } }),
+    f("problem_list_none", r(13, 313, 11, 11)),
+    l("None", 27, 312, { forCode: "problem_list_none" }),
 
     box(r(94, 329, 686, 195)),
     opener("Add Chief Complaints with characteristics and Associated conditions", r(172, 338, 496, 16), "chief_complaints", {
@@ -565,9 +575,135 @@ const postEvlt = (): SectionLayout => {
   };
 };
 
+/**
+ * Past Venous Hx (ADR-040). Measured from a photo of the printed SonoSoft screen
+ * (no screenshot yet), so positions follow SonoSoft's grid approximately.
+ * Calculate Caprini Score and Tutorial are not reproduced (Product Owner).
+ */
+const PV_COLS = [120, 300, 480];
+const PV_ROWS = [309, 323, 337, 351];
+const PV_BOXES: [string, string][] = [
+  ["venous_hx_phlebitis", "Phlebitis"],
+  ["venous_hx_dvt", "DVT"],
+  ["venous_hx_pulmonary_embolism", "Pulmonary Embolism"],
+  ["venous_hx_bleeding_from_veins", "Bleeding from veins"],
+  ["venous_hx_sclerotherapy", "Sclerotherapy"],
+  ["venous_hx_sonogram", "Sonogram"],
+  ["venous_hx_prior_vein_surgery", "Prior Vein Surgery"],
+  ["venous_hx_hemorrhoids", "Hemorrhoids"],
+  ["venous_hx_iv_drug_use", "IV drug use"],
+  ["venous_hx_aids_hiv_hepatitis", "AIDS/HIV/Hepatitis"],
+  ["venous_hx_previous_trauma", "Previous Trauma"],
+  ["venous_hx_clotting_disorder", "Clotting Disorder"],
+];
+
+const PAST_VENOUS_HX: SectionLayout = {
+  width: 790,
+  height: 175,
+  origin: { x: 0, y: 292 },
+  background: "#f0f0f0",
+  items: [
+    box(r(10, 300, 760, 158)),
+    l("Venous History", 20, 309, { title: true }),
+    ...PV_BOXES.flatMap(([code, text], i): LayoutItem[] => {
+      const x = PV_COLS[Math.floor(i / 4)]!;
+      const y = PV_ROWS[i % 4]!;
+      return [f(code, r(x, y, 11, 11)), l(text, x + 14, y, { forCode: code })];
+    }),
+    l("Vein History Narrative", 14, 378, { w: 100, align: "right", forCode: "vein_history_narrative" }),
+    f("vein_history_narrative", r(120, 375, 640, 76), { size: 9.5, arrow: true }),
+  ],
+};
+
+/**
+ * Initial US Exam (ADR-041). Measured from photos of the printed SonoSoft screen (no
+ * screenshot yet): Right leg on the left, a middle column, Left leg on the right,
+ * findings below. Not reproduced (Product Owner): Date of Service, Name of Exam, Add
+ * Charge, Leg Study, Tutorial, insurance guideline text, Branch Tributarie groups.
+ */
+function usLeg(side: "r" | "l", x: number): LayoutItem[] {
+  const leg = side === "r" ? "Right" : "Left";
+  const c = (n: string) => `ius_${side}_${n}`;
+  const row = (text: string, y: number, code: string, w = 168, extra: Partial<FieldItem> = {}): LayoutItem[] => [
+    l(text, x + 4, y + 1, { w: 128, align: "right", forCode: code }),
+    f(code, r(x + 136, y, w, 16), extra),
+  ];
+  const check = (code: string, text: string, cx: number, y: number): LayoutItem[] => [
+    f(code, r(cx, y, 11, 11)),
+    l(text, cx + 14, y, { forCode: code }),
+  ];
+  return [
+    box(r(x, 4, 310, 40)),
+    l(`${leg} Deep Vessels With Reflux`, x + 4, 7, { w: 302, align: "center", bold: true }),
+    ...check(c("deep_cfv_reflux"), "Common Femoral", x + 20, 26),
+    ...check(c("deep_fv_reflux"), "Femoral", x + 130, 26),
+    ...check(c("deep_pop_reflux"), "Popliteal", x + 215, 26),
+
+    box(r(x, 48, 310, 266)),
+    l(`${leg} GSV`, x + 4, 54, { title: true }),
+    f(c("gsv_status"), r(x + 76, 52, 230, 16), { inline: true }),
+    ...row("Size at the femoral junction", 74, c("gsv_size_sfj")),
+    ...row("Size at knee", 92, c("gsv_size_knee"), 70, { white: true }),
+    ...row("Tortuous", 110, c("gsv_tortuous")),
+    ...row("Reflux time", 128, c("gsv_reflux_time")),
+    ...row("Dist Ext of Reflux", 146, c("gsv_reflux_extent")),
+    l(`${leg} SSV`, x + 4, 170, { title: true }),
+    f(c("ssv_status"), r(x + 76, 168, 230, 16), { inline: true }),
+    ...row("Size at the popliteal junction", 190, c("ssv_size_spj")),
+    ...row("Rec. Time", 208, c("ssv_reflux_time")),
+    l("Incompetent Accessories", x + 4, 230, { bold: true }),
+    ...check(c("accessory_anterior"), "anterior", x + 140, 230),
+    ...check(c("accessory_posterior"), "posterior", x + 215, 230),
+    l("Incompetent perforators", x + 4, 250, { bold: true }),
+    ...check(c("perf_thigh"), "Thigh", x + 4, 268),
+    ...check(c("perf_proximal_calf"), "Proximal Calf", x + 56, 268),
+    ...check(c("perf_mid_calf"), "Mid Calf", x + 136, 268),
+    ...check(c("perf_distal_calf"), "Distal Calf", x + 196, 268),
+    ...check(c("perf_ankle"), "Ankle", x + 262, 268),
+    f(c("perforators_statement"), r(x + 4, 288, 302, 16), { size: 9 }),
+  ];
+}
+
+const INITIAL_US_EXAM: SectionLayout = {
+  width: 790,
+  height: 478,
+  origin: { x: 0, y: 0 },
+  background: "#f0f0f0",
+  items: [
+    ...usLeg("r", 6),
+    ...usLeg("l", 474),
+
+    opener("Add'l Measurements", r(328, 4, 134, 18), "ius_additional_measurements", { size: 9.5 }),
+    f("ius_additional_measurements", r(324, 26, 142, 150)),
+    { kind: "diagram", text: "Create Diagram", rect: r(338, 190, 114, 20), diagramType: "vein" },
+
+    box(r(6, 320, 778, 154)),
+    l("Add'l Findings", 10, 327, { w: 100, align: "right", forCode: "ius_addl_findings_1" }),
+    f("ius_addl_findings_1", r(114, 326, 664, 16)),
+    l("Add'l Findings 2", 10, 345, { w: 100, align: "right", forCode: "ius_addl_findings_2" }),
+    f("ius_addl_findings_2", r(114, 344, 664, 16)),
+    l("add findings 3", 10, 363, { w: 100, align: "right", forCode: "ius_addl_findings_3" }),
+    f("ius_addl_findings_3", r(114, 362, 664, 16)),
+    opener("Impression", r(26, 384, 84, 16), "ius_impression", { size: 9 }),
+    f("ius_impression", r(114, 382, 664, 34)),
+    l("DVT?  There", 10, 424, { w: 100, align: "right", bold: true, forCode: "ius_dvt" }),
+    f("ius_dvt", r(114, 421, 104, 16), { inline: true }),
+    l("evidence of DVT found during this examination.", 222, 424, { bold: true }),
+    l("Location / Extent of DVT,\nsuperficial thrombophlebitis\nor flow characteristics.", 4, 441, {
+      w: 106,
+      align: "right",
+      size: 8.5,
+      forCode: "ius_dvt_location",
+    }),
+    f("ius_dvt_location", r(114, 440, 664, 30)),
+  ],
+};
+
 export const SECTION_LAYOUTS: Record<string, SectionLayout> = {
   subj_complaints_habits: SUBJ,
+  past_venous_hx: PAST_VENOUS_HX,
   past_medical_hx: PAST_MEDICAL_HX,
+  initial_us_exam: INITIAL_US_EXAM,
   assessment_plan: ASSESSMENT_PLAN,
   laser_ablation: LASER_ABLATION,
   follow_up_office_visit: FOLLOW_UP,
