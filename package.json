@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "db:dev": "tsx src/db/dev-db.ts start",
+    "db:dev:stop": "tsx src/db/dev-db.ts stop",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed-run.ts",

@@ -14,6 +14,18 @@ See `/docs`, `CLAUDE.md`, and `PROMPT_SPRINT_1.md`.
   - `docker-compose up -d` (starts `postgres` on `localhost:5432`), or
   - any PostgreSQL 16 instance you already have.
 
+#### Persistent local dev database without Docker (`npm run db:dev`)
+`npm run db:dev` starts a real PostgreSQL (the binaries bundled with the
+`embedded-postgres` devDependency, launched through `pg_ctl`) on the host/port/
+database in `DATABASE_URL`, creating the cluster and database on first run.
+Data lives in `.dev-db/data` (git-ignored) and survives restarts; the command is
+idempotent. `npm run db:dev:stop` stops it. It refuses non-local hosts, is
+development-only, and is not used by tests or CI. It also works from an
+elevated Windows shell, where launching `postgres.exe` directly is refused
+(see ADR-017). Typical flow: `npm run db:dev && npm run db:migrate && npm run db:seed && npm run dev`.
+Note the default `.env.example` URL uses port 5432; use whatever port your
+`.env` `DATABASE_URL` says (this machine: `127.0.0.1:5555/dawali_dev`).
+
 ### Environment
 Copy `.env.example` to `.env` and fill in real values. `.env` is
 git-ignored and must never be committed.
